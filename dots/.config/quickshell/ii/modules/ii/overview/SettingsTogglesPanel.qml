@@ -54,6 +54,12 @@ Item {
         return output;
     }
     readonly property var activeRows: root.activeSection === 0 ? root.settingRows : root.pageRows
+    readonly property var selectedRowData: root.selectedIndex >= 0 && root.selectedIndex < root.activeRows.length
+        ? root.activeRows[root.selectedIndex]
+        : null
+    readonly property string primaryActionLabel: root.activeSection === 0 && String(root.selectedRowData?.type ?? "") === "bool"
+        ? Translation.tr("Toggle")
+        : Translation.tr("Open")
     readonly property bool indexing: !Ai.settingsIntegration.ready
     readonly property bool hasQuery: root.normalizedQuery.length > 0
     readonly property string statusText: root.indexing
@@ -140,6 +146,15 @@ Item {
         return row && typeof row.activate === "function" ? row.activate() : false;
     }
 
+    function secondaryActivateSelected(): bool {
+        const row = root.selectedDelegate();
+        if (!row)
+            return false;
+        if (typeof row.openInSettings === "function")
+            return row.openInSettings();
+        return typeof row.activate === "function" ? row.activate() : false;
+    }
+
     function toggleSection(): bool {
         if (!Config.options.search.modules.settingsToggles.showPages)
             return false;
@@ -169,10 +184,11 @@ Item {
         accent: true
         statusText: root.statusText
         showStatus: true
-        primaryHint: ({ label: Translation.tr("Open"), keys: ["↵"] })
+        primaryHint: ({ label: root.primaryActionLabel, actionId: "activate", keys: ["↵"] })
         hints: [
             { label: Translation.tr("Adjust"), keys: ["←", "→"] },
-            { label: Translation.tr("Section"), keys: ["Tab"] }
+            { label: Translation.tr("Open Settings"), actionId: "secondary", keys: ["Ctrl", "↵"] },
+            { label: Translation.tr("Section"), actionId: "section", keys: ["Tab"] }
         ]
 
         ColumnLayout {
@@ -197,8 +213,8 @@ Item {
 
                         visible: modelData.section === 0 || Config.options.search.modules.settingsToggles.showPages
                         Layout.fillWidth: true
-                        implicitHeight: Appearance.sizes.elevationMargin * 7
-                        buttonRadius: selected ? Appearance.rounding.verylarge : Appearance.rounding.large
+                        implicitHeight: sectionButtonContent.implicitHeight + Appearance.sizes.elevationMargin
+                        buttonRadius: selected ? Appearance.rounding.large : Appearance.rounding.normal
                         toggled: selected
                         colBackground: Appearance.colors.colSurfaceContainerHigh
                         colBackgroundHover: Appearance.colors.colSurfaceContainerHighestHover
@@ -214,18 +230,19 @@ Item {
                         }
 
                         contentItem: RowLayout {
-                            spacing: Appearance.sizes.elevationMargin
+                            id: sectionButtonContent
+                            spacing: Appearance.sizes.elevationMargin * 0.75
 
                             MaterialShape {
                                 implicitSize: Appearance.sizes.elevationMargin * 4
                                 shapeString: sectionButton.modelData.shape
-                                color: sectionButton.selected ? Appearance.colors.colPrimary : Appearance.colors.colTertiaryContainer
+                                color: sectionButton.selected ? Appearance.colors.colPrimary : Appearance.colors.colSecondaryContainer
 
                                 MaterialSymbol {
                                     anchors.centerIn: parent
                                     text: sectionButton.modelData.icon
-                                    iconSize: Appearance.font.pixelSize.normal
-                                    color: sectionButton.selected ? Appearance.colors.colOnPrimary : Appearance.colors.colOnTertiaryContainer
+                                    iconSize: Appearance.font.pixelSize.large
+                                    color: sectionButton.selected ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSecondaryContainer
                                 }
                             }
 
@@ -236,7 +253,8 @@ Item {
                                 StyledText {
                                     Layout.fillWidth: true
                                     text: sectionButton.modelData.label
-                                    font.pixelSize: Appearance.font.pixelSize.small
+                                    font.pixelSize: Appearance.font.pixelSize.normal
+                                    font.weight: Font.DemiBold
                                     color: sectionButton.selected ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnSurface
                                 }
 
@@ -250,10 +268,27 @@ Item {
                                 }
                             }
 
-                            StyledText {
-                                text: String(sectionButton.modelData.section === 0 ? root.settingRows.length : root.pageRows.length)
-                                font.pixelSize: Appearance.font.pixelSize.smaller
-                                color: sectionButton.selected ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnSurfaceVariant
+                            ConfiguredKeyHint {
+                                visible: sectionButton.selected && Config.options.search.appearance.showKeyHints
+                                actionId: "section"
+                                fallbackKeys: ["Tab"]
+                                surface: Appearance.colors.colPrimaryContainer
+                                onSurface: Appearance.colors.colOnPrimaryContainer
+                            }
+
+                            MaterialShape {
+                                id: sectionCountShape
+                                implicitSize: Appearance.sizes.elevationMargin * 3.2
+                                shapeString: sectionButton.selected ? "Cookie6Sided" : "Cookie4Sided"
+                                color: sectionButton.selected ? Appearance.colors.colPrimary : Appearance.colors.colSecondaryContainer
+
+                                StyledText {
+                                    anchors.centerIn: parent
+                                    text: String(sectionButton.modelData.section === 0 ? root.settingRows.length : root.pageRows.length)
+                                    font.pixelSize: Appearance.font.pixelSize.small
+                                    font.weight: Font.Bold
+                                    color: sectionButton.selected ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSecondaryContainer
+                                }
                             }
                         }
                     }
@@ -313,7 +348,7 @@ Item {
                     clip: true
                     reuseItems: true
                     cacheBuffer: height
-                    spacing: Appearance.sizes.elevationMargin
+                    spacing: Appearance.sizes.elevationMargin / 2
                     model: root.activeRows
 
                     delegate: Loader {
@@ -347,39 +382,43 @@ Item {
                                 readonly property bool selected: root.selectedIndex === rowLoader.index
 
                                 implicitWidth: rowLoader.width
-                                implicitHeight: pageRowContent.implicitHeight + Appearance.sizes.elevationMargin * 2
-                                buttonRadius: selected ? Appearance.rounding.verylarge : Appearance.rounding.large
+                                implicitHeight: pageRowContent.implicitHeight + Appearance.sizes.elevationMargin * 1.2
+                                buttonRadius: selected ? Appearance.rounding.large : Appearance.rounding.normal
                                 toggled: selected
                                 colBackground: Appearance.colors.colSurfaceContainerHigh
                                 colBackgroundHover: Appearance.colors.colSurfaceContainerHighestHover
                                 colBackgroundActive: Appearance.colors.colSurfaceContainerHighestActive
-                                colBackgroundToggled: Appearance.colors.colTertiaryContainer
-                                colBackgroundToggledHover: Appearance.colors.colTertiaryContainerHover
-                                colBackgroundToggledActive: Appearance.colors.colTertiaryContainerActive
+                                colBackgroundToggled: Appearance.colors.colPrimaryContainer
+                                colBackgroundToggledHover: Appearance.colors.colPrimaryContainerHover
+                                colBackgroundToggledActive: Appearance.colors.colPrimaryContainerActive
                                 colRipple: Appearance.colors.colSurfaceContainerHighestActive
-                                colRippleToggled: Appearance.colors.colTertiaryContainerActive
+                                colRippleToggled: Appearance.colors.colPrimaryContainerActive
                                 onClicked: root.openPage(rowLoader.modelData)
 
                                 function activate(): bool {
                                     return root.openPage(rowLoader.modelData);
                                 }
 
+                                function openInSettings(): bool {
+                                    return root.openPage(rowLoader.modelData);
+                                }
+
                                 RowLayout {
                                     id: pageRowContent
                                     anchors.fill: parent
-                                    anchors.margins: Appearance.sizes.elevationMargin
-                                    spacing: Appearance.sizes.elevationMargin
+                                    anchors.margins: Appearance.sizes.elevationMargin * 0.6
+                                    spacing: Appearance.sizes.elevationMargin * 0.75
 
                                     MaterialShape {
-                                        implicitSize: Appearance.sizes.elevationMargin * 5
+                                        implicitSize: Appearance.sizes.elevationMargin * 4
                                         shapeString: pageButton.selected ? "Cookie7Sided" : "Cookie4Sided"
-                                        color: pageButton.selected ? Appearance.colors.colTertiary : Appearance.colors.colPrimaryContainer
+                                        color: pageButton.selected ? Appearance.colors.colPrimary : Appearance.colors.colSecondaryContainer
 
                                         MaterialSymbol {
                                             anchors.centerIn: parent
                                             text: rowLoader.modelData.icon
-                                            iconSize: Appearance.font.pixelSize.normal
-                                            color: pageButton.selected ? Appearance.colors.colOnTertiary : Appearance.colors.colOnPrimaryContainer
+                                            iconSize: Appearance.font.pixelSize.large
+                                            color: pageButton.selected ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSecondaryContainer
                                         }
                                     }
 
@@ -391,8 +430,9 @@ Item {
                                             Layout.fillWidth: true
                                             text: rowLoader.modelData.displayName
                                             elide: Text.ElideRight
-                                            font.pixelSize: Appearance.font.pixelSize.small
-                                            color: pageButton.selected ? Appearance.colors.colOnTertiaryContainer : Appearance.colors.colOnSurface
+                                            font.pixelSize: Appearance.font.pixelSize.normal
+                                            font.weight: Font.DemiBold
+                                            color: pageButton.selected ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnSurface
                                         }
 
                                         StyledText {
@@ -400,15 +440,49 @@ Item {
                                             text: rowLoader.modelData.parentName.length > 0 ? rowLoader.modelData.parentName : Translation.tr("Settings page")
                                             elide: Text.ElideRight
                                             font.pixelSize: Appearance.font.pixelSize.smaller
-                                            color: pageButton.selected ? Appearance.colors.colOnTertiaryContainer : Appearance.colors.colSubtext
+                                            color: pageButton.selected ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colSubtext
                                             opacity: pageButton.selected ? 0.78 : 1
                                         }
                                     }
 
-                                    MaterialSymbol {
-                                        text: "arrow_outward"
-                                        iconSize: Appearance.font.pixelSize.small
-                                        color: pageButton.selected ? Appearance.colors.colOnTertiaryContainer : Appearance.colors.colOnSurfaceVariant
+                                    ConfiguredKeyHint {
+                                        visible: pageButton.selected && Config.options.search.appearance.showKeyHints
+                                        actionId: "activate"
+                                        fallbackKeys: ["↵"]
+                                        surface: Appearance.colors.colPrimaryContainer
+                                        onSurface: Appearance.colors.colOnPrimaryContainer
+                                    }
+
+                                    RippleButton {
+                                        implicitWidth: pageOpenContent.implicitWidth + Appearance.sizes.elevationMargin * 1.4
+                                        implicitHeight: Appearance.sizes.elevationMargin * 3.6
+                                        buttonRadius: Appearance.rounding.full
+                                        colBackground: pageButton.selected ? Appearance.colors.colPrimary : Appearance.colors.colSecondaryContainer
+                                        colBackgroundHover: pageButton.selected ? Appearance.colors.colPrimaryHover : Appearance.colors.colSecondaryContainerHover
+                                        colRipple: pageButton.selected ? Appearance.colors.colPrimaryActive : Appearance.colors.colSecondaryContainerActive
+                                        onClicked: root.openPage(rowLoader.modelData)
+                                        Accessible.name: Translation.tr("Open in Settings")
+
+                                        RowLayout {
+                                            id: pageOpenContent
+                                            anchors.centerIn: parent
+                                            spacing: Appearance.sizes.elevationMargin / 2
+
+                                            StyledText {
+                                                text: Translation.tr("Open")
+                                                font.pixelSize: Appearance.font.pixelSize.small
+                                                font.weight: Font.DemiBold
+                                                color: pageButton.selected ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSecondaryContainer
+                                            }
+
+                                            ConfiguredKeyHint {
+                                                visible: Config.options.search.appearance.showKeyHints
+                                                actionId: "secondary"
+                                                fallbackKeys: ["Ctrl", "↵"]
+                                                surface: pageButton.selected ? Appearance.colors.colPrimary : Appearance.colors.colSecondaryContainer
+                                                onSurface: pageButton.selected ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSecondaryContainer
+                                            }
+                                        }
                                     }
                                 }
                             }

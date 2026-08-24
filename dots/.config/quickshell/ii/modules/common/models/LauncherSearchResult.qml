@@ -39,6 +39,9 @@ QtObject {
     property list<string> matchTerms: []
     property list<string> keyHints: []
     property string feedbackText: ""
+    // Absolute path behind a result whose `name` is only the display label, so
+    // a preview or a file action does not have to reconstruct it.
+    property string filePath: ""
 
     // Extra stuff to allow for more flexibility
     property string category: type

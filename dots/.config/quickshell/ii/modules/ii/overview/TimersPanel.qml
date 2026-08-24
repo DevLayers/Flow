@@ -254,10 +254,10 @@ Item {
         accent: true
         showStatus: true
         statusText: root.statusText
-        primaryHint: ({ label: root.typedMinutes > 0 ? Translation.tr("Create") : (root.selectedRow?.action ?? Translation.tr("Run")), keys: ["↵"] })
+        primaryHint: ({ label: root.typedMinutes > 0 ? Translation.tr("Create") : (root.selectedRow?.action ?? Translation.tr("Run")), actionId: "activate", keys: ["↵"] })
         hints: [
-            { label: Translation.tr("Reset"), keys: ["Ctrl", "↵"] },
-            { label: Translation.tr("Create typed duration"), keys: ["Ctrl", "N"] }
+            { label: Translation.tr("Reset"), actionId: "secondary", keys: ["Ctrl", "↵"] },
+            { label: Translation.tr("Create typed duration"), actionId: "create", keys: ["Ctrl", "N"] }
         ]
 
         ColumnLayout {
@@ -405,10 +405,23 @@ Item {
                                     color: root.selectedIndex === index ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colPrimary
                                 }
                             }
-                            StyledText {
-                                text: modelData.action
-                                font.pixelSize: Appearance.font.pixelSize.smallest
-                                color: root.selectedIndex === index ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colPrimary
+                            ColumnLayout {
+                                spacing: Appearance.sizes.elevationMargin / 4
+
+                                StyledText {
+                                    Layout.alignment: Qt.AlignRight
+                                    text: modelData.action
+                                    font.pixelSize: Appearance.font.pixelSize.smallest
+                                    color: root.selectedIndex === index ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colPrimary
+                                }
+
+                                ConfiguredKeyHint {
+                                    visible: root.selectedIndex === index && Config.options.search.appearance.showKeyHints
+                                    actionId: "activate"
+                                    fallbackKeys: ["↵"]
+                                    surface: Appearance.colors.colSecondaryContainer
+                                    onSurface: Appearance.colors.colOnSecondaryContainer
+                                }
                             }
                         }
                     }

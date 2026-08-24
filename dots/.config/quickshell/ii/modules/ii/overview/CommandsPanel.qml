@@ -134,9 +134,9 @@ Item {
         accent: true
         statusText: root.statusText
         showStatus: true
-        primaryHint: ({ label: Translation.tr("Copy"), keys: ["↵"] })
+        primaryHint: ({ label: Translation.tr("Copy"), actionId: "activate", keys: ["↵"] })
         hints: [
-            { label: Translation.tr("Run"), keys: ["Ctrl", "↵"] },
+            { label: Translation.tr("Run"), actionId: "secondary", keys: ["Ctrl", "↵"] },
             { label: Translation.tr("Tag"), keys: ["←", "→"] }
         ]
 
@@ -224,6 +224,14 @@ Item {
                                 font.pixelSize: Appearance.font.pixelSize.smaller
                                 color: root.selectedIndex === index ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colSubtext
                             }
+                        }
+
+                        ConfiguredKeyHint {
+                            visible: root.selectedIndex === index && Config.options.search.appearance.showKeyHints
+                            actionId: "activate"
+                            fallbackKeys: ["↵"]
+                            surface: Appearance.colors.colPrimaryContainer
+                            onSurface: Appearance.colors.colOnPrimaryContainer
                         }
                     }
                 }

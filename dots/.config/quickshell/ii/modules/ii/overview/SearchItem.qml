@@ -37,7 +37,14 @@ RippleButton {
     property string bigText: entry?.iconType === LauncherSearchResult.IconType.Text ? entry?.iconName ?? "" : ""
     property string materialSymbol: entry?.iconType === LauncherSearchResult.IconType.Material ? entry?.iconName ?? "" : ""
     property string cliphistRawString: entry?.rawValue ?? ""
-    property string filePath: Images.isValidImageByName(entry?.name) ? entry?.name : ""
+    // Results that carry an explicit path show the label in `name`, so the
+    // preview has to read the path from the result rather than from the label.
+    property string filePath: {
+        const explicit = entry?.filePath ?? "";
+        if (explicit.length > 0)
+            return Images.isValidImageByName(explicit) ? explicit : "";
+        return Images.isValidImageByName(entry?.name) ? entry?.name : "";
+    }
     property bool blurImage: entry?.blurImage ?? false
     readonly property bool hasInlineSwitch: entry?.controlKind === "switch"
 

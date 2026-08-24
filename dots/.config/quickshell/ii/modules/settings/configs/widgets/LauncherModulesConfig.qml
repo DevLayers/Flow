@@ -71,6 +71,90 @@ Item {
                 ConfigSwitch { buttonIcon: "select_window"; text: Translation.tr("Window search"); description: Translation.tr("Type prefix ‘%1’ followed by a window title or app class.").arg(String(Config.options.search.prefix.windowSearch)); checked: Config.options.search.modules.windowSearch; onCheckedChanged: Config.options.search.modules.windowSearch = checked }
                 ConfigSwitch { buttonIcon: "folder_open"; text: Translation.tr("File browser"); description: Translation.tr("Type prefix ‘%1’ followed by a path to browse folders.").arg(String(Config.options.search.prefix.fileBrowser)); checked: Config.options.search.modules.fileBrowser; onCheckedChanged: Config.options.search.modules.fileBrowser = checked }
                 ConfigSwitch { buttonIcon: "find_in_page"; text: Translation.tr("File search"); description: Translation.tr("Type prefix ‘%1’ followed by at least two characters to find files.").arg(String(Config.options.search.prefix.fileSearch)); checked: Config.options.search.modules.fileSearch; onCheckedChanged: Config.options.search.modules.fileSearch = checked }
+
+                ContentSubsection {
+                    title: Translation.tr("Indexed directory")
+                    icon: "folder_open"
+                    Layout.fillWidth: true
+                    enabled: Config.options.search.modules.fileSearch
+
+                    MaterialTextArea {
+                        Layout.fillWidth: true
+                        text: Config.options.search.fileSearchDirectory
+                        wrapMode: TextEdit.NoWrap
+                        onTextChanged: Config.options.search.fileSearchDirectory = text
+                    }
+
+                    ConfigSwitch {
+                        buttonIcon: "search"
+                        text: Translation.tr("Show files and folders without a prefix")
+                        description: Translation.tr("Adds a Files & folders group to ordinary results, alongside applications. The prefix keeps working either way.")
+                        checked: Config.options.search.fileSearch.inlineResults
+                        onCheckedChanged: Config.options.search.fileSearch.inlineResults = checked
+                    }
+
+                    ConfigSwitch {
+                        buttonIcon: "visibility"
+                        text: Translation.tr("Include hidden files and folders")
+                        description: Translation.tr("Covers dotfiles such as ~/.config, at the cost of walking every cache and state folder a home directory accumulates.")
+                        checked: Config.options.search.fileSearch.includeHidden
+                        enabled: Config.options.search.fileSearch.inlineResults
+                        onCheckedChanged: Config.options.search.fileSearch.includeHidden = checked
+                    }
+
+                    ConfigSpinBox {
+                        icon: "text_fields"
+                        text: Translation.tr("Start searching files after (characters)")
+                        value: Config.options.search.fileSearch.minimumQueryLength
+                        from: 2
+                        to: 8
+                        stepSize: 1
+                        enabled: Config.options.search.fileSearch.inlineResults
+                        onValueChanged: Config.options.search.fileSearch.minimumQueryLength = value
+                        StyledToolTip {
+                            text: Translation.tr("One or two letters match a large share of a home directory. Raising this keeps the disk quiet until the query narrows.")
+                        }
+                    }
+
+                    ConfigSpinBox {
+                        icon: "format_list_numbered"
+                        text: Translation.tr("File results shown")
+                        value: Config.options.search.fileSearch.maxResults
+                        from: 1
+                        to: 20
+                        stepSize: 1
+                        enabled: Config.options.search.fileSearch.inlineResults
+                        onValueChanged: Config.options.search.fileSearch.maxResults = value
+                    }
+
+                    ConfigSpinBox {
+                        icon: "speed"
+                        text: Translation.tr("Walk budget")
+                        value: Config.options.search.fileSearch.walkLimit
+                        from: 20
+                        to: 400
+                        stepSize: 10
+                        enabled: Config.options.search.fileSearch.inlineResults
+                        onValueChanged: Config.options.search.fileSearch.walkLimit = value
+                        StyledToolTip {
+                            text: Translation.tr("How many matches the walk collects before it stops. This is what decides how long a search costs — the results shown above are ranked out of this pool.")
+                        }
+                    }
+
+                    ConfigSpinBox {
+                        icon: "account_tree"
+                        text: Translation.tr("Maximum folder depth (0 = unlimited)")
+                        value: Config.options.search.fileSearch.maxDepth
+                        from: 0
+                        to: 20
+                        stepSize: 1
+                        enabled: Config.options.search.fileSearch.inlineResults
+                        onValueChanged: Config.options.search.fileSearch.maxDepth = value
+                        StyledToolTip {
+                            text: Translation.tr("A query matching almost nothing never fills the walk budget, so it pays for the whole tree. Capping the depth bounds that worst case, at the cost of missing files buried deeper. The prefix always searches to full depth.")
+                        }
+                    }
+                }
                 ConfigSwitch { buttonIcon: "calculate"; text: Translation.tr("Calculator"); description: Translation.tr("Type an expression directly or use prefix ‘%1’.").arg(String(Config.options.search.prefix.math)); checked: Config.options.search.modules.math; onCheckedChanged: Config.options.search.modules.math = checked }
                 ConfigSwitch { buttonIcon: "travel_explore"; text: Translation.tr("Web search"); description: Translation.tr("Type prefix ‘%1’ followed by the search terms, or use the fallback result.").arg(String(Config.options.search.prefix.webSearch)); checked: Config.options.search.modules.webSearch; onCheckedChanged: Config.options.search.modules.webSearch = checked }
                 ConfigSwitch { buttonIcon: "terminal"; text: Translation.tr("Shell commands"); description: Translation.tr("Type prefix ‘%1’ followed by a command. Commands run only after pressing Enter.").arg(String(Config.options.search.prefix.shellCommand)); checked: Config.options.search.modules.shellCommand; onCheckedChanged: Config.options.search.modules.shellCommand = checked }

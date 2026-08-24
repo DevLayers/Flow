@@ -50,6 +50,9 @@ Item {
     // as two separate literals.
     readonly property real rowSideMargin: Appearance.sizes.elevationMargin
     readonly property int resultPageSize: 30
+    // Rows a single section may claim before every other section has had its
+    // turn at the page budget. Its long tail comes back on the second pass.
+    readonly property int sectionPageLimit: 8
     // Tallest the result list is allowed to get before it starts scrolling.
     readonly property real maxResultsHeight: 600
     property int loadedResultsCount: root.resultPageSize
@@ -711,9 +714,11 @@ Item {
         LauncherSearch.query = text;
     }
 
-    // Row order for the flattened result list. "best" leads, the fallback
-    // "continue with" rows always close it out.
-    readonly property var sectionOrder: ["media", "best", "apps", "controls", "tools", "actions", "content", "other", "settings", "continue"]
+    // Priority of the result groups, top to bottom, as the user arranged it in
+    // Settings. A group the user removed from that list is simply not iterated
+    // below, so its results never reach the model — the list is the on/off
+    // switch as much as it is the order.
+    readonly property var sectionOrder: SearchResultSectionRegistry.activeOrder
 
     function resultSectionId(item): string {
         const key = String(item?.key ?? "");
@@ -729,7 +734,11 @@ Item {
             return "controls";
         if (/^(panel:|keybind:|cheatsheet:|shortcut:)/.test(key))
             return "tools";
-        if (/^(file:|fsearch:|quicklink:|alias:|text-snippet:)/.test(key))
+        // Files and folders are their own class of result, not "links & text":
+        // they are the one group whose rows are a location on disk.
+        if (/^(file:|fsearch:)/.test(key))
+            return "files";
+        if (/^(quicklink:|alias:|text-snippet:)/.test(key))
             return "content";
         if (/^(cmd:shell|web:search|ai:ask|fallback:|math:)/.test(key))
             return "continue";
@@ -739,18 +748,10 @@ Item {
     }
 
     function sectionPresentation(sectionId: string): var {
-        switch (sectionId) {
-        case "media": return { label: Translation.tr("Now playing"), icon: "music_note" };
-        case "best": return { label: Translation.tr("Best match"), icon: "stars" };
-        case "apps": return { label: Translation.tr("Applications"), icon: "apps" };
-        case "controls": return { label: Translation.tr("Controls"), icon: "tune" };
-        case "tools": return { label: Translation.tr("Search tools"), icon: "widgets" };
-        case "actions": return { label: Translation.tr("Actions & shortcuts"), icon: "bolt" };
-        case "content": return { label: Translation.tr("Files, links & text"), icon: "link" };
-        case "settings": return { label: Translation.tr("Settings"), icon: "settings" };
-        case "continue": return { label: Translation.tr("Continue with"), icon: "arrow_forward" };
-        default: return { label: Translation.tr("More results"), icon: "search" };
-        }
+        const section = SearchResultSectionRegistry.getComponent(sectionId);
+        if (section)
+            return { label: section.title, icon: section.icon };
+        return { label: Translation.tr("More results"), icon: "search" };
     }
 
     /**
@@ -796,7 +797,7 @@ Item {
         // command surface when no application matches, and never promote
         // Settings: configuration discovery is useful, but intentionally
         // secondary to things the user can launch or act on immediately.
-        if (!hasApplications && query.length >= 2) {
+        if (!hasApplications && query.length >= 2 && root.sectionOrder.indexOf("best") !== -1) {
             let bestIndex = -1;
             for (let i = 0; i < unique.length; i++) {
                 const key = String(unique[i].key ?? "");
@@ -827,14 +828,40 @@ Item {
                 buckets[sectionIds[i]] = [unique[i]];
         }
 
+        // How many rows each section contributes is decided before any of them
+        // are laid out, so the page budget is shared rather than consumed
+        // front to back. Filling it in order let one broad section swallow the
+        // page — a three-letter query matches enough applications to push Files
+        // and Controls out of the list entirely, even though they matched.
+        //
+        // Pass one gives every section its opening few rows; pass two hands the
+        // leftover budget to whoever still has more, in section order. Paging
+        // then extends the same split as the user scrolls.
+        const takes = ({});
+        let remaining = maxItems;
+        for (let pass = 0; pass < 2 && remaining > 0; pass++) {
+            for (let s = 0; s < root.sectionOrder.length && remaining > 0; s++) {
+                const sectionId = root.sectionOrder[s];
+                const items = buckets[sectionId];
+                if (!items || items.length === 0)
+                    continue;
+                const already = takes[sectionId] ?? 0;
+                const ceiling = pass === 0 ? Math.min(items.length, root.sectionPageLimit) : items.length;
+                const take = Math.min(ceiling - already, remaining);
+                if (take <= 0)
+                    continue;
+                takes[sectionId] = already + take;
+                remaining -= take;
+            }
+        }
+
         const rows = [];
-        let emitted = 0;
         for (let s = 0; s < root.sectionOrder.length; s++) {
             const sectionId = root.sectionOrder[s];
-            const items = buckets[sectionId];
-            if (!items || items.length === 0 || emitted >= maxItems)
+            const take = takes[sectionId] ?? 0;
+            if (take <= 0)
                 continue;
-            const take = Math.min(items.length, maxItems - emitted);
+            const items = buckets[sectionId];
             rows.push({
                 key: "section:" + sectionId,
                 sectionId: sectionId,
@@ -854,7 +881,6 @@ Item {
                     ref: item
                 });
             }
-            emitted += take;
         }
         return rows;
     }

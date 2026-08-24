@@ -100,9 +100,9 @@ Item {
         accent: true
         showStatus: true
         statusText: root.statusText
-        primaryHint: ({ label: Translation.tr("Generate & copy"), keys: ["↵"] })
+        primaryHint: ({ label: Translation.tr("Generate & copy"), actionId: "activate", keys: ["↵"] })
         hints: [
-            { label: Translation.tr("New value"), keys: ["Tab"] },
+            { label: Translation.tr("New value"), actionId: "section", keys: ["Tab"] },
             { label: Translation.tr("Choose"), keys: ["←", "→"] }
         ]
 
@@ -121,6 +121,7 @@ Item {
                         required property var modelData
                         Layout.fillWidth: true
                         implicitHeight: generatorContent.implicitHeight + Appearance.sizes.elevationMargin * 2
+                        scale: down ? 0.98 : 1.0
                         buttonRadius: root.selectedIndex === index ? Appearance.rounding.large : Appearance.rounding.normal
                         colBackground: root.selectedIndex === index ? Appearance.colors.colSecondaryContainer : Appearance.colors.colSurfaceContainerHigh
                         colBackgroundHover: root.selectedIndex === index ? Appearance.colors.colSecondaryContainerHover : Appearance.colors.colSurfaceContainerHighestHover
@@ -150,6 +151,17 @@ Item {
                                 font.pixelSize: Appearance.font.pixelSize.smaller
                                 color: root.selectedIndex === index ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colSubtext
                             }
+                        }
+
+                        ConfiguredKeyHint {
+                            anchors.right: parent.right
+                            anchors.bottom: parent.bottom
+                            anchors.margins: Appearance.sizes.elevationMargin / 2
+                            visible: root.selectedIndex === index && Config.options.search.appearance.showKeyHints
+                            actionId: "activate"
+                            fallbackKeys: ["↵"]
+                            surface: Appearance.colors.colSecondaryContainer
+                            onSurface: Appearance.colors.colOnSecondaryContainer
                         }
                     }
                 }

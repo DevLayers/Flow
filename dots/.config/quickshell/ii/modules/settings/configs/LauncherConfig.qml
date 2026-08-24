@@ -62,6 +62,49 @@ Item {
         }
 
         ContentSection {
+            id: resultPrioritySection
+            icon: "low_priority"
+            title: Translation.tr("Result priority")
+            tooltip: Translation.tr("Order the groups results are shown in, and choose which ones appear at all.")
+
+            // ContentSection reparents its children into an inner layout, so
+            // the list below reaches this by id rather than through `parent`.
+            readonly property var orderedIds: Array.from(Config.options.search.sectionOrder ?? [])
+                .map(entry => String(entry?.id ?? entry ?? ""))
+                .filter(id => id.length > 0)
+
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: Appearance.sizes.elevationMargin / 2
+
+                NoticeBox {
+                    Layout.fillWidth: true
+                    materialIcon: "reorder"
+                    text: Translation.tr("Drag a group to change where its results appear. Removing one hides its results entirely — add it back from the selector below.")
+                }
+
+                ConfigListView {
+                    // Not a bar layout: no group owns a "centered" slot here.
+                    barSection: -1
+                    listModel: Config.options.search.sectionOrder
+                    availableComponents: SearchResultSectionRegistry.getAvailableComponents(resultPrioritySection.orderedIds)
+                    addButtonText: Translation.tr("Add group")
+                    infoProvider: id => SearchResultSectionRegistry.getComponent(id)
+                    // A result group is only ever an id and a position, so that
+                    // is all the stored entry carries. Taking the bar's
+                    // per-entry shape would write fields into config.json that
+                    // mean nothing here.
+                    normalizeEntry: entry => ({
+                            id: entry.id
+                        })
+                    onUpdated: newList => {
+                        Config.options.search.sectionOrder = newList;
+                    }
+                }
+            }
+        }
+
+        ContentSection {
             icon: "extension"
             title: Translation.tr("Search workspace")
             tooltip: Translation.tr("Configure every searchable panel and see the words or prefixes that open it.")

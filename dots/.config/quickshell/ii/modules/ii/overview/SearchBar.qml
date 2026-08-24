@@ -106,6 +106,14 @@ RowLayout {
             key = "up";
         else if (event.key === Qt.Key_Down)
             key = "down";
+        else if (event.key === Qt.Key_Left)
+            key = "left";
+        else if (event.key === Qt.Key_Right)
+            key = "right";
+        else if (event.key === Qt.Key_Tab)
+            key = "tab";
+        else if (event.key === Qt.Key_Delete)
+            key = "delete";
         else if (event.key >= Qt.Key_A && event.key <= Qt.Key_Z)
             key = String.fromCharCode(event.key).toLocaleLowerCase();
         return parts.concat(key ? [key] : []).join("+");
@@ -440,43 +448,42 @@ RowLayout {
                 event.accepted = true;
                 return;
             }
-            if (event.key === Qt.Key_C && (event.modifiers & Qt.ControlModifier) && root.activePanelMode) {
+            if (root.matchesShortcut(event, "copy", "Ctrl+C") && root.activePanelMode) {
                 root.copySelected();
                 event.accepted = true;
                 return;
             }
-            if (root.activePanelMode && event.key === Qt.Key_S && (event.modifiers & Qt.ControlModifier)) {
+            if (root.activePanelMode && root.matchesShortcut(event, "save", "Ctrl+S")) {
                 root.saveSelected();
                 event.accepted = true;
                 return;
             }
-            if (root.activePanelMode && event.key === Qt.Key_E && (event.modifiers & Qt.ControlModifier)) {
+            if (root.activePanelMode && root.matchesShortcut(event, "edit", "Ctrl+E")) {
                 root.editSelected();
                 event.accepted = true;
                 return;
             }
-            if (root.activePanelMode && event.key === Qt.Key_O && (event.modifiers & Qt.ControlModifier)) {
+            if (root.activePanelMode && root.matchesShortcut(event, "ocr", "Ctrl+O")) {
                 root.ocrSelected();
                 event.accepted = true;
                 return;
             }
-            if (root.activePanelMode && event.key === Qt.Key_N && (event.modifiers & Qt.ControlModifier)) {
+            if (root.activePanelMode && root.matchesShortcut(event, "create", "Ctrl+N")) {
                 root.createFromQuery();
                 event.accepted = true;
                 return;
             }
-            if (root.activePanelMode && event.key === Qt.Key_K
-                    && (event.modifiers & (Qt.ControlModifier | Qt.ShiftModifier)) === (Qt.ControlModifier | Qt.ShiftModifier)) {
+            if (root.activePanelMode && root.matchesShortcut(event, "copyDispatch", "Ctrl+Shift+K")) {
                 root.copyDispatchSelected();
                 event.accepted = true;
                 return;
             }
-            if (root.activePanelMode && event.key === Qt.Key_Delete && (event.modifiers & Qt.ShiftModifier)) {
+            if (root.activePanelMode && root.matchesShortcut(event, "delete", "Shift+Delete")) {
                 root.deleteSelected();
                 event.accepted = true;
                 return;
             }
-            if (event.key === Qt.Key_Tab && root.activePanelMode && root.supportsPanelSectionToggle) {
+            if (root.matchesShortcut(event, "section", "Tab") && root.activePanelMode && root.supportsPanelSectionToggle) {
                 root.togglePanelSection();
                 event.accepted = true;
                 return;

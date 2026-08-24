@@ -167,12 +167,12 @@ Item {
         accent: true
         showStatus: true
         statusText: root.statusText
-        primaryHint: ({ label: Translation.tr("Copy"), keys: ["↵"] })
+        primaryHint: ({ label: Translation.tr("Copy"), actionId: "activate", keys: ["↵"] })
         hints: [
-            { label: Translation.tr("Save"), keys: ["Ctrl", "S"] },
-            { label: Translation.tr("Edit"), keys: ["Ctrl", "E"] },
-            { label: Translation.tr("OCR"), keys: ["Ctrl", "O"] },
-            { label: Translation.tr("Delete"), keys: ["⇧", "⌫"] }
+            { label: Translation.tr("Save"), actionId: "save", keys: ["Ctrl", "S"] },
+            { label: Translation.tr("Edit"), actionId: "edit", keys: ["Ctrl", "E"] },
+            { label: Translation.tr("OCR"), actionId: "ocr", keys: ["Ctrl", "O"] },
+            { label: Translation.tr("Delete"), actionId: "delete", keys: ["⇧", "Del"] }
         ]
 
         RowLayout {
@@ -245,6 +245,14 @@ Item {
                                     ? Appearance.colors.colOnPrimaryContainer
                                     : Appearance.colors.colSubtext
                             }
+                        }
+
+                        ConfiguredKeyHint {
+                            visible: root.selectedIndex === index && Config.options.search.appearance.showKeyHints
+                            actionId: "activate"
+                            fallbackKeys: ["↵"]
+                            surface: Appearance.colors.colPrimaryContainer
+                            onSurface: Appearance.colors.colOnPrimaryContainer
                         }
                     }
                 }

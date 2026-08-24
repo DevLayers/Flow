@@ -107,8 +107,8 @@ Item {
         accent: true
         statusText: root.statusText
         showStatus: true
-        primaryHint: ({ label: Translation.tr("Select"), keys: ["↵"] })
-        hints: [{ label: Translation.tr("Remind"), keys: ["Ctrl", "N"] }]
+        primaryHint: ({ label: Translation.tr("Select"), actionId: "activate", keys: ["↵"] })
+        hints: [{ label: Translation.tr("Remind"), actionId: "create", keys: ["Ctrl", "N"] }]
 
         ListView {
             id: gamesList
@@ -136,9 +136,12 @@ Item {
                     anchors.fill: parent
                     anchors.margins: Appearance.sizes.elevationMargin
                     spacing: Appearance.sizes.elevationMargin
+                    readonly property real columnWidth: Math.max(0, (width - spacing * 2) / 3)
 
                     ColumnLayout {
-                        Layout.fillWidth: true
+                        Layout.minimumWidth: gameContent.columnWidth
+                        Layout.preferredWidth: gameContent.columnWidth
+                        Layout.maximumWidth: gameContent.columnWidth
                         spacing: Appearance.sizes.elevationMargin / 2
                         Rectangle {
                             Layout.alignment: Qt.AlignHCenter
@@ -172,7 +175,9 @@ Item {
                     }
 
                     ColumnLayout {
-                        Layout.preferredWidth: parent.width / 3
+                        Layout.minimumWidth: gameContent.columnWidth
+                        Layout.preferredWidth: gameContent.columnWidth
+                        Layout.maximumWidth: gameContent.columnWidth
                         spacing: Appearance.sizes.elevationMargin / 2
                         Rectangle {
                             Layout.alignment: Qt.AlignHCenter
@@ -208,10 +213,21 @@ Item {
                             font.pixelSize: Appearance.font.pixelSize.smaller
                             color: root.selectedIndex === index ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colSubtext
                         }
+
+                        ConfiguredKeyHint {
+                            Layout.alignment: Qt.AlignHCenter
+                            visible: root.selectedIndex === index && Config.options.search.appearance.showKeyHints
+                            actionId: "activate"
+                            fallbackKeys: ["↵"]
+                            surface: Appearance.colors.colPrimaryContainer
+                            onSurface: Appearance.colors.colOnPrimaryContainer
+                        }
                     }
 
                     ColumnLayout {
-                        Layout.fillWidth: true
+                        Layout.minimumWidth: gameContent.columnWidth
+                        Layout.preferredWidth: gameContent.columnWidth
+                        Layout.maximumWidth: gameContent.columnWidth
                         spacing: Appearance.sizes.elevationMargin / 2
                         Rectangle {
                             Layout.alignment: Qt.AlignHCenter

@@ -146,10 +146,10 @@ Item {
         accent: true
         statusText: root.statusText
         showStatus: true
-        primaryHint: ({ label: Translation.tr("Open"), keys: ["↵"] })
+        primaryHint: ({ label: Translation.tr("Open"), actionId: "activate", keys: ["↵"] })
         hints: [
-            { label: Translation.tr("Reply"), keys: ["Ctrl", "↵"] },
-            { label: Translation.tr("Mark read"), keys: ["Ctrl", "E"] }
+            { label: Translation.tr("Reply"), actionId: "secondary", keys: ["Ctrl", "↵"] },
+            { label: Translation.tr("Mark read"), actionId: "edit", keys: ["Ctrl", "E"] }
         ]
 
         ColumnLayout {
@@ -215,6 +215,9 @@ Item {
                             id: messageContent
                             anchors.fill: parent
                             anchors.margins: Appearance.sizes.elevationMargin
+                            anchors.rightMargin: root.selectedIndex === index
+                                ? Appearance.sizes.elevationMargin * 6
+                                : Appearance.sizes.elevationMargin
                             spacing: 0
 
                             StyledText {
@@ -239,6 +242,17 @@ Item {
                                 font.pixelSize: Appearance.font.pixelSize.smaller
                                 color: root.selectedIndex === index ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colSubtext
                             }
+                        }
+
+                        ConfiguredKeyHint {
+                            anchors.right: parent.right
+                            anchors.verticalCenter: parent.verticalCenter
+                            anchors.rightMargin: Appearance.sizes.elevationMargin
+                            visible: root.selectedIndex === index && Config.options.search.appearance.showKeyHints
+                            actionId: "activate"
+                            fallbackKeys: ["↵"]
+                            surface: Appearance.colors.colPrimaryContainer
+                            onSurface: Appearance.colors.colOnPrimaryContainer
                         }
                     }
 

@@ -72,6 +72,14 @@ RippleButton {
             }
         }
 
+        ConfiguredKeyHint {
+            visible: root.selected && Config.options.search.appearance.showKeyHints
+            actionId: "activate"
+            fallbackKeys: ["↵"]
+            surface: Appearance.colors.colPrimaryContainer
+            onSurface: Appearance.colors.colOnPrimaryContainer
+        }
+
         MaterialSymbol {
             visible: String(root.event?.url ?? "").length > 0
             text: "open_in_new"

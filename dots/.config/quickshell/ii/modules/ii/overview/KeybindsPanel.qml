@@ -149,10 +149,10 @@ Item {
         accent: true
         statusText: root.statusText
         showStatus: true
-        primaryHint: ({ label: Translation.tr("Run"), keys: ["↵"] })
+        primaryHint: ({ label: Translation.tr("Run"), actionId: "activate", keys: ["↵"] })
         hints: [
-            { label: Translation.tr("Copy"), keys: ["Ctrl", "C"] },
-            { label: Translation.tr("Cheat sheet"), keys: ["Ctrl", "↵"] }
+            { label: Translation.tr("Copy"), actionId: "copy", keys: ["Ctrl", "C"] },
+            { label: Translation.tr("Cheat sheet"), actionId: "secondary", keys: ["Ctrl", "↵"] }
         ]
 
         ColumnLayout {
@@ -254,6 +254,14 @@ Item {
                                     onSurface: root.selectedIndex === rowLoader.index
                                         ? Appearance.colors.colOnPrimaryContainer
                                         : Appearance.colors.colOnSurface
+                                }
+
+                                ConfiguredKeyHint {
+                                    visible: root.selectedIndex === rowLoader.index && Config.options.search.appearance.showKeyHints
+                                    actionId: "activate"
+                                    fallbackKeys: ["↵"]
+                                    surface: Appearance.colors.colPrimaryContainer
+                                    onSurface: Appearance.colors.colOnPrimaryContainer
                                 }
                             }
                         }

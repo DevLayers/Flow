@@ -70,11 +70,14 @@ Rectangle {
         || root.settingType === "int"
         || root.settingType === "real"
         || (root.settingType === "enum" && root.enumOptions.length > 0))
+    readonly property color selectedSurfaceColor: Appearance.colors.colPrimaryContainer
+    readonly property color selectedAccentColor: Appearance.colors.colPrimary
+    readonly property color idleAccentColor: Appearance.colors.colSecondaryContainer
     readonly property color foregroundColor: root.expressiveStyle && root.isSelected
-        ? Appearance.colors.colOnSecondaryContainer
+        ? Appearance.colors.colOnPrimaryContainer
         : (root.launcherStyle && root.isSelected ? Appearance.colors.colOnPrimary : Appearance.colors.colOnLayer2)
     readonly property color secondaryColor: root.expressiveStyle && root.isSelected
-        ? Appearance.colors.colOnSecondaryContainer
+        ? Appearance.colors.colOnPrimaryContainer
         : (root.launcherStyle && root.isSelected ? Appearance.colors.colOnPrimary : Appearance.colors.colSubtext)
     readonly property bool isHovered: cardHover.hovered
     // One label, already in the language the interface is showing. The index
@@ -188,7 +191,7 @@ Rectangle {
      * the index was built in another language this silently did nothing but
      * open the page.
      */
-    function openInSettings() {
+    function openInSettings(): bool {
         Ai.toolSettingsOpen({
             args: {
                 pageId: String(root.setting?.pageId ?? ""),
@@ -196,6 +199,7 @@ Rectangle {
                 sectionTitle: root.sectionTitle
             }
         });
+        return true;
     }
 
     /**
@@ -237,9 +241,9 @@ Rectangle {
     }
 
     Layout.fillWidth: true
-    implicitHeight: cardColumn.implicitHeight + (root.compact ? 16 : 20)
+    implicitHeight: cardColumn.implicitHeight + (root.compact ? Appearance.sizes.elevationMargin * 1.2 : Appearance.sizes.elevationMargin * 2)
     radius: root.expressiveStyle
-        ? (root.isSelected ? Appearance.rounding.verylarge : Appearance.rounding.large)
+        ? (root.isSelected ? Appearance.rounding.large : Appearance.rounding.normal)
         : Appearance.rounding.normal
     topLeftRadius: root.expressiveStyle ? root.radius : (root.launcherStyle
         ? (root.isFirst ? Appearance.rounding.large : (root.isSelected || root.isBelowSelected ? root.pillRadius : Appearance.rounding.small))
@@ -251,7 +255,7 @@ Rectangle {
     bottomRightRadius: root.bottomLeftRadius
     color: root.expressiveStyle
         ? (root.isSelected
-            ? Appearance.colors.colSecondaryContainer
+            ? root.selectedSurfaceColor
             : (root.isHovered ? Appearance.colors.colSurfaceContainerHighestHover : Appearance.colors.colSurfaceContainerHigh))
         : (root.launcherStyle
         ? (root.isSelected ? Appearance.colors.colPrimaryHover : (root.isHovered ? Appearance.colors.colSurfaceContainerHighestHover : Appearance.colors.colSurfaceContainerHigh))
@@ -288,7 +292,7 @@ Rectangle {
     ColumnLayout {
         id: cardColumn
         anchors.fill: parent
-        anchors.margins: root.compact ? 8 : 10
+        anchors.margins: root.compact ? Appearance.sizes.elevationMargin * 0.6 : Appearance.sizes.elevationMargin
         spacing: root.compact ? 4 : 6
 
         RowLayout {
@@ -298,7 +302,7 @@ Rectangle {
             Item {
                 Layout.alignment: Qt.AlignTop
                 Layout.preferredWidth: root.expressiveStyle
-                    ? Appearance.sizes.elevationMargin * 5
+                    ? Appearance.sizes.elevationMargin * 4
                     : Appearance.font.pixelSize.normal
                 Layout.preferredHeight: Layout.preferredWidth
 
@@ -310,16 +314,16 @@ Rectangle {
                         : (root.settingType === "enum" ? "Cookie7Sided"
                         : (root.settingType === "string" ? "Arch" : "SoftBurst"))
                     color: root.isSelected
-                        ? Appearance.colors.colPrimary
-                        : Appearance.colors.colTertiaryContainer
+                        ? root.selectedAccentColor
+                        : root.idleAccentColor
                 }
 
                 MaterialSymbol {
                     anchors.centerIn: parent
                     text: root.settingIcon
-                    iconSize: Appearance.font.pixelSize.normal
+                    iconSize: Appearance.font.pixelSize.large
                     color: root.expressiveStyle
-                        ? (root.isSelected ? Appearance.colors.colOnPrimary : Appearance.colors.colOnTertiaryContainer)
+                        ? (root.isSelected ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSecondaryContainer)
                         : root.foregroundColor
                 }
             }
@@ -332,7 +336,8 @@ Rectangle {
                     Layout.fillWidth: true
                     text: root.displayLabel
                     elide: Text.ElideRight
-                    font.pixelSize: Appearance.font.pixelSize.small
+                    font.pixelSize: Appearance.font.pixelSize.normal
+                    font.weight: Font.DemiBold
                     color: root.foregroundColor
                 }
 
@@ -349,6 +354,7 @@ Rectangle {
 
             StyledSwitch {
                 visible: root.expressiveStyle && root.canEditInline && root.settingType === "bool"
+                sizeScale: 0.82
                 checked: Boolean(root.currentValue)
                 onToggled: {
                     if (checked !== Boolean(root.currentValue))
@@ -356,21 +362,50 @@ Rectangle {
                 }
             }
 
+            ConfiguredKeyHint {
+                visible: root.expressiveStyle && root.isSelected && Config.options.search.appearance.showKeyHints
+                actionId: "activate"
+                fallbackKeys: ["↵"]
+                surface: root.selectedSurfaceColor
+                onSurface: Appearance.colors.colOnPrimaryContainer
+            }
+
             RippleButton {
-                implicitWidth: 34
-                implicitHeight: 32
+                id: openSettingsButton
+                implicitWidth: openSettingsContent.implicitWidth + Appearance.sizes.elevationMargin * 1.4
+                implicitHeight: Appearance.sizes.elevationMargin * 3.8
                 buttonRadius: Appearance.rounding.full
-                colBackground: ColorUtils.transparentize(root.isSelected ? Appearance.colors.colPrimary : Appearance.colors.colLayer2, 1)
-                colBackgroundHover: root.isSelected ? Appearance.colors.colPrimaryHover : Appearance.colors.colLayer2Hover
-                colRipple: root.isSelected ? Appearance.colors.colPrimaryActive : Appearance.colors.colLayer2Active
+                colBackground: root.isSelected ? root.selectedAccentColor : root.idleAccentColor
+                colBackgroundHover: root.isSelected ? Appearance.colors.colPrimaryHover : Appearance.colors.colSecondaryContainerHover
+                colRipple: root.isSelected ? Appearance.colors.colPrimaryActive : Appearance.colors.colSecondaryContainerActive
                 onClicked: root.openInSettings()
 
                 Accessible.name: Translation.tr("Open in Settings")
 
-                contentItem: MaterialSymbol {
-                    text: "open_in_new"
-                    iconSize: Appearance.font.pixelSize.small
-                    color: root.foregroundColor
+                contentItem: RowLayout {
+                    id: openSettingsContent
+                    spacing: Appearance.sizes.elevationMargin / 2
+
+                    MaterialSymbol {
+                        text: "open_in_new"
+                        iconSize: Appearance.font.pixelSize.normal
+                        color: root.isSelected ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSecondaryContainer
+                    }
+
+                    StyledText {
+                        text: Translation.tr("Open")
+                        font.pixelSize: Appearance.font.pixelSize.small
+                        font.weight: Font.DemiBold
+                        color: root.isSelected ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSecondaryContainer
+                    }
+
+                    ConfiguredKeyHint {
+                        visible: Config.options.search.appearance.showKeyHints
+                        actionId: "secondary"
+                        fallbackKeys: ["Ctrl", "↵"]
+                        surface: root.isSelected ? root.selectedAccentColor : root.idleAccentColor
+                        onSurface: root.isSelected ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSecondaryContainer
+                    }
                 }
 
                 StyledToolTip { text: Translation.tr("Open in Settings") }
@@ -381,6 +416,13 @@ Rectangle {
             id: controlLoader
             Layout.fillWidth: true
             sourceComponent: {
+                // The Settings search panel is intentionally a compact command
+                // surface. Expanding a slider, option flow or text field inside
+                // one result made individual rows consume several list slots.
+                // Numeric and enum values remain keyboard-adjustable through
+                // Left/Right; text and composite controls open their full page.
+                if (root.compact && root.expressiveStyle)
+                    return null;
                 if (!root.canEditInline || (root.expressiveStyle && root.settingType === "bool"))
                     return null;
                 if (root.settingType === "bool")
@@ -399,7 +441,7 @@ Rectangle {
 
         StyledText {
             Layout.fillWidth: true
-            visible: !root.canEditInline
+            visible: !root.canEditInline && !(root.compact && root.expressiveStyle)
             text: root.enumOptions.length > 0
                 ? Translation.tr("Composite control · open its page to choose safely")
                 : Translation.tr("Open this setting to change its value.")

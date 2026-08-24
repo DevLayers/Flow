@@ -208,11 +208,13 @@ class SearchRaycastContractTests(unittest.TestCase):
     def test_normal_results_are_deduplicated_and_grouped(self):
         widget = source("modules/ii/overview/SearchWidget.qml")
         launcher = source("services/LauncherSearch.qml")
+        registry = source("modules/common/SearchResultSectionRegistry.qml")
         self.assertIn("function organizeResults(results, limit)", widget)
-        self.assertIn("Best match", widget)
+        # Group names moved to the registry so Settings can list them too.
+        self.assertIn('title: qsTr("Best match")', registry)
+        self.assertIn('title: qsTr("Settings")', registry)
         self.assertIn("let hasApplications = false", widget)
         self.assertIn('key !== "panel:settings"', widget)
-        self.assertIn('case "settings": return { label: Translation.tr("Settings")', widget)
         # Section captions are model rows, not ListView.section delegates: Qt
         # positions section delegates outside the view transitions, which let
         # them snap over rows that were still animating.
@@ -241,6 +243,72 @@ class SearchRaycastContractTests(unittest.TestCase):
         self.assertIn("pageLoadTimer.restart()", widget)
         # Length invariant: nothing may survive past the end of the new rows.
         self.assertIn("while (resultModel.count > rows.length)", widget)
+
+    def test_file_search_can_run_without_a_prefix_and_stays_bounded(self):
+        launcher = source("services/LauncherSearch.qml")
+        widget = source("modules/ii/overview/SearchWidget.qml")
+        config = source("modules/common/Config.qml")
+
+        # The toggle, and the levers that keep it affordable.
+        self.assertIn("property bool inlineResults: false", config)
+        self.assertIn("property int minimumQueryLength: 3", config)
+        self.assertIn("property int walkLimit: 60", config)
+        self.assertIn("property int threads: 4", config)
+
+        # The walk must never sit on the keystroke path, and must never start
+        # for a query that already belongs to a prefix or to the calculator.
+        self.assertIn("fileSearchDebounce.restart()", launcher)
+        self.assertIn("function fileSearchExpression(query: string): string", launcher)
+        self.assertIn("root.queryUsesPrefix(query) || root.isMathQuery(query)", launcher)
+
+        # `--max-results` is what makes fd quit early instead of walking the
+        # whole tree; without it a keystroke costs a full traversal.
+        self.assertIn('"--max-results", String(walkLimit)', launcher)
+        self.assertIn('command.push("--threads", String(threads))', launcher)
+
+        # A query is user text, not a regex: an unescaped bracket would make fd
+        # exit with an error instead of results.
+        self.assertIn("function searchPattern(expression)", launcher)
+        self.assertIn('.join(".*")', launcher)
+
+        # Files are their own result class, not "links & text". The group's name
+        # and its default position now live in the registry, not in the widget.
+        registry = source("modules/common/SearchResultSectionRegistry.qml")
+        self.assertIn('return "files"', widget)
+        self.assertIn('id: "files"', registry)
+        self.assertIn('title: qsTr("Files & folders")', registry)
+
+    def test_result_group_priority_is_user_orderable(self):
+        registry = source("modules/common/SearchResultSectionRegistry.qml")
+        widget = source("modules/ii/overview/SearchWidget.qml")
+        config = source("modules/common/Config.qml")
+        listview = source("modules/common/widgets/ConfigListView.qml")
+        entry = source("modules/common/widgets/ConfigListViewEntry.qml")
+        launcher_page = source("modules/settings/configs/LauncherConfig.qml")
+
+        # One catalogue behind both the rendered groups and the Settings list,
+        # instead of the two parallel switch statements this replaced.
+        self.assertIn("function getAvailableComponents(usedIds: var): var", registry)
+        self.assertIn("readonly property var activeOrder", registry)
+        self.assertIn("readonly property var sectionOrder: SearchResultSectionRegistry.activeOrder", widget)
+        self.assertIn("SearchResultSectionRegistry.getComponent(sectionId)", widget)
+
+        # Files & folders ships last among the match groups.
+        self.assertIn('{ "id": "files" },\n                    { "id": "continue" }', config)
+        self.assertIn("property list<var> sectionOrder", config)
+
+        # An emptied list must not mean "no results at all".
+        self.assertIn("order.length > 0 ? order : root.defaultOrder", registry)
+        # Promoting into a group the user removed would delete the row, not
+        # highlight it.
+        self.assertIn('root.sectionOrder.indexOf("best") !== -1', widget)
+
+        # The bar's reorderable list, reused rather than duplicated.
+        self.assertIn("property var infoProvider: null", listview)
+        self.assertIn("property var normalizeEntry: null", listview)
+        self.assertIn("function componentInfo(id)", listview)
+        self.assertIn("root.componentInfo(modelData.id)", entry)
+        self.assertIn("infoProvider: id => SearchResultSectionRegistry.getComponent(id)", launcher_page)
 
     def test_collapsed_search_does_not_reserve_hidden_result_margins(self):
         widget = source("modules/ii/overview/SearchWidget.qml")
@@ -324,6 +392,58 @@ class SearchRaycastContractTests(unittest.TestCase):
         self.assertIn("readonly property string settingIcon", card)
         self.assertIn("text: root.settingIcon", card)
         self.assertIn("root.setting?.hasUi === true", card)
+
+    def test_settings_panel_is_compact_tonal_and_keyboard_complete(self):
+        panel = source("modules/ii/overview/SettingsTogglesPanel.qml")
+        card = source("services/ai/blocks/AiSettingResultCard.qml")
+
+        self.assertIn("function secondaryActivateSelected(): bool", panel)
+        self.assertIn("id: sectionCountShape", panel)
+        self.assertIn("id: sectionButtonContent", panel)
+        self.assertNotIn("implicitHeight: Appearance.sizes.elevationMargin * 7", panel)
+        self.assertIn("readonly property color selectedSurfaceColor: Appearance.colors.colPrimaryContainer", card)
+        self.assertIn("readonly property color selectedAccentColor: Appearance.colors.colPrimary", card)
+        self.assertIn("id: openSettingsButton", card)
+        self.assertIn('text: Translation.tr("Open")', card)
+        self.assertIn('actionId: "secondary"', card)
+        self.assertIn("ConfiguredKeyHint", card)
+        self.assertIn("if (root.compact && root.expressiveStyle)", card)
+
+    def test_every_new_panel_exposes_item_level_keyboard_hints(self):
+        configured_hint = source("modules/common/widgets/ConfiguredKeyHint.qml")
+        hint_bar = source("modules/common/widgets/KeyHintBar.qml")
+        self.assertIn("property string actionId", configured_hint)
+        self.assertIn("Config.options.search.keybindings", configured_hint)
+        self.assertIn("fallbackKeys", configured_hint)
+        self.assertIn("ConfiguredKeyHint", hint_bar)
+
+        paths = (
+            "modules/ii/overview/calendar/CalendarEventBlock.qml",
+            "modules/ii/overview/TasksPanel.qml",
+            "modules/ii/overview/TimersPanel.qml",
+            "modules/ii/overview/EmojiPanel.qml",
+            "modules/ii/overview/ScreenshotsPanel.qml",
+            "modules/ii/overview/WindowManagementPanel.qml",
+            "modules/ii/overview/SettingsTogglesPanel.qml",
+            "modules/ii/overview/KeybindsPanel.qml",
+            "modules/ii/overview/CommandsPanel.qml",
+            "modules/ii/overview/GmailPanel.qml",
+            "modules/ii/overview/SportsPanel.qml",
+            "modules/ii/overview/GeneratorsPanel.qml",
+        )
+        for path in paths:
+            self.assertIn("ConfiguredKeyHint", source(path), path)
+
+    def test_sports_score_column_stays_geometrically_centered(self):
+        panel = source("modules/ii/overview/SportsPanel.qml")
+        self.assertIn("readonly property real columnWidth", panel)
+        self.assertEqual(panel.count("Layout.preferredWidth: gameContent.columnWidth"), 3)
+
+    def test_generator_selection_hint_does_not_resize_or_hover_scale_card(self):
+        panel = source("modules/ii/overview/GeneratorsPanel.qml")
+        self.assertIn("scale: down ? 0.98 : 1.0", panel)
+        self.assertIn("anchors.bottom: parent.bottom", panel)
+        self.assertIn("anchors.right: parent.right", panel)
 
     def test_new_search_surfaces_do_not_introduce_borders(self):
         paths = (

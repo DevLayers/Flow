@@ -245,11 +245,11 @@ Item {
         accent: true
         statusText: root.statusText
         showStatus: true
-        primaryHint: ({ label: Translation.tr("Run"), keys: ["↵"] })
+        primaryHint: ({ label: Translation.tr("Run"), actionId: "activate", keys: ["↵"] })
         hints: [
-            { label: Translation.tr("Section"), keys: ["Tab"] },
-            { label: Translation.tr("Keep open"), keys: ["Ctrl", "↵"] },
-            { label: Translation.tr("Copy dispatch"), keys: ["Ctrl", "Shift", "K"] }
+            { label: Translation.tr("Section"), actionId: "section", keys: ["Tab"] },
+            { label: Translation.tr("Keep open"), actionId: "secondary", keys: ["Ctrl", "↵"] },
+            { label: Translation.tr("Copy dispatch"), actionId: "copyDispatch", keys: ["Ctrl", "Shift", "K"] }
         ]
 
         ColumnLayout {
@@ -473,6 +473,14 @@ Item {
                                 keys: modelData.keyHint
                                 surface: root.selectedIndex === index ? Appearance.colors.colPrimaryContainer : Appearance.colors.colSurfaceContainerHigh
                                 onSurface: root.selectedIndex === index ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnSurface
+                            }
+
+                            ConfiguredKeyHint {
+                                visible: root.selectedIndex === index && Config.options.search.appearance.showKeyHints
+                                actionId: "activate"
+                                fallbackKeys: ["↵"]
+                                surface: Appearance.colors.colPrimaryContainer
+                                onSurface: Appearance.colors.colOnPrimaryContainer
                             }
                         }
                     }

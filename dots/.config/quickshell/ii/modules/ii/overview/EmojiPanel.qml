@@ -249,9 +249,9 @@ Item {
         accent: true
         showStatus: true
         statusText: root.statusText
-        primaryHint: ({ label: Translation.tr("Copy"), keys: ["↵"] })
+        primaryHint: ({ label: Translation.tr("Copy"), actionId: "activate", keys: ["↵"] })
         hints: [
-            { label: Translation.tr("Category"), keys: ["Tab"] },
+            { label: Translation.tr("Category"), actionId: "section", keys: ["Tab"] },
             { label: Translation.tr("Navigate"), keys: ["↑", "↓", "←", "→"] }
         ]
 
@@ -365,6 +365,17 @@ Item {
                             text: root.skinToneEmoji(emojiDelegate.entry)
                             font.pixelSize: root.emojiGlyphSize
                             color: Appearance.colors.colOnSurface
+                        }
+
+                        ConfiguredKeyHint {
+                            anchors.right: parent.right
+                            anchors.bottom: parent.bottom
+                            anchors.margins: Appearance.sizes.elevationMargin / 2
+                            visible: emojiDelegate.selected && Config.options.search.appearance.showKeyHints
+                            actionId: "activate"
+                            fallbackKeys: ["↵"]
+                            surface: emojiDelegate.selectedColor
+                            onSurface: ColorUtils.getContrastingTextColor(emojiDelegate.selectedColor)
                         }
                     }
                 }

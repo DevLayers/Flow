@@ -200,11 +200,11 @@ Item {
         statusText: root.statusText
         showStatus: true
         primaryHint: root.createPageOpen
-            ? ({ label: Translation.tr("Create"), keys: ["Ctrl", "N"] })
-            : ({ label: Translation.tr("Open"), keys: ["↵"] })
+            ? ({ label: Translation.tr("Create"), actionId: "create", keys: ["Ctrl", "N"] })
+            : ({ label: Translation.tr("Open"), actionId: "activate", keys: ["↵"] })
         hints: [
             { label: Translation.tr("Day"), keys: ["←", "→"] },
-            { label: Translation.tr("Create"), keys: ["Ctrl", "N"] }
+            { label: Translation.tr("Create"), actionId: "create", keys: ["Ctrl", "N"] }
         ]
 
         StackLayout {

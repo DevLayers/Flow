@@ -29,9 +29,10 @@ RowLayout {
                 font.pixelSize: Appearance.font.pixelSize.smallest
             }
 
-            KeyHint {
+            ConfiguredKeyHint {
                 visible: root.showKeys && (modelData.keys ?? []).length > 0
-                keys: modelData.keys ?? []
+                actionId: modelData.actionId ?? ""
+                fallbackKeys: modelData.keys ?? []
                 surface: root.surface
                 onSurface: root.onSurface
             }

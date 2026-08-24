@@ -171,10 +171,10 @@ Item {
         accent: true
         statusText: root.statusText
         showStatus: true
-        primaryHint: ({ label: root.selectedTask?.done ? Translation.tr("Reopen") : Translation.tr("Complete"), keys: ["↵"] })
+        primaryHint: ({ label: root.selectedTask?.done ? Translation.tr("Reopen") : Translation.tr("Complete"), actionId: "activate", keys: ["↵"] })
         hints: [
-            { label: Translation.tr("New from query"), keys: ["Ctrl", "N"] },
-            { label: Translation.tr("Delete"), keys: ["⇧", "⌫"] }
+            { label: Translation.tr("New from query"), actionId: "create", keys: ["Ctrl", "N"] },
+            { label: Translation.tr("Delete"), actionId: "delete", keys: ["⇧", "Del"] }
         ]
 
         ColumnLayout {
@@ -255,6 +255,14 @@ Item {
                                     ? Appearance.colors.colOnPrimaryContainer
                                     : Appearance.colors.colSubtext
                             }
+                        }
+
+                        ConfiguredKeyHint {
+                            visible: root.selectedIndex === index && Config.options.search.appearance.showKeyHints
+                            actionId: "activate"
+                            fallbackKeys: ["↵"]
+                            surface: Appearance.colors.colPrimaryContainer
+                            onSurface: Appearance.colors.colOnPrimaryContainer
                         }
                     }
                 }

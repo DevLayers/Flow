@@ -808,16 +808,6 @@ Singleton {
     }
 
     property string _fileBrowserDir: ""
-    // File search: debounce calls to avoid Process/Disk spelling flicker
-    property string _fileSearchExpr: ""
-    Timer {
-        id: fileSearchDebounce
-        interval: 250 // slightly longer because fd search is expensive
-        onTriggered: {
-            if (root._fileSearchExpr.length >= 2)
-                fileProc.searchFiles(root._fileSearchExpr);
-        }
-    }
 
     onQueryChanged: {
         root.selectedResult = null;
@@ -826,11 +816,22 @@ Singleton {
         fileBrowserProc.running = false;
         mathProc.running = false; // Stop active math calculation instantly to resolve race conditions and QML coalescing
 
-        if (Config.options.search.modules.fileSearch && root.query.startsWith(Config.options.search.prefix.fileSearch)) {
-            const fileSearchExpr = root.query.slice(Config.options.search.prefix.fileSearch.length);
-            fileProc.searchFiles(fileSearchExpr);
+        // Files are the slow lane: a process launch and a filesystem walk. The
+        // walk is queued, never run from the keystroke itself, and the in-flight
+        // one was already cancelled above.
+        const fileExpression = root.fileSearchExpression(root.query);
+        root._fileQueryPrefixed = root.queryIsFileSearchPrefixed(root.query);
+        const fileMinimum = root._fileQueryPrefixed
+            ? 2
+            : Math.max(2, Config.options.search.fileSearch?.minimumQueryLength ?? 3);
+        if (fileExpression.length >= fileMinimum) {
+            root._fileQuery = fileExpression;
+            fileSearchDebounce.restart();
         } else {
-            root.fileResults = [];
+            fileSearchDebounce.stop();
+            root._fileQuery = "";
+            if (root.fileResults.length > 0)
+                root.fileResults = [];
         }
 
         if (Config.options.search.modules.fileBrowser && root.query.startsWith(Config.options.search.prefix.fileBrowser)) {
@@ -881,23 +882,202 @@ Singleton {
         }
     }
 
+    // ========== File search ==========
+    //
+    // Every other source in this service answers from memory. This one shells
+    // out and walks a directory tree, so it is the only one that has to stay
+    // off the keystroke path entirely: the query queues a walk, the rest of the
+    // results render immediately, and the list simply grows when files arrive.
     property var fileResults: []
+    property string _fileQuery: ""
+    property bool _fileQueryPrefixed: false
+
+    readonly property bool fileSearchInlineEnabled: Config.options.search.modules.fileSearch
+        && (Config.options.search.fileSearch?.inlineResults ?? false)
+
+    function queryIsFileSearchPrefixed(query: string): bool {
+        const prefix = String(Config.options.search.prefix.fileSearch ?? "");
+        return Config.options.search.modules.fileSearch && prefix.length > 0 && query.startsWith(prefix);
+    }
+
+    /**
+     * The expression the walk should run for, or "" for "do not walk".
+     *
+     * The prefixed form is an explicit request and always runs. The inline form
+     * is a side effect of an ordinary query, so it stays out of the way of text
+     * that already belongs to something else — another prefix, or a sum.
+     */
+    function fileSearchExpression(query: string): string {
+        if (root.queryIsFileSearchPrefixed(query))
+            return query.slice(String(Config.options.search.prefix.fileSearch).length).trim();
+        if (!root.fileSearchInlineEnabled)
+            return "";
+        if (root.queryUsesPrefix(query) || root.isMathQuery(query))
+            return "";
+        return query.trim();
+    }
+
+    /**
+     * `fd --max-results` returns what it found first, not what fits best, so the
+     * ordering has to be rebuilt here.
+     *
+     * A hit on the entry's own name is what the user meant; one that exists only
+     * somewhere up the path is a weak fallback. Shallow beats deep — "downloads"
+     * almost always means the folder, not a file six levels inside it.
+     */
+    function rankFilePaths(paths, query, limit): var {
+        const tokens = String(query).toLowerCase().split(/\s+/).filter(token => token.length > 0);
+        if (tokens.length === 0)
+            return paths.slice(0, limit);
+
+        const scored = [];
+        for (let i = 0; i < paths.length; i++) {
+            const path = paths[i];
+            const trimmed = path.endsWith("/") ? path.slice(0, -1) : path;
+            const base = trimmed.slice(trimmed.lastIndexOf("/") + 1).toLowerCase();
+
+            let matchedInName = 0;
+            for (let t = 0; t < tokens.length; t++) {
+                if (base.indexOf(tokens[t]) !== -1)
+                    matchedInName++;
+            }
+
+            let score = matchedInName * 200;
+            if (matchedInName === tokens.length)
+                score += 300;
+            if (base.startsWith(tokens[0]))
+                score += 200;
+            if (base === tokens.join(" "))
+                score += 400;
+            score -= trimmed.split("/").length * 8;
+            score -= base.length;
+
+            scored.push({
+                path: path,
+                score: score
+            });
+        }
+        scored.sort((a, b) => b.score - a.score);
+
+        const ranked = [];
+        for (let i = 0; i < scored.length && i < limit; i++)
+            ranked.push(scored[i].path);
+        return ranked;
+    }
+
+    function shortenHomePath(path: string): string {
+        const home = FileUtils.trimFileProtocol(Directories.home);
+        if (home.length > 0 && path.startsWith(home))
+            return "~" + path.slice(home.length);
+        return path;
+    }
+
+    function fileResultIcon(name: string, isDirectory: bool): string {
+        if (isDirectory)
+            return "folder";
+        const dot = name.lastIndexOf(".");
+        const extension = dot > 0 ? name.slice(dot + 1).toLowerCase() : "";
+        switch (extension) {
+        case "png": case "jpg": case "jpeg": case "gif": case "webp": case "bmp": case "svg": case "avif":
+            return "image";
+        case "mp4": case "mkv": case "webm": case "mov": case "avi":
+            return "movie";
+        case "mp3": case "flac": case "wav": case "ogg": case "opus": case "m4a":
+            return "music_note";
+        case "pdf":
+            return "picture_as_pdf";
+        case "zip": case "tar": case "gz": case "xz": case "zst": case "7z": case "rar":
+            return "folder_zip";
+        case "qml": case "js": case "ts": case "py": case "rs": case "go": case "c": case "cpp": case "h": case "sh": case "json": case "yaml": case "yml": case "toml":
+            return "code";
+        case "md": case "txt": case "rst": case "org":
+            return "description";
+        case "odt": case "doc": case "docx": case "rtf":
+            return "article";
+        case "ods": case "xls": case "xlsx": case "csv":
+            return "table";
+        case "odp": case "ppt": case "pptx":
+            return "slideshow";
+        default:
+            return "draft";
+        }
+    }
+
+    Timer {
+        id: fileSearchDebounce
+        // The rest of the results are already on screen by the time this fires,
+        // so the wait costs nothing the user can see — and a burst of keystrokes
+        // starts one walk instead of one per letter.
+        interval: 200
+        repeat: false
+        onTriggered: fileProc.searchFiles(root._fileQuery)
+    }
+
     Process {
         id: fileProc
-        function searchFiles(expr) {
-            if (expr.length < 2)
+
+        /**
+         * Whitespace-separated tokens become an ordered "contains" pattern, so
+         * "project logo" finds "Project - Logo.png". Every token is regex
+         * escaped: the query is user text, not a pattern, and a stray bracket
+         * would otherwise make fd exit with an error instead of results.
+         */
+        function searchPattern(expression) {
+            return String(expression).trim().split(/\s+/)
+                .filter(token => token.length > 0)
+                .map(token => token.replace(/[.*+?^${}()|[\]\\\/-]/g, "\\$&"))
+                .join(".*");
+        }
+
+        function searchFiles(expression) {
+            const pattern = fileProc.searchPattern(expression);
+            if (pattern.length === 0)
                 return;
+            const settings = Config.options.search.fileSearch;
+            const budget = Math.max(20, settings?.walkLimit ?? 60);
+            // An explicit `,` query asked for files and nothing else, so it can
+            // afford a wider walk than one riding along with an ordinary query.
+            const walkLimit = root._fileQueryPrefixed ? budget * 4 : budget;
+
+            // `--max-results` is the first half of the performance story: fd
+            // quits as soon as it has enough instead of traversing the tree —
+            // ~9ms against ~290ms on a real home directory.
+            //
+            // The second half is the query that matches almost nothing, which
+            // never fills that budget and so pays for the whole walk anyway.
+            // `--threads` bounds what that costs: measured on 16 cores, the
+            // default saturated every one of them for 0.70s of CPU time, while
+            // four threads did the same walk for 0.28s and 50ms more wall time.
+            const command = ["fd", "--color", "never", "--absolute-path", "--max-results", String(walkLimit)];
+            const threads = Math.max(0, settings?.threads ?? 4);
+            if (threads > 0)
+                command.push("--threads", String(threads));
+            // An explicit `,` query is allowed to reach as deep as it likes.
+            const maxDepth = root._fileQueryPrefixed ? 0 : Math.max(0, settings?.maxDepth ?? 0);
+            if (maxDepth > 0)
+                command.push("--max-depth", String(maxDepth));
+            if (settings?.includeHidden === true)
+                command.push("--hidden");
+            const excluded = settings?.excludedDirectories ?? [];
+            for (let i = 0; i < excluded.length; i++) {
+                const directory = String(excluded[i] ?? "");
+                if (directory.length > 0)
+                    command.push("--exclude", directory);
+            }
+            command.push(pattern, Config.options.search.fileSearchDirectory);
+
             fileProc.running = false;
-            fileProc.command = ["fd", expr, Config.options.search.fileSearchDirectory];
+            fileProc.command = command;
             fileProc.running = true;
         }
+
         stdout: StdioCollector {
             id: fileCollector
             onStreamFinished: {
-                const rawResult = fileCollector.text;
-                const result = rawResult.split('\n');
-                result.pop(); // deleting the last empty line
-                root.fileResults = result;
+                const lines = fileCollector.text.split("\n").filter(line => line.length > 0);
+                const settings = Config.options.search.fileSearch;
+                const limit = root._fileQueryPrefixed ? 60 : Math.max(1, settings?.maxResults ?? 8);
+                root.fileResults = root.rankFilePaths(lines, root._fileQuery, limit);
             }
         }
     }
@@ -1250,31 +1430,51 @@ Singleton {
             }
         }) : null;
         const fileResultsObject = root.fileResults.map(entry => {
-            const isImage = Images.isValidImageByName(entry);
+            // fd already marks directories with a trailing separator, so the
+            // type comes back for free — no stat, no second process.
+            const isDirectory = entry.endsWith("/");
+            const path = isDirectory ? entry.slice(0, -1) : entry;
+            const separator = path.lastIndexOf("/");
+            const displayName = separator >= 0 ? path.slice(separator + 1) : path;
+            const parent = separator > 0 ? path.slice(0, separator) : "/";
             return resultComp.createObject(null, {
                 key: "fsearch:" + entry,
-                type: Translation.tr("File"),
-                name: entry,
+                // "Directory" is the type SearchItem keys its folder actions off.
+                type: isDirectory ? Translation.tr("Directory") : Translation.tr("File"),
+                // The row has two lines; a bare path wastes both. The name is
+                // what the user typed towards, the location is the context.
+                name: displayName,
+                comment: root.shortenHomePath(parent),
+                category: "filepath",
+                filePath: path,
                 verb: Translation.tr("Open"),
-                iconName: isImage ? 'image' : 'file_open',
+                iconName: root.fileResultIcon(displayName, isDirectory),
                 iconType: LauncherSearchResult.IconType.Material,
                 execute: () => {
-                    Quickshell.execDetached(["xdg-open", entry]);
+                    Quickshell.execDetached(["xdg-open", path]);
                 },
                 actions: [resultComp.createObject(null, {
                         name: Translation.tr("Copy path"),
                         iconName: "content_copy",
                         iconType: LauncherSearchResult.IconType.Material,
                         execute: () => {
-                            Quickshell.clipboardText = entry;
+                            Quickshell.clipboardText = path;
                         }
                     }), resultComp.createObject(null, {
-                        name: Translation.tr("Open folder"),
+                        name: isDirectory ? Translation.tr("Open in file manager") : Translation.tr("Open folder"),
                         iconName: "folder_open",
                         iconType: LauncherSearchResult.IconType.Material,
                         execute: () => {
-                            const dir = entry.substring(0, entry.lastIndexOf("/") + 1);
-                            Quickshell.execDetached(["xdg-open", dir]);
+                            Quickshell.execDetached(["xdg-open", isDirectory ? path : parent]);
+                        }
+                    }), resultComp.createObject(null, {
+                        name: Translation.tr("Browse here"),
+                        iconName: "folder_data",
+                        iconType: LauncherSearchResult.IconType.Material,
+                        execute: () => {
+                            const home = FileUtils.trimFileProtocol(Directories.home);
+                            const target = isDirectory ? path : parent;
+                            root.query = Config.options.search.prefix.fileBrowser + target.replace(home, "") + "/";
                         }
                     })]
             });

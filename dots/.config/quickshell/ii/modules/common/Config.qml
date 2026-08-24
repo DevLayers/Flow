@@ -848,7 +848,15 @@ Singleton {
                     { actionId: "favorite", shortcut: "Ctrl+P" },
                     { actionId: "historyPrevious", shortcut: "Up" },
                     { actionId: "historyNext", shortcut: "Down" },
-                    { actionId: "secondary", shortcut: "Ctrl+Enter" }
+                    { actionId: "secondary", shortcut: "Ctrl+Enter" },
+                    { actionId: "copy", shortcut: "Ctrl+C" },
+                    { actionId: "save", shortcut: "Ctrl+S" },
+                    { actionId: "edit", shortcut: "Ctrl+E" },
+                    { actionId: "ocr", shortcut: "Ctrl+O" },
+                    { actionId: "create", shortcut: "Ctrl+N" },
+                    { actionId: "copyDispatch", shortcut: "Ctrl+Shift+K" },
+                    { actionId: "delete", shortcut: "Shift+Delete" },
+                    { actionId: "section", shortcut: "Tab" }
                 ];
             console.log("[Config] Added Search v2 content defaults");
         }
@@ -3655,8 +3663,57 @@ Singleton {
                 property bool levenshtein: false
                 property bool frecency: true
                 property list<var> aliases: []
+                // Priority of the result groups, top to bottom. Removing an
+                // entry hides that group's results, so this list is both the
+                // order and the on/off switch. Reordered from Settings; the
+                // catalogue of ids lives in SearchResultSectionRegistry.
+                property list<var> sectionOrder: [
+                    { "id": "media" },
+                    { "id": "best" },
+                    { "id": "apps" },
+                    { "id": "controls" },
+                    { "id": "tools" },
+                    { "id": "actions" },
+                    { "id": "content" },
+                    { "id": "other" },
+                    { "id": "settings" },
+                    { "id": "files" },
+                    { "id": "continue" }
+                ]
                 property string fileSearchDirectory: "/home"
                 property bool blurFileSearchResultPreviews: false
+                property JsonObject fileSearch: JsonObject {
+                    // Show files and folders from the indexed directory for a
+                    // plain query, no prefix. Off by default: this is the one
+                    // search source that costs a process launch and a filesystem
+                    // walk, so turning it on is a deliberate trade.
+                    property bool inlineResults: false
+                    // One or two letters match a large share of a home directory.
+                    // The walk is only worth starting once the query narrows.
+                    property int minimumQueryLength: 3
+                    property int maxResults: 8
+                    // `fd --max-results` makes the walk quit as soon as it has
+                    // this many hits instead of traversing the whole tree — the
+                    // difference between ~9ms and ~290ms on a real home
+                    // directory. Ranking then reorders whatever came back, so
+                    // this is a walk budget, not the number of rows shown.
+                    property int walkLimit: 60
+                    // A query that matches almost nothing never fills the walk
+                    // budget, so it pays for the whole tree — the worst case.
+                    // Depth bounds that walk; 0 leaves it unbounded.
+                    property int maxDepth: 0
+                    // fd saturates every core by default. On a 16-core machine
+                    // that measured 1351% CPU and 0.70s of CPU time for one
+                    // rare-query walk, against 388% and 0.28s at four threads —
+                    // a third of the work for 50ms more wall time. A background
+                    // helper should not take the machine hostage.
+                    property int threads: 4
+                    // fd skips dotfiles by default. Including them covers the
+                    // whole directory, at the cost of walking every cache and
+                    // state folder a home directory accumulates.
+                    property bool includeHidden: false
+                    property list<string> excludedDirectories: ["node_modules", ".git", ".cache", ".venv", "__pycache__", ".cargo", ".rustup", ".npm", ".local/share/Trash"]
+                }
                 property JsonObject prefix: JsonObject {
                     property bool showDefaultActionsWithoutPrefix: true
                     property string action: "/"
@@ -3801,7 +3858,15 @@ Singleton {
                     { actionId: "favorite", shortcut: "Ctrl+P" },
                     { actionId: "historyPrevious", shortcut: "Up" },
                     { actionId: "historyNext", shortcut: "Down" },
-                    { actionId: "secondary", shortcut: "Ctrl+Enter" }
+                    { actionId: "secondary", shortcut: "Ctrl+Enter" },
+                    { actionId: "copy", shortcut: "Ctrl+C" },
+                    { actionId: "save", shortcut: "Ctrl+S" },
+                    { actionId: "edit", shortcut: "Ctrl+E" },
+                    { actionId: "ocr", shortcut: "Ctrl+O" },
+                    { actionId: "create", shortcut: "Ctrl+N" },
+                    { actionId: "copyDispatch", shortcut: "Ctrl+Shift+K" },
+                    { actionId: "delete", shortcut: "Shift+Delete" },
+                    { actionId: "section", shortcut: "Tab" }
                 ]
                 property JsonObject appearance: JsonObject {
                     property bool accentPanels: true
