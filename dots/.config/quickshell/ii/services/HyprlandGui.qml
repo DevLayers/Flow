@@ -293,6 +293,12 @@ Singleton {
         root._remove("env", name);
     }
 
+    /// Every entry that will be written into one file, in the order it will be written. The
+    /// rules page groups these into its own sections itself; nothing else needs the raw list.
+    function entriesFor(target: string): var {
+        return root._entriesFor(target);
+    }
+
     function setRule(kind: string, id: string, spec: var) {
         root._upsert({ kind: kind, id: id, spec: spec });
     }
