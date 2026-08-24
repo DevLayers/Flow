@@ -445,7 +445,8 @@ def render_table(table, key_order=None):
 # ---------------------------------------------------------------------------
 
 TAG_LETTERS = {"config": "k", "device": "d", "env": "e", "windowrule": "r",
-               "layerrule": "r", "workspacerule": "r", "bind": "b", "unbind": "u"}
+               "layerrule": "r", "workspacerule": "r", "bind": "b", "unbind": "u",
+               "global": "g"}
 RULE_FN = {"windowrule": "hl.window_rule", "layerrule": "hl.layer_rule",
            "workspacerule": "hl.workspace_rule"}
 FN_KIND = {"hl.window_rule": "windowrule", "hl.layer_rule": "layerrule",
@@ -488,6 +489,11 @@ def render_entry(entry):
         return "hl.env(%s, %s)" % (render_string(entry["name"]), render_string(str(entry.get("value", ""))))
     if kind in RULE_FN:
         return "%s(%s)" % (RULE_FN[kind], render_table(entry.get("spec") or {}, key_order=["match"]))
+    if kind == "global":
+        name = entry.get("name", "")
+        if not IDENT_RE.match(name) or name in LUA_KEYWORDS:
+            raise ValueError("not a Lua global name: %r" % name)
+        return "%s = %s" % (name, render_value(entry.get("value")))
     if kind == "unbind":
         return "pcall(hl.unbind, %s)" % render_string(entry["key"])
     if kind == "bind":
@@ -506,7 +512,7 @@ def entry_id(entry, index):
     kind = entry.get("kind")
     if kind == "config":
         return entry["key"]
-    if kind == "env":
+    if kind in ("env", "global"):
         return entry["name"]
     if kind == "device":
         return (entry.get("spec") or {}).get("name", "device%d" % index)
@@ -588,6 +594,51 @@ def _match_paren(text, i):
                 return i
         i += 1
     return None
+
+
+# Single-character operators that would make whatever follows a value part of the same
+# expression rather than the start of the next statement.
+CONTINUATION_OPS = set(".+-*/%^<>=~[(,")
+
+
+def scan_assignments(text):
+    """Top-level `name = <literal>` statements, the form hyprland/variables.lua uses.
+
+    Only a bare name at the start of a line, assigned exactly one literal, counts. Anything
+    indented, `local`, or built out of an expression is left alone on purpose: this exists so
+    the default app chains can be read and rewritten, not to become a second Lua interpreter.
+    """
+    out = []
+    tokens = tokenize(text)
+    for index, tok in enumerate(tokens):
+        if tok.kind != 'name' or tok.value in LUA_KEYWORDS:
+            continue
+        if tok.start != 0 and text[tok.start - 1] != '\n':
+            continue
+        eq = tokens[index + 1] if index + 1 < len(tokens) else None
+        if eq is None or eq.kind != 'op' or eq.value != '=':
+            continue
+        value_tok = tokens[index + 2] if index + 2 < len(tokens) else None
+        if value_tok is None:
+            continue
+        after = tokens[index + 3] if index + 3 < len(tokens) else None
+        if after is not None:
+            if after.kind == 'op' and after.value in CONTINUATION_OPS:
+                continue
+            # A statement that ends where the next one begins, on the same line, is something
+            # this scanner does not understand well enough to touch.
+            if '\n' not in text[value_tok.end:after.start]:
+                continue
+        if value_tok.kind == 'string':
+            value = value_tok.value
+        elif value_tok.kind == 'number':
+            value = _lua_number(value_tok.value)
+        elif value_tok.kind == 'name' and value_tok.value in ('true', 'false'):
+            value = value_tok.value == 'true'
+        else:
+            continue
+        out.append({"name": tok.value, "value": value, "start": tok.start, "end": value_tok.end})
+    return out
 
 
 def _unresolved(kind, value, line_number):
@@ -702,10 +753,15 @@ def parse_region(lines, begin, end):
             if calls:
                 fn, args, _, _, _ = calls[0]
                 parsed = call_to_entries(fn, args, offset + 1)
-                # A tag letter this version does not know about, or one that disagrees with the
-                # call on the line, means a newer shell wrote it. Keep the line, do not reinterpret.
-                if parsed and TAG_LETTERS.get(parsed[0].get("kind")) != m.group(1):
-                    parsed = []
+            elif m.group(1) == TAG_LETTERS["global"]:
+                found = scan_assignments(code)
+                if found:
+                    parsed = [{"kind": "global", "name": found[0]["name"],
+                               "value": found[0]["value"], "line": offset + 1}]
+            # A tag letter this version does not know about, or one that disagrees with the
+            # line it sits on, means a newer shell wrote it. Keep the line, do not reinterpret.
+            if parsed and TAG_LETTERS.get(parsed[0].get("kind")) != m.group(1):
+                parsed = []
         if parsed:
             entry = parsed[0]
             entry["id"] = m.group(2)
@@ -754,6 +810,14 @@ def scan_unmanaged(lines, begin, end):
     out = []
     for fn, args, start, _, args_offset in scan_calls(text):
         out.extend(call_to_entries(fn, args, line_at(start), args_offset, locate))
+    for found in scan_assignments(text):
+        entry = {"kind": "global", "name": found["name"], "value": found["value"],
+                 "line": line_at(found["start"])}
+        head = locate(found["start"])
+        tail = locate(found["end"])
+        if head is not None and tail is not None:
+            entry["span"] = [head[1], tail[1]]
+        out.append(entry)
     for entry in out:
         entry["managed"] = False
     return out

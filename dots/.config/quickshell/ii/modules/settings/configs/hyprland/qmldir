@@ -17,6 +17,12 @@ HyprAppRuleCard 1.0 HyprAppRuleCard.qml
 HyprKeyboardLayoutPage 1.0 HyprKeyboardLayoutPage.qml
 HyprAppPickerPage 1.0 HyprAppPickerPage.qml
 HyprRuleEditorPage 1.0 HyprRuleEditorPage.qml
+HyprKeyChip 1.0 HyprKeyChip.qml
+HyprShortcutRow 1.0 HyprShortcutRow.qml
+HyprKeyCapture 1.0 HyprKeyCapture.qml
+HyprBindEditorPage 1.0 HyprBindEditorPage.qml
+HyprActionPickerPage 1.0 HyprActionPickerPage.qml
+HyprAppChainPage 1.0 HyprAppChainPage.qml
 InputTab 1.0 InputTab.qml
 LayoutTab 1.0 LayoutTab.qml
 ShortcutsTab 1.0 ShortcutsTab.qml

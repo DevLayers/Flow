@@ -34,11 +34,14 @@ Singleton {
         general: `${root.customDir}/general.lua`,
         rules: `${root.customDir}/rules.lua`,
         keybinds: `${root.customDir}/keybinds.lua`,
-        env: `${root.customDir}/env.lua`
+        env: `${root.customDir}/env.lua`,
+        variables: `${root.customDir}/variables.lua`
     })
     /// The order hyprland.lua requires these files in. Later wins, so the maps below build in
-    /// this order and let a later file overwrite an earlier one.
-    readonly property var loadOrder: ["env", "general", "rules", "keybinds"]
+    /// this order and let a later file overwrite an earlier one. variables.lua is the odd one:
+    /// hyprland.lua never requires it, hyprland/keybinds.lua does, at its very top - which is
+    /// exactly why the app names it holds still reach every bind built below them.
+    readonly property var loadOrder: ["env", "variables", "general", "rules", "keybinds"]
     readonly property var targetForKind: ({
         config: "general",
         device: "general",
@@ -47,7 +50,8 @@ Singleton {
         workspacerule: "rules",
         bind: "keybinds",
         unbind: "keybinds",
-        env: "env"
+        env: "env",
+        global: "variables"
     })
 
     /// Keys Appearance.qml re-pushes with `hyprctl eval` after every reload. A file can't win
@@ -105,6 +109,34 @@ Singleton {
                     target: target,
                     file: String(file.file ?? "").split("/").pop(),
                     removable: (entry.span ?? null) !== null
+                };
+            }
+        }
+        return map;
+    }
+
+    /// global name -> the value this page wrote for it.
+    readonly property var managedGlobals: {
+        const map = {};
+        for (const target of root.loadOrder)
+            for (const entry of root._entriesFor(target))
+                if (entry.kind === "global" && entry.name) map[entry.name] = entry.value;
+        return map;
+    }
+
+    /// global name -> { value, file, line } for the last hand-written assignment of it.
+    readonly property var inheritedGlobals: {
+        const map = {};
+        for (const target of root.loadOrder) {
+            const file = root.files[target];
+            if (!file) continue;
+            for (const entry of (file.unmanaged ?? [])) {
+                if (entry.kind !== "global" || !entry.name) continue;
+                map[entry.name] = {
+                    value: entry.value,
+                    line: entry.line ?? 0,
+                    target: target,
+                    file: String(file.file ?? "").split("/").pop()
                 };
             }
         }
@@ -288,6 +320,15 @@ Singleton {
         root._remove("device", id);
     }
 
+    /// A plain Lua global, which is how hyprland/variables.lua names the app each shortcut
+    /// opens. Not a config key and not an env var: an ordinary assignment the binds read.
+    function setGlobal(name: string, value: var) {
+        root._upsert({ kind: "global", id: name, name: name, value: value });
+    }
+    function removeGlobal(name: string) {
+        root._remove("global", name);
+    }
+
     function setEnv(name: string, value: string) {
         root._upsert({ kind: "env", id: name, name: name, value: String(value) });
     }
@@ -315,8 +356,11 @@ Singleton {
         root._remove("bind", id);
     }
 
-    function setUnbind(key: string) {
-        root._upsert({ kind: "unbind", id: key, key: key });
+    /// `id` defaults to the key. The shortcut editor passes a canonical id instead, so a
+    /// release and the bind it belongs to are found together whichever way the key is spelled.
+    function setUnbind(key: string, id: string) {
+        const chosen = (id === undefined || id === null || id === "") ? key : id;
+        root._upsert({ kind: "unbind", id: chosen, key: key });
     }
     function removeUnbind(key: string) {
         root._remove("unbind", key);
