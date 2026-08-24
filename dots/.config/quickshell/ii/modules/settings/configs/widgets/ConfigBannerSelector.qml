@@ -19,6 +19,15 @@ Item {
 
     readonly property string defaultPreviewPath: `${Directories.assetsPath}/images/default_wallpaper.png`
 
+    // Open where wallpapers live, honoring the wallpaper selector's custom folder when set.
+    readonly property string wallpaperFolder: {
+        const selector = Config.options.wallpaperSelector;
+        const custom = selector?.customDefaultPath ?? "";
+        if (selector?.useCustomDefaultPath && custom !== "")
+            return `file://${FileUtils.trimFileProtocol(custom)}`;
+        return `${Directories.pictures}/Wallpapers`;
+    }
+
     StyledImage {
         id: bannerPreview
         anchors.fill: parent
@@ -57,7 +66,10 @@ Item {
         colBackground: "transparent"
         colBackgroundHover: ColorUtils.transparentize(Appearance.colors.colOnPrimary, 0.85)
         colRipple: ColorUtils.transparentize(Appearance.colors.colOnPrimary, 0.5)
-        onClicked: fileDialog.open()
+        onClicked: {
+            fileDialog.currentFolder = bannerSelectorRoot.wallpaperFolder;
+            fileDialog.open();
+        }
     }
 
     FileDialog {
