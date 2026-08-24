@@ -379,7 +379,7 @@ Singleton {
         {
             "id": "system",
             "name": "System",
-            "pageIds": ["displays", "network", "soundAlerts", "touchGestures", "power", "usageStats", "devicesPhone", "privacy", "about"]
+            "pageIds": ["displays", "network", "soundAlerts", "touchGestures", "power", "devicesPhone", "usageStats", "privacy", "about"]
         }
     ]
 
