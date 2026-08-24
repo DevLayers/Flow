@@ -70,6 +70,26 @@ ContentPage {
         tab.openSubPage(Qt.resolvedUrl("HyprBindEditorPage.qml"));
     }
 
+    /// Something elsewhere in the shell asked for a shortcut - a routine's trigger, so far. The
+    /// draft is already filled in; all this has to do is show it.
+    function takePendingEditor() {
+        if (!HyprlandBinds.takePendingEditor())
+            return;
+        tab.openSubPage(Qt.resolvedUrl("HyprBindEditorPage.qml"));
+    }
+
+    // Deferred: openSubPage walks up the parent chain, and on the first frame of a tab that has
+    // only just been loaded there is not yet a chain to walk.
+    Component.onCompleted: Qt.callLater(tab.takePendingEditor)
+
+    // A second request arrives while this tab is already built, so it never reaches the line above.
+    Connections {
+        target: HyprlandBinds
+        function onPendingEditorChanged() {
+            tab.takePendingEditor();
+        }
+    }
+
     function editApp(name: string) {
         HyprlandBinds.beginEditApp(name);
         tab.openSubPage(Qt.resolvedUrl("HyprAppChainPage.qml"));

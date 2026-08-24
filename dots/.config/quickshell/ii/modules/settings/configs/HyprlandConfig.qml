@@ -69,6 +69,23 @@ Item {
         return hubRoot.tabs.findIndex(tab => tab.file.split("/").pop() === name);
     }
 
+    /// A deep link from elsewhere in the shell names the tab outright, so it does not have to
+    /// guess at a translated section title. Any sub-page open at the time is closed: the link
+    /// asked for a tab, and landing behind an editor would look like nothing happened.
+    function showTab(id: string) {
+        if (!id || id === "")
+            return;
+        const index = hubRoot.tabs.findIndex(tab => tab.id === id);
+        if (index < 0)
+            return;
+        subPageOverlay.close();
+        swipeView.currentIndex = index;
+    }
+
+    function takePendingTab() {
+        hubRoot.showTab(HyprlandGui.takePendingTab());
+    }
+
     function revealSection(title: string) {
         if (!title || title === "")
             return;
@@ -82,13 +99,25 @@ Item {
         }
     }
 
-    Component.onCompleted: HyprlandGui.attach()
+    Component.onCompleted: {
+        HyprlandGui.attach();
+        hubRoot.takePendingTab();
+    }
     Component.onDestruction: HyprlandGui.detach()
 
     Connections {
         target: SearchRegistry
         function onCurrentSearchChanged() {
             hubRoot.revealSection(SearchRegistry.currentSearch);
+        }
+    }
+
+    // The page outlives the settings window being hidden, so a second deep link arrives while
+    // this is already built and never reaches Component.onCompleted.
+    Connections {
+        target: HyprlandGui
+        function onPendingTabChanged() {
+            hubRoot.takePendingTab();
         }
     }
 

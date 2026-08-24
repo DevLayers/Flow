@@ -5,6 +5,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import Quickshell.Hyprland
+import qs
 import qs.modules.common
 import qs.modules.common.functions
 
@@ -217,6 +218,33 @@ Singleton {
     signal changed
     signal wrote(string target)
     signal writeFailed(string target, string message)
+
+    // ------------------------------------------------------------- getting here
+
+    /// Which tab the page should show the next time it lands. A request, not a state: the page
+    /// clears it as it reads it, so opening Settings by hand afterwards lands where it was left.
+    ///
+    /// Section titles were the only way in before this, and they are translated - a deep link
+    /// from elsewhere in the shell would have gone to the wrong tab in every language but one.
+    property string pendingTab: ""
+
+    /**
+     * Opens Settings on this page, at `tab`.
+     *
+     * Callable from anywhere in the shell, including surfaces that have no settings window to
+     * talk to yet - the tab is left here and picked up whenever the page finally loads.
+     */
+    function openTab(tab: string) {
+        root.pendingTab = String(tab ?? "");
+        GlobalStates.openSettingsPage("hyprland", "", "");
+    }
+
+    /// Reads the request and forgets it. Called by the page as it lands.
+    function takePendingTab(): string {
+        const tab = root.pendingTab;
+        root.pendingTab = "";
+        return tab;
+    }
 
     // ---------------------------------------------------------------- reading
 

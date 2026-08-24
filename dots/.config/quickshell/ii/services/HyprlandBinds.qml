@@ -467,6 +467,19 @@ Singleton {
 
     readonly property var missingEssentials: root.essentials.filter(item => !root.essentialCovered(item.id))
 
+    /// The shortcut bound to a global by that name, or null. Anything in the shell that can be
+    /// reached by a global - a routine's trigger, so far - asks this before offering to bind it,
+    /// so it can say "change the key" rather than quietly making a second one.
+    function boundToGlobal(name: string): var {
+        const wanted = String(name ?? "").trim();
+        if (wanted === "") return null;
+        return root.effective.find(row => {
+            if (row.kind !== "bind" || !row.resolved) return false;
+            const read = root.readAction(row.action ?? "");
+            return read.id === "global" && String(read.value ?? "").trim() === wanted;
+        }) ?? null;
+    }
+
     /// True when this row is the only thing standing between the user and a keyboard they
     /// cannot rescue. The editor refuses to delete one of these.
     function isLastEssential(row: var): bool {
@@ -709,6 +722,45 @@ Singleton {
             "actionRaw": "", "description": "", "opts": {}, "wasManaged": false,
             "fromFile": "", "fromLine": 0
         };
+    }
+
+    /// Set when something outside Settings has asked for the editor to open on a draft it has
+    /// already filled in. The Shortcuts tab reads it whenever it next exists, which is usually
+    /// after the settings window has finished building - so this waits rather than being
+    /// delivered.
+    property bool pendingEditor: false
+
+    /**
+     * Starts a shortcut for `actionValue` and opens the editor on it.
+     *
+     * Everything a routine, a mode or a widget could want a key for is an action this editor
+     * already knows, so the only thing they have to say is which one and what to call it.
+     */
+    function requestNewBind(actionId: string, actionValue: string, description: string) {
+        // The tab first. Landing on it closes whatever sub-page was open, which would take the
+        // editor down with it if the request had already opened one.
+        HyprlandGui.openTab("shortcuts");
+        root.beginNew();
+        root.putDraft("actionId", String(actionId ?? "global"));
+        root.putDraft("actionValue", String(actionValue ?? ""));
+        root.putDraft("description", String(description ?? ""));
+        root.pendingEditor = true;
+    }
+
+    /// Same, for a key that already exists. Offering "make one" when there is one already is how
+    /// a second bind on the same action gets made, and both would fire.
+    function requestEditBind(row: var) {
+        if (!row) return;
+        HyprlandGui.openTab("shortcuts");
+        root.beginEdit(row);
+        root.pendingEditor = true;
+    }
+
+    /// Reads the request and forgets it, so returning to the tab later does not reopen it.
+    function takePendingEditor(): bool {
+        if (!root.pendingEditor) return false;
+        root.pendingEditor = false;
+        return true;
     }
 
     function putDraft(key: string, value: var) {
