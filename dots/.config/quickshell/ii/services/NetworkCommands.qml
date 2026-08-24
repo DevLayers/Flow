@@ -21,6 +21,8 @@ Singleton {
     readonly property string kConnectPsk: 'nmcli device wifi connect "$1" password "$PASSWORD" "${@:2}"'
     readonly property string kSetPsk: 'nmcli connection modify "$1" wifi-sec.psk "$PASSWORD"'
     readonly property string kAddEnterprise: 'nmcli connection add type wifi con-name "$1" ifname "$2" ssid "$3" wifi-sec.key-mgmt wpa-eap 802-1x.password "$PASSWORD" "${@:4}"'
+    readonly property string kAddWifi: 'name="$1"; ssid="$2"; key="$3"; shift 3; nmcli connection add type wifi con-name "$name" ssid "$ssid" "$key" "$PASSWORD" "$@"'
+    readonly property string kModifySecret: 'uuid="$1"; key="$2"; shift 2; nmcli connection modify uuid "$uuid" "$key" "$PASSWORD" "$@"'
 
     readonly property bool busy: root.active !== null
     property var active: null
@@ -284,6 +286,131 @@ Singleton {
             return "";
         const bits = (0xFFFFFFFF << (32 - prefix)) >>> 0;
         return [bits >>> 24, (bits >>> 16) & 255, (bits >>> 8) & 255, bits & 255].join(".");
+    }
+
+    // ---- Saved profiles ---------------------------------------------------
+    function readProfiles(callback): void {
+        root.run(["nmcli", "-t", "-e", "yes", "-g",
+            "NAME,UUID,TYPE,DEVICE,ACTIVE,AUTOCONNECT,AUTOCONNECT-PRIORITY,TIMESTAMP,TIMESTAMP-REAL",
+            "connection", "show"], "profiles", (code, out) => {
+            callback(code === 0 ? root.parseProfiles(out) : []);
+        });
+    }
+
+    function parseProfiles(text: string): var {
+        const rows = [];
+        text.trim().split("\n").forEach(line => {
+            if (line.length === 0)
+                return;
+            const parts = root.splitEscaped(line);
+            if (!parts[1] || parts[1].length === 0)
+                return;
+            rows.push({
+                name: parts[0] ?? "",
+                uuid: parts[1],
+                type: parts[2] ?? "",
+                device: parts[3] ?? "",
+                active: parts[4] === "yes",
+                autoconnect: parts[5] === "yes",
+                priority: parseInt(parts[6]) || 0,
+                timestamp: parseInt(parts[7]) || 0,
+                lastUsed: (parts[8] ?? "") === "never" ? "" : (parts[8] ?? "")
+            });
+        });
+        return rows;
+    }
+
+    /**
+     * Every property of one saved profile, flattened to a key -> value map.
+     * --show-secrets is deliberately not passed, so stored passwords come back
+     * as the literal "<hidden>": the editor only ever writes a new secret, it
+     * never puts an existing one back on screen.
+     */
+    function readProfileSettings(uuid: string, callback): void {
+        if (uuid.length === 0) {
+            callback({});
+            return;
+        }
+        root.run(["nmcli", "-t", "-e", "yes", "connection", "show", "uuid", uuid], "settings", (code, out) => {
+            callback(code === 0 ? root.parseProfileSettings(out) : ({}));
+        });
+    }
+
+    function parseProfileSettings(text: string): var {
+        const settings = ({});
+        text.split("\n").forEach(line => {
+            const parts = root.splitEscaped(line);
+            if (parts.length < 2)
+                return;
+            settings[parts[0]] = parts.slice(1).join(":");
+        });
+        return settings;
+    }
+
+    function settingsToArgv(settings: var): var {
+        const pairs = [];
+        Object.keys(settings ?? ({})).forEach(key => {
+            pairs.push(key, String(settings[key]));
+        });
+        return pairs;
+    }
+
+    function modifyProfile(uuid: string, settings: var, callback = null): void {
+        const pairs = root.settingsToArgv(settings);
+        if (pairs.length === 0) {
+            if (callback)
+                callback(0, "", "");
+            return;
+        }
+        root.run(["nmcli", "connection", "modify", "uuid", uuid, ...pairs], "modify", callback);
+    }
+
+    function modifyProfileWithSecret(uuid: string, secretKey: string, secret: string, settings: var, callback = null): void {
+        if (secret.length === 0 || secretKey.length === 0) {
+            root.modifyProfile(uuid, settings, callback);
+            return;
+        }
+        root.runScript(root.kModifySecret, [uuid, secretKey, ...root.settingsToArgv(settings)], "modify", callback, {
+            PASSWORD: secret
+        });
+    }
+
+    // A setting cannot be emptied key by key: NetworkManager rejects an empty
+    // key-mgmt as "property is missing", so dropping security off a profile has
+    // to remove the whole setting group.
+    function removeSetting(uuid: string, setting: string, callback = null): void {
+        root.run(["nmcli", "connection", "modify", "uuid", uuid, "remove", setting], "modify", callback);
+    }
+
+    function addWifiProfile(name: string, ssid: string, settings: var, secretKey = "", secret = "", callback = null): void {
+        const pairs = root.settingsToArgv(settings);
+        if (secret.length === 0 || secretKey.length === 0) {
+            root.run(["nmcli", "connection", "add", "type", "wifi", "con-name", name, "ssid", ssid, ...pairs], "add", callback);
+            return;
+        }
+        root.runScript(root.kAddWifi, [name, ssid, secretKey, ...pairs], "add", callback, {
+            PASSWORD: secret
+        });
+    }
+
+    // Names repeat — NetworkManager happily keeps three profiles called
+    // "PlanetCampus" — so everything the profile manager does addresses a uuid.
+    function activateProfileUuid(uuid: string, callback = null): void {
+        root.run(["nmcli", "connection", "up", "uuid", uuid], "activate", callback);
+    }
+
+    function deactivateProfileUuid(uuid: string, callback = null): void {
+        root.run(["nmcli", "connection", "down", "uuid", uuid], "down", callback);
+    }
+
+    function deleteProfileUuid(uuid: string, callback = null): void {
+        root.run(["nmcli", "connection", "delete", "uuid", uuid], "forget", callback);
+    }
+
+    function setAutoconnectUuid(uuid: string, enabled: bool, callback = null): void {
+        root.modifyProfile(uuid, {
+            "connection.autoconnect": enabled ? "yes" : "no"
+        }, callback);
     }
 
     Process {

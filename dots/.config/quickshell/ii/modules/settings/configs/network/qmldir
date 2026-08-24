@@ -2,5 +2,7 @@ module qs.modules.settings.configs.network
 
 BluetoothDeviceRow 1.0 BluetoothDeviceRow.qml
 BluetoothTab 1.0 BluetoothTab.qml
+SavedNetworkRow 1.0 SavedNetworkRow.qml
 WifiNetworkRow 1.0 WifiNetworkRow.qml
+WifiProfileEditor 1.0 WifiProfileEditor.qml
 WifiTab 1.0 WifiTab.qml

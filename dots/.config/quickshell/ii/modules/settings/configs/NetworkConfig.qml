@@ -27,7 +27,8 @@ Item {
             "icon": "wifi",
             "name": Translation.tr("Wi-Fi"),
             "sections": [Translation.tr("Wi-Fi"), Translation.tr("Available networks"),
-                Translation.tr("Hidden network"), Translation.tr("Connection details")]
+                Translation.tr("Saved networks"), Translation.tr("Hidden network"),
+                Translation.tr("Connection details")]
         },
         {
             "source": "network/BluetoothTab.qml",
@@ -110,6 +111,7 @@ Item {
             model: root.tabs
 
             delegate: Loader {
+                id: tabLoader
                 required property var modelData
                 required property int index
 
@@ -118,6 +120,17 @@ Item {
                 asynchronous: true
                 source: Qt.resolvedUrl(modelData.source)
                 onItemChanged: if (item) tabHost.currentPage = item
+
+                // A tab is unloaded as soon as another one is picked, so the
+                // sub-pages it opens have to be owned by this page instead.
+                Connections {
+                    target: tabLoader.item
+                    ignoreUnknownSignals: true
+
+                    function onOpenSubPage(page): void {
+                        root.activeSubPage = page;
+                    }
+                }
             }
         }
     }

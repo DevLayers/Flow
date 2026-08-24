@@ -4,6 +4,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import Quickshell
 import Quickshell.Networking as QNet
+import qs.modules.common
 
 /**
  * Live NetworkManager state, straight from Quickshell's native D-Bus backend.

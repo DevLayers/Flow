@@ -19,6 +19,15 @@ ContentPage {
 
     property bool hiddenOpen: false
 
+    // Sub-pages belong to the page that owns the tab bar, not to a tab that is
+    // unloaded the moment someone switches away from it.
+    signal openSubPage(url page)
+
+    function editProfile(uuid: string): void {
+        NetworkProfiles.editUuid = uuid;
+        root.openSubPage(Qt.resolvedUrl("WifiProfileEditor.qml"));
+    }
+
     component InfoRow: RowLayout {
         id: infoRow
         property string label: ""
@@ -149,6 +158,82 @@ ContentPage {
             horizontalAlignment: Text.AlignHCenter
             visible: Network.wifiEnabled && !Network.wifiScanning && Network.friendlyWifiNetworks.length === 0
             text: Translation.tr("No networks found.")
+            font.pixelSize: Appearance.font.pixelSize.smaller
+            color: Appearance.colors.colSubtext
+        }
+    }
+
+    ContentSection {
+        id: savedSection
+        icon: "bookmark"
+        title: Translation.tr("Saved networks")
+
+        // Held here rather than in the row: the list is rebuilt after every
+        // write, and an open row should survive that.
+        property string expandedUuid: ""
+
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: 8
+
+            StyledText {
+                Layout.fillWidth: true
+                text: NetworkProfiles.wifiProfiles.length === 0 ? Translation.tr("Nothing saved yet")
+                    : Translation.tr("%1 saved").arg(NetworkProfiles.wifiProfiles.length)
+                font.pixelSize: Appearance.font.pixelSize.smaller
+                color: Appearance.colors.colSubtext
+            }
+
+            RippleButtonWithIcon {
+                materialIcon: "add"
+                mainText: Translation.tr("Add network")
+                colBackground: Appearance.colors.colPrimary
+                colText: Appearance.colors.colOnPrimary
+                onClicked: root.editProfile("")
+            }
+
+            RippleButtonWithIcon {
+                enabled: !NetworkProfiles.loading
+                materialIcon: "refresh"
+                mainText: Translation.tr("Refresh")
+                onClicked: NetworkProfiles.refresh()
+            }
+        }
+
+        ColumnLayout {
+            Layout.fillWidth: true
+            spacing: 4
+
+            Repeater {
+                id: savedRepeater
+                model: ScriptModel {
+                    values: NetworkProfiles.wifiProfiles
+                    objectProp: "uuid"
+                }
+
+                delegate: SavedNetworkRow {
+                    required property var modelData
+                    required property int index
+
+                    profile: modelData
+                    isFirst: index === 0
+                    isLast: index === savedRepeater.count - 1
+                    expanded: savedSection.expandedUuid === modelData.uuid
+                    onToggleRequested: {
+                        savedSection.expandedUuid = savedSection.expandedUuid === modelData.uuid
+                            ? "" : modelData.uuid;
+                    }
+                    onEditRequested: root.editProfile(modelData.uuid)
+                }
+            }
+        }
+
+        StyledText {
+            Layout.fillWidth: true
+            Layout.topMargin: 8
+            horizontalAlignment: Text.AlignHCenter
+            visible: NetworkProfiles.loadedOnce && NetworkProfiles.wifiProfiles.length === 0
+            text: Translation.tr("Networks you join are saved here so they can be edited later.")
             font.pixelSize: Appearance.font.pixelSize.smaller
             color: Appearance.colors.colSubtext
         }
