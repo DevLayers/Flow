@@ -1,7 +1,5 @@
 import QtQuick
 import qs.services
-import qs.modules.common
-import qs.modules.common.widgets
 
 /**
  * A switch bound to one Hyprland option.
@@ -9,7 +7,7 @@ import qs.modules.common.widgets
  * Shows what Hyprland is actually doing until this page sets the key, then shows what this page
  * set. Writing only ever happens on a click, so the value can never write itself back.
  */
-ConfigSwitch {
+HyprToggle {
     id: root
 
     required property string optionKey
@@ -18,12 +16,12 @@ ConfigSwitch {
 
     readonly property var optionState: HyprlandGui.resolve(root.optionKey)
 
-    checked: {
+    switchOn: {
         const value = HyprlandGui.displayValue(root.optionKey, root.defaultValue);
         return value === true || value === 1;
     }
     enabled: root.optionState.shellOwnedBy === ""
-    onClicked: HyprlandGui.setKey(root.optionKey, !root.checked)
+    onRequested: wanted => HyprlandGui.setKey(root.optionKey, wanted)
 
     Component.onCompleted: HyprlandGui.watch([root.optionKey])
 }

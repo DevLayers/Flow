@@ -4,6 +4,7 @@ HyprlandHealthStrip 1.0 HyprlandHealthStrip.qml
 HyprlandTabPlaceholder 1.0 HyprlandTabPlaceholder.qml
 HyprOptionNote 1.0 HyprOptionNote.qml
 HyprNavRow 1.0 HyprNavRow.qml
+HyprToggle 1.0 HyprToggle.qml
 HyprSwitch 1.0 HyprSwitch.qml
 HyprSlider 1.0 HyprSlider.qml
 HyprSpinBox 1.0 HyprSpinBox.qml

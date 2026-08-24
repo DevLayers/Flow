@@ -317,15 +317,13 @@ Item {
             Repeater {
                 model: subPageRoot.options
 
-                delegate: ConfigSwitch {
+                delegate: HyprToggle {
                     required property var modelData
 
                     buttonIcon: modelData.icon
                     text: modelData.label
-                    // onClicked replaces ConfigSwitch's own handler, which would otherwise
-                    // assign `checked` and blow away the binding above it.
-                    checked: (subPageRoot.draft.opts ?? {})[modelData.key] === true
-                    onClicked: HyprlandBinds.putDraftOption(modelData.key, !checked)
+                    switchOn: (subPageRoot.draft.opts ?? {})[modelData.key] === true
+                    onRequested: wanted => HyprlandBinds.putDraftOption(modelData.key, wanted)
                 }
             }
 

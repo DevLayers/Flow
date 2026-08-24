@@ -39,13 +39,10 @@ ContentSubsection {
         return card.spec[key] !== undefined ? card.spec[key] : fallback;
     }
 
+    /// `undefined` takes the field out of the rule. Off means "no opinion" here rather than
+    /// "false": a rule that says `float = false` is not the same as one that says nothing.
     function put(key: string, newValue: var) {
         HyprlandRules.putEffect("windowrule", card.rule.id, key, newValue);
-    }
-
-    /// Off means "no opinion", so it takes the field out rather than writing a false.
-    function toggle(key: string) {
-        card.put(key, card.value(key, false) === true ? undefined : true);
     }
 
     function putMatch(key: string, newValue: var) {
@@ -131,62 +128,61 @@ ContentSubsection {
         }
     }
 
-    ConfigSwitch {
+    HyprToggle {
         buttonIcon: "picture_in_picture"
         text: Translation.tr("Always float")
-        checked: card.value("float", false) === true
-        onClicked: card.toggle("float")
+        switchOn: card.value("float", false) === true
+        onRequested: wanted => card.put("float", wanted ? true : undefined)
     }
 
-    ConfigSwitch {
+    HyprToggle {
         buttonIcon: "grid_view"
         text: Translation.tr("Always tile")
-        checked: card.value("tile", false) === true
-        onClicked: card.toggle("tile")
+        switchOn: card.value("tile", false) === true
+        onRequested: wanted => card.put("tile", wanted ? true : undefined)
     }
 
-    ConfigSwitch {
+    HyprToggle {
         buttonIcon: "center_focus_weak"
         text: Translation.tr("Open centred")
-        checked: card.value("center", false) === true
-        onClicked: card.toggle("center")
+        switchOn: card.value("center", false) === true
+        onRequested: wanted => card.put("center", wanted ? true : undefined)
 
         StyledToolTip {
             text: Translation.tr("Only does anything to a floating window.")
         }
     }
 
-    ConfigSwitch {
+    HyprToggle {
         buttonIcon: "blur_off"
         text: Translation.tr("No blur behind it")
-        checked: card.value("no_blur", false) === true
-        onClicked: card.toggle("no_blur")
+        switchOn: card.value("no_blur", false) === true
+        onRequested: wanted => card.put("no_blur", wanted ? true : undefined)
     }
 
-    ConfigSwitch {
+    HyprToggle {
         buttonIcon: "animation"
         text: Translation.tr("No open or close animation")
-        checked: card.value("no_anim", false) === true
-        onClicked: card.toggle("no_anim")
+        switchOn: card.value("no_anim", false) === true
+        onRequested: wanted => card.put("no_anim", wanted ? true : undefined)
     }
 
-    ConfigSwitch {
+    HyprToggle {
         buttonIcon: "bolt"
         text: Translation.tr("Allow tearing")
-        checked: card.value("immediate", false) === true
-        onClicked: card.toggle("immediate")
+        switchOn: card.value("immediate", false) === true
+        onRequested: wanted => card.put("immediate", wanted ? true : undefined)
 
         StyledToolTip {
             text: Translation.tr("Lets a frame reach the screen mid-refresh. Lower latency in a game, visible tearing in anything else.")
         }
     }
 
-    ConfigSwitch {
+    HyprToggle {
         buttonIcon: "bedtime_off"
         text: Translation.tr("Keep the screen awake while it is focused")
-        checked: String(card.value("idle_inhibit", "none")) !== "none"
-        onClicked: card.put("idle_inhibit",
-            String(card.value("idle_inhibit", "none")) !== "none" ? undefined : "focus")
+        switchOn: String(card.value("idle_inhibit", "none")) !== "none"
+        onRequested: wanted => card.put("idle_inhibit", wanted ? "focus" : undefined)
 
         StyledToolTip {
             text: Translation.tr("The rule editor also offers \"always\" and \"only while fullscreen\".")

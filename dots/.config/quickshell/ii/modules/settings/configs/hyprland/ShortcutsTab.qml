@@ -97,11 +97,11 @@ ContentPage {
             onTextChanged: tab.rawQuery = text
         }
 
-        ConfigSwitch {
+        HyprToggle {
             buttonIcon: "visibility"
             text: Translation.tr("Show the ones with no name")
-            checked: tab.showEverything
-            onClicked: tab.showEverything = !tab.showEverything
+            switchOn: tab.showEverything
+            onRequested: wanted => tab.showEverything = wanted
         }
 
         HyprOptionNote {

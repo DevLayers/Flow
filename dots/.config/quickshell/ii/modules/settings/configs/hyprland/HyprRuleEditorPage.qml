@@ -413,17 +413,15 @@ Item {
             Repeater {
                 model: subPageRoot.shownSwitches
 
-                delegate: ConfigSwitch {
+                delegate: HyprToggle {
                     required property var modelData
 
                     buttonIcon: modelData.icon
                     text: modelData.label
-                    checked: subPageRoot.effects[modelData.key] === true
-                    onClicked: {
-                        if (subPageRoot.effects[modelData.key] === true)
-                            subPageRoot.drop(modelData.key);
-                        else
-                            subPageRoot.put(modelData.key, true);
+                    switchOn: subPageRoot.effects[modelData.key] === true
+                    onRequested: wanted => {
+                        if (wanted) subPageRoot.put(modelData.key, true);
+                        else subPageRoot.drop(modelData.key);
                     }
                 }
             }

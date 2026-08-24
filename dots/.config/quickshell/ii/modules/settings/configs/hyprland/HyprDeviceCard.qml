@@ -48,13 +48,13 @@ ContentSubsection {
         return spec && spec[key] !== undefined ? spec[key] : fallback;
     }
 
-    ConfigSwitch {
+    HyprToggle {
         buttonIcon: "tune"
         text: Translation.tr("Settings just for this device")
-        checked: card.overridden
-        onClicked: {
-            if (card.overridden) HyprlandGui.removeDevice(card.deviceName);
-            else HyprlandGui.setDevice(card.deviceName, { "name": card.deviceName });
+        switchOn: card.overridden
+        onRequested: wanted => {
+            if (wanted) HyprlandGui.setDevice(card.deviceName, { "name": card.deviceName });
+            else HyprlandGui.removeDevice(card.deviceName);
         }
 
         StyledToolTip {
@@ -62,12 +62,12 @@ ContentSubsection {
         }
     }
 
-    ConfigSwitch {
+    HyprToggle {
         visible: card.overridden
         buttonIcon: "power_settings_new"
         text: Translation.tr("Device enabled")
-        checked: card.setting("enabled", true) === true
-        onClicked: card.put("enabled", !checked)
+        switchOn: card.setting("enabled", true) === true
+        onRequested: wanted => card.put("enabled", wanted)
     }
 
     ConfigSlider {
@@ -106,20 +106,20 @@ ContentSubsection {
         onSelected: newValue => card.put("accel_profile", newValue)
     }
 
-    ConfigSwitch {
+    HyprToggle {
         visible: card.overridden && card.isPointer
         buttonIcon: "swap_vert"
         text: Translation.tr("Natural scrolling")
-        checked: card.setting("natural_scroll", false) === true
-        onClicked: card.put("natural_scroll", !checked)
+        switchOn: card.setting("natural_scroll", false) === true
+        onRequested: wanted => card.put("natural_scroll", wanted)
     }
 
-    ConfigSwitch {
+    HyprToggle {
         visible: card.overridden && card.isPointer
         buttonIcon: "back_hand"
         text: Translation.tr("Left handed")
-        checked: card.setting("left_handed", false) === true
-        onClicked: card.put("left_handed", !checked)
+        switchOn: card.setting("left_handed", false) === true
+        onRequested: wanted => card.put("left_handed", wanted)
     }
 
     ConfigTextField {
