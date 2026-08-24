@@ -143,6 +143,36 @@ Singleton {
         return map;
     }
 
+    /// env name -> the value this page wrote for it.
+    readonly property var managedEnv: {
+        const map = {};
+        for (const target of root.loadOrder)
+            for (const entry of root._entriesFor(target))
+                if (entry.kind === "env" && entry.name) map[entry.name] = entry.value;
+        return map;
+    }
+
+    /// env name -> { value, file, line } for the last hand-written hl.env above the region.
+    /// Only custom/env.lua is read here; what hyprland/env.lua sets before it, and what
+    /// hyprland/variables.lua sets after it, are the Environment tab's own business.
+    readonly property var inheritedEnv: {
+        const map = {};
+        for (const target of root.loadOrder) {
+            const file = root.files[target];
+            if (!file) continue;
+            for (const entry of (file.unmanaged ?? [])) {
+                if (entry.kind !== "env" || !entry.name) continue;
+                map[entry.name] = {
+                    value: entry.value,
+                    line: entry.line ?? 0,
+                    target: target,
+                    file: String(file.file ?? "").split("/").pop()
+                };
+            }
+        }
+        return map;
+    }
+
     /// device name -> the spec this page wrote for it, for the per-device cards.
     readonly property var managedDevices: {
         const map = {};

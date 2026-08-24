@@ -23,6 +23,8 @@ HyprKeyCapture 1.0 HyprKeyCapture.qml
 HyprBindEditorPage 1.0 HyprBindEditorPage.qml
 HyprActionPickerPage 1.0 HyprActionPickerPage.qml
 HyprAppChainPage 1.0 HyprAppChainPage.qml
+HyprCursorThemePage 1.0 HyprCursorThemePage.qml
+HyprEnvEditorPage 1.0 HyprEnvEditorPage.qml
 InputTab 1.0 InputTab.qml
 LayoutTab 1.0 LayoutTab.qml
 ShortcutsTab 1.0 ShortcutsTab.qml
