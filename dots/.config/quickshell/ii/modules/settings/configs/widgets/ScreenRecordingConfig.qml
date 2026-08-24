@@ -378,5 +378,180 @@ Item {
             }
         }
 
+        // ── Keystroke display ────────────────────────────────────────────────
+        ContentSection {
+            title: Translation.tr("Keystroke Display")
+            icon: "keyboard"
+
+            StyledText {
+                Layout.fillWidth: true
+                text: Translation.tr("Shows the keys you press on top of everything, so they are captured by the recording. It can also be turned on at any time from the quick toggles.")
+                wrapMode: Text.Wrap
+                font.pixelSize: Appearance.font.pixelSize.smaller
+                color: Appearance.colors.colSubtext
+            }
+
+            ConfigSwitch {
+                buttonIcon: "keyboard_alt"
+                text: Translation.tr("Show keystrokes while recording")
+                checked: Config.options.screenRecord.keypress.showWhileRecording
+                onCheckedChanged: {
+                    Config.options.screenRecord.keypress.showWhileRecording = checked;
+                }
+                StyledToolTip {
+                    text: Translation.tr("Applies to every new recording. Each recording can still be switched over on its own from the recording indicator.")
+                }
+            }
+
+            NoticeBox {
+                Layout.fillWidth: true
+                visible: KeypressService.lastError.length > 0
+                materialIcon: "error"
+                text: Translation.tr("Keystrokes cannot be read: %1").arg(KeypressService.lastError)
+            }
+
+            NoticeBox {
+                Layout.fillWidth: true
+                visible: KeypressService.lastError.length === 0 && !KeypressService.layoutAware
+                materialIcon: "warning"
+                text: Translation.tr("Key labels assume a US layout. Install python-xkbcommon to have them follow the keyboard layout you actually use.")
+            }
+
+            ContentSubsection {
+                title: Translation.tr("Position on screen")
+                icon: "pin_drop"
+                Layout.fillWidth: true
+
+                ConfigSelectionArray {
+                    currentValue: Config.options.screenRecord.keypress.position
+                    onSelected: (newValue) => {
+                        Config.options.screenRecord.keypress.position = newValue;
+                    }
+                    options: [{
+                        "displayName": Translation.tr("Top left"),
+                        "value": "topLeft",
+                        "icon": "north_west"
+                    }, {
+                        "displayName": Translation.tr("Top"),
+                        "value": "top",
+                        "icon": "north"
+                    }, {
+                        "displayName": Translation.tr("Top right"),
+                        "value": "topRight",
+                        "icon": "north_east"
+                    }, {
+                        "displayName": Translation.tr("Bottom left"),
+                        "value": "bottomLeft",
+                        "icon": "south_west"
+                    }, {
+                        "displayName": Translation.tr("Bottom"),
+                        "value": "bottom",
+                        "icon": "south"
+                    }, {
+                        "displayName": Translation.tr("Bottom right"),
+                        "value": "bottomRight",
+                        "icon": "south_east"
+                    }]
+                }
+            }
+
+            ConfigSlider {
+                buttonIcon: "swap_horiz"
+                text: Translation.tr("Distance from the side edge")
+                value: Config.options.screenRecord.keypress.marginH
+                from: 0
+                to: 400
+                stepSize: 8
+                usePercentTooltip: false
+                onValueChanged: {
+                    Config.options.screenRecord.keypress.marginH = value;
+                }
+            }
+
+            ConfigSlider {
+                buttonIcon: "swap_vert"
+                text: Translation.tr("Distance from the top or bottom edge")
+                value: Config.options.screenRecord.keypress.marginV
+                from: 0
+                to: 400
+                stepSize: 8
+                usePercentTooltip: false
+                onValueChanged: {
+                    Config.options.screenRecord.keypress.marginV = value;
+                }
+            }
+
+            ConfigSlider {
+                buttonIcon: "format_size"
+                text: Translation.tr("Size")
+                value: Config.options.screenRecord.keypress.scale
+                from: 0.6
+                to: 2.0
+                stepSize: 0.1
+                usePercentTooltip: false
+                onValueChanged: {
+                    Config.options.screenRecord.keypress.scale = value;
+                }
+            }
+
+            ConfigSlider {
+                buttonIcon: "timer"
+                text: Translation.tr("Time on screen (ms)")
+                value: Config.options.screenRecord.keypress.hideDelayMs
+                from: 500
+                to: 8000
+                stepSize: 250
+                usePercentTooltip: false
+                onValueChanged: {
+                    Config.options.screenRecord.keypress.hideDelayMs = value;
+                }
+            }
+
+            ConfigSlider {
+                buttonIcon: "format_list_numbered"
+                text: Translation.tr("Keys kept on screen")
+                value: Config.options.screenRecord.keypress.maxKeys
+                from: 1
+                to: 12
+                stepSize: 1
+                usePercentTooltip: false
+                onValueChanged: {
+                    Config.options.screenRecord.keypress.maxKeys = value;
+                }
+            }
+
+            ConfigSwitch {
+                buttonIcon: "text_fields"
+                text: Translation.tr("Join typed letters into words")
+                checked: Config.options.screenRecord.keypress.mergeTyping
+                onCheckedChanged: {
+                    Config.options.screenRecord.keypress.mergeTyping = checked;
+                }
+                StyledToolTip {
+                    text: Translation.tr("Typing fills one chip instead of flooding the screen with a chip per letter. Shortcuts always get their own.")
+                }
+            }
+
+            ConfigSwitch {
+                buttonIcon: "keyboard_command_key"
+                text: Translation.tr("Only show shortcuts")
+                checked: Config.options.screenRecord.keypress.onlyShortcuts
+                onCheckedChanged: {
+                    Config.options.screenRecord.keypress.onlyShortcuts = checked;
+                }
+                StyledToolTip {
+                    text: Translation.tr("Hides ordinary typing and reports only combinations with Ctrl, Alt or Super — useful when what you type is private.")
+                }
+            }
+
+            ConfigSwitch {
+                buttonIcon: "mouse"
+                text: Translation.tr("Show mouse buttons")
+                checked: Config.options.screenRecord.keypress.showMouseButtons
+                onCheckedChanged: {
+                    Config.options.screenRecord.keypress.showMouseButtons = checked;
+                }
+            }
+        }
     }
 }

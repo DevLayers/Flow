@@ -15,6 +15,7 @@ SCREENSHOT_ACTION = (ROOT / "modules/common/utils/ScreenshotAction.qml").read_te
 REGION_SELECTION = (ROOT / "modules/ii/regionSelector/RegionSelection.qml").read_text()
 WAFFLE_REGION_SELECTION = (ROOT / "modules/waffle/screenSnip/WRegionSelectionPanel.qml").read_text()
 QUALITY_JS = (ROOT / "modules/common/functions/recordingQuality.js").read_text()
+KEYPRESS_MONITOR = (ROOT / "scripts/videos/keypress_monitor.py").read_text()
 
 
 class ScreenRecordingContractTests(unittest.TestCase):
@@ -89,6 +90,21 @@ class ScreenRecordingContractTests(unittest.TestCase):
         ):
             self.assertIn(f'{preset}) echo "{box}" ;;', RECORD)
             self.assertIn(f'"{preset}": [{box.replace(" ", ", ")}]', QUALITY_JS)
+
+    def test_keypress_monitor_never_persists_what_it_reads(self):
+        """The reader is a keylogger by construction; it may only ever write to
+        the pipe the shell holds open."""
+        self.assertNotIn("open(", KEYPRESS_MONITOR.replace("os.open(", ""))
+        self.assertIn("def emit(", KEYPRESS_MONITOR)
+        self.assertIn("print(json.dumps(payload", KEYPRESS_MONITOR)
+
+    def test_keypress_monitor_translates_through_the_active_layout(self):
+        """evdev reports physical keys, so a US table would mislabel every
+        letter on an AZERTY keyboard."""
+        self.assertIn("keymap_new_from_names", KEYPRESS_MONITOR)
+        self.assertIn("--layout", KEYPRESS_MONITOR)
+        # +8 is the offset between an evdev keycode and an xkb one.
+        self.assertIn("code + 8", KEYPRESS_MONITOR)
 
     def test_recording_does_not_open_the_screenshot_overlay(self):
         snip_body = REGION_SELECTION.split("function snip()", 1)[1]

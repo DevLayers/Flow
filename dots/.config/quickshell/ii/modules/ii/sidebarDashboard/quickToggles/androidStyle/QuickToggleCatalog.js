@@ -21,6 +21,7 @@ var TOGGLE_TYPES = {
     colorPicker: { kind: "toggle", defaultSize: [1, 1], maxHeight: 8 },
     videoEditor: { kind: "toggle", defaultSize: [1, 1], maxHeight: 8 },
     onScreenKeyboard: { kind: "toggle", defaultSize: [1, 1], maxHeight: 8 },
+    keypressDisplay: { kind: "toggle", defaultSize: [1, 1], maxHeight: 8 },
     mic: { kind: "toggle", defaultSize: [1, 1], maxHeight: 8 },
     audio: { kind: "toggle", defaultSize: [1, 1], maxHeight: 8 },
     notifications: { kind: "toggle", defaultSize: [1, 1], maxHeight: 8 },

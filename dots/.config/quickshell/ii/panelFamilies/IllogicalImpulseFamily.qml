@@ -33,6 +33,7 @@ import qs.modules.ii.videoEditor
 import qs.modules.ii.localSendPopup
 import qs.modules.ii.scratchpadOverlay
 import qs.modules.ii.keyboardLayoutTransitionPopup
+import qs.modules.ii.keypressDisplay
 import qs.modules.ii.topLayer
 import qs.modules.ii.tilingAssistant
 import qs.modules.ii.usage
@@ -124,6 +125,12 @@ Scope {
     PanelLoader {
         extraCondition: (Config.ready && (Config.options.osd.style === "minimalist" || Config.options.osd.style === "material"))
         component: MinimalistOsd {}
+    }
+    PanelLoader {
+        // Kept loaded rather than gated on the service: the windows are empty
+        // and invisible until a recording or the quick toggle asks for them.
+        extraCondition: Config.ready
+        component: KeypressDisplay {}
     }
     PanelLoader {
         component: OnScreenKeyboard {}

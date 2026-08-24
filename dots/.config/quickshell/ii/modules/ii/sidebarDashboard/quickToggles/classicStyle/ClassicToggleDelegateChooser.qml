@@ -95,6 +95,16 @@ DelegateChooser {
         }
     }
     DelegateChoice {
+        roleValue: "keypressDisplay"
+        KeystrokeDisplay {
+            editMode: root.editMode
+            isUnused: root.isUnused
+            toggleType: "keypressDisplay"
+            draggable: root.draggable
+            onEditClicked: root.editRequested("keypressDisplay")
+        }
+    }
+    DelegateChoice {
         roleValue: "idleInhibitor"
         IdleInhibitor {
             editMode: root.editMode
