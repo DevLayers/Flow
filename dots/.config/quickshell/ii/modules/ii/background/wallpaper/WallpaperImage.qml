@@ -280,8 +280,7 @@ Item {
             y: 0
             width: screen.width
             height: screen.height
-            visible: false
-            layer.enabled: wallpaperImageRoot.overviewController.isMaterialShape && wallpaperImageRoot.overviewAnimationVisible
+            visible: wallpaperImageRoot.overviewAnimationVisible
 
             MaterialShape {
                 id: materialShapeMask
@@ -305,6 +304,14 @@ Item {
                     }
                 ]
             }
+        }
+
+        ShaderEffectSource {
+            id: materialShapeMaskSource
+            sourceItem: materialShapeMaskContainer
+            hideSource: true
+            live: wallpaperImageRoot.overviewAnimationVisible
+            visible: false
         }
 
         StyledRectangularShadow {
@@ -341,7 +348,7 @@ Item {
             layer.enabled: (radius > 0) || (wallpaperImageRoot.overviewController.isMaterialShape && wallpaperImageRoot.overviewAnimationVisible)
             layer.effect: MultiEffect {
                 maskEnabled: true
-                maskSource: wallpaperImageRoot.overviewController.isMaterialShape ? materialShapeMaskContainer : centralClipMask
+                maskSource: wallpaperImageRoot.overviewController.isMaterialShape ? materialShapeMaskSource : centralClipMask
                 maskThresholdMin: 0.5
                 maskSpreadAtMin: 1.0
 
