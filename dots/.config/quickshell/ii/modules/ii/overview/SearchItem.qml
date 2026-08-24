@@ -141,91 +141,16 @@ RippleButton {
     readonly property real actionBtnPadY: 4
 
     property var allActionItems: {
-        // Lazy: only compute when this item is selected or action panel is open.
+        // Lazy: only compute when this item is selected or the panel is open.
         // Avoids creating closures for every off-screen / unselected item.
         if (!root.isSelected && !root.actionPanelOpen)
             return [];
-
-        let items = [];
-        items.push({
-            name: root.itemClickActionName || Translation.tr("Open"),
-            icon: "open_in_new",
-            execute: () => {
-                const isSystemControl = root.entry?.key?.startsWith("sys:");
-                const cmdKey = isSystemControl ? root.entry.key.slice(4) : "";
-                const isConfirming = isSystemControl && LauncherSearch.confirmKey !== cmdKey;
-                const isModeSwitch = root.keepsOverviewOpen || (root.entry?.key?.startsWith("mock:") && root.entry?.key !== "mock:settings") || (root.entry?.key?.startsWith("shortcut:") && root.entry?.key !== "shortcut:openSettings") || root.itemType === Translation.tr("Folder Alias");
-
+        return SearchResultActions.build(root.entry, {
+            onDone: () => {
                 root.actionPanelOpen = false;
-                if (!isConfirming && !isModeSwitch) {
-                    GlobalStates.overviewOpen = false;
-                }
-                root.itemExecute();
-                root.resultExecuted(String(root.entry?.feedbackText ?? ""));
-            }
+            },
+            onExecuted: feedbackText => root.resultExecuted(feedbackText)
         });
-        if (root.entry?.type === Translation.tr("App") || root.itemType === Translation.tr("App")) {
-            const isPinned = TaskbarApps.isPinned(root.entry ? root.entry.id : root.iconName);
-            items.push({
-                name: isPinned ? Translation.tr("Unpin from Dock") : Translation.tr("Pin to Dock"),
-                icon: isPinned ? "keep_off" : "keep",
-                execute: () => {
-                    TaskbarApps.togglePin(root.entry ? root.entry.id : root.iconName);
-                    root.actionPanelOpen = false;
-                }
-            });
-            items.push({
-                name: Translation.tr("Copy ID"),
-                icon: "content_copy",
-                execute: () => {
-                    Quickshell.clipboardText = root.entry ? root.entry.id : root.iconName;
-                    root.actionPanelOpen = false;
-                }
-            });
-            items.push({
-                name: Translation.tr("Reset"),
-                icon: "restart_alt",
-                execute: () => {
-                    AppUsage.resetRanking(root.entry ? root.entry.id : root.iconName);
-                    root.actionPanelOpen = false;
-                }
-            });
-        }
-        if (root.contentType === "filepath" || root.itemType === Translation.tr("Directory") || root.itemType === Translation.tr("Folder Alias")) {
-            const isDir = root.itemType === Translation.tr("Directory") || root.itemType === Translation.tr("Folder Alias");
-            if (isDir) {
-                const pinnedFiles = Config.options?.dock?.pinnedFiles ?? [];
-                const cleanPath = root.itemName.toString().replace(/^file:\/\//, "");
-                const isPinned = pinnedFiles.includes(cleanPath);
-
-                items.push({
-                    name: isPinned ? Translation.tr("Unpin folder from Dock") : Translation.tr("Pin folder to Dock"),
-                    icon: isPinned ? "folder_off" : "create_new_folder",
-                    execute: () => {
-                        if (isPinned) {
-                            TaskbarApps.removePinnedFile(root.itemName);
-                        } else {
-                            TaskbarApps.addPinnedFile(root.itemName);
-                        }
-                        root.actionPanelOpen = false;
-                    }
-                });
-            }
-        }
-        const ea = root.entry?.actions ?? [];
-        for (const action of ea) {
-            items.push({
-                name: action.name,
-                icon: action.iconName || "play_arrow",
-                nativeIcon: action.iconType === LauncherSearchResult.IconType.System,
-                execute: () => {
-                    root.actionPanelOpen = false;
-                    GlobalStates.overviewOpen = false;
-                    action.execute();
-                }
-            });
-        }
-        return items;
     }
 
     property int actionSelectedIndex: 0
@@ -285,10 +210,9 @@ RippleButton {
     /**
      * Underline the query inside a result name.
      *
-     * Contiguous matched characters are wrapped once instead of one tag per
-     * character: a name with scattered matches used to come back as confetti —
-     * four tag pairs for "file" — and every one of them is a separate rich-text
-     * run for the layout engine to place.
+     * Only the first contiguous fuzzy-match run is emphasized. Highlighting
+     * every later island made long names look like confetti and obscured the
+     * suffix that actually distinguishes similarly named applications.
      */
     function highlightContent(content, query) {
         if (!query || query.length === 0 || content === query || root.fontType === "monospace")
@@ -296,33 +220,30 @@ RippleButton {
 
         const contentLower = content.toLowerCase();
         const queryLower = query.toLowerCase();
-        const pieces = [];
-        let plainStart = 0;
         let runStart = -1;
+        let runEnd = -1;
         let queryIndex = 0;
 
         for (let i = 0; i < content.length; i++) {
             const matches = queryIndex < query.length && contentLower[i] === queryLower[queryIndex];
             if (matches) {
-                if (runStart === -1) {
-                    if (i > plainStart)
-                        pieces.push(StringUtils.escapeHtml(content.slice(plainStart, i)));
+                if (runStart === -1)
                     runStart = i;
-                }
                 queryIndex++;
             } else if (runStart !== -1) {
-                pieces.push(root.highlightPrefix, StringUtils.escapeHtml(content.slice(runStart, i)), root.highlightSuffix);
-                plainStart = i;
-                runStart = -1;
+                runEnd = i;
+                break;
             }
         }
-        if (runStart !== -1) {
-            pieces.push(root.highlightPrefix, StringUtils.escapeHtml(content.slice(runStart)), root.highlightSuffix);
-            plainStart = content.length;
-        }
-        if (plainStart < content.length)
-            pieces.push(StringUtils.escapeHtml(content.slice(plainStart)));
-        return pieces.join("");
+        if (runStart === -1)
+            return StringUtils.escapeHtml(content);
+        if (runEnd === -1)
+            runEnd = content.length;
+        return StringUtils.escapeHtml(content.slice(0, runStart))
+            + root.highlightPrefix
+            + StringUtils.escapeHtml(content.slice(runStart, runEnd))
+            + root.highlightSuffix
+            + StringUtils.escapeHtml(content.slice(runEnd));
     }
 
     property string displayContent: {
@@ -660,7 +581,7 @@ RippleButton {
                                 font.family: (root.fontType === "monospace" || root.contentType === "json") ? Appearance.font.family.monospace : Appearance.font.family.main
                                 color: root.colForeground
                                 horizontalAlignment: Text.AlignLeft
-                                elide: Text.ElideRight
+                                elide: Text.ElideMiddle
                                 text: root.isSelected ? root.itemName : root.displayContent
                             }
                         }
@@ -771,7 +692,7 @@ RippleButton {
                         font.family: Appearance.font.family.main
                         font.weight: Font.Medium
                         color: root.isSelected ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSecondaryContainer
-                        elide: Text.ElideRight
+                        elide: Text.ElideMiddle
                     }
 
                     Item {

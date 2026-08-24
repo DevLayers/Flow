@@ -96,7 +96,12 @@ Item {
         let count = 0;
         for (let i = 0; i < results.length; i++) {
             const item = results[i];
-            if (item && (!(Config.options.search.alwaysListApps || q !== "" || !Config.options.search.showNowPlayingBubble) || item.key !== "mpris:now-playing"))
+            if (!item || ((Config.options.search.alwaysListApps || q !== "" || !Config.options.search.showNowPlayingBubble) && item.key === "mpris:now-playing"))
+                continue;
+            const sectionId = root.resultSectionId(item);
+            if (sectionId === "continue" && !root.queryHasAnyPrefix && !root.showContinuationRows)
+                continue;
+            if (root.categoryAcceptsSection(sectionId))
                 count++;
         }
         return count;
@@ -125,6 +130,19 @@ Item {
             if (!GlobalStates.overviewOpen)
                 return;
             appResults.applyResultDiff(root.processResults(LauncherSearch.results));
+        }
+    }
+
+    Timer {
+        id: categoryApplyTimer
+        interval: 0
+        repeat: false
+        onTriggered: {
+            if (!GlobalStates.overviewOpen || root.isAnySpecialMode)
+                return;
+            appResults.applyResultDiff(root.processResults(LauncherSearch.results));
+            appResults.selectFirst();
+            root.focusSearchInput();
         }
     }
 
@@ -179,9 +197,13 @@ Item {
         .concat(LauncherSearch.enabledUtilityPrefixes())
         .filter((value, index, values) => value && values.indexOf(value) === index)
     readonly property bool queryHasAnyPrefix: root.searchPrefixValues.some(prefix => root.searchingText.startsWith(prefix))
-    // Results that are actual matches — the always-there fallback rows
-    // (shell command, math, web, ask-AI) never count.
-    readonly property int realResultCount: LauncherSearch.results.filter(r => r && r.key !== "cmd:shell" && r.key !== "web:search" && r.key !== "ai:ask" && r.key !== "mpris:now-playing" && !r.key.startsWith("math:")).length
+    // Results that are actual matches — generic continuation rows never count.
+    // A calculator result does: valid math must not be replaced by auto-AI.
+    readonly property int realResultCount: LauncherSearch.results.filter(r => {
+        const key = String(r?.key ?? "");
+        return r && key !== "cmd:shell" && key !== "web:search" && key !== "ai:ask"
+            && key !== "mpris:now-playing" && !r.isFallback && !key.startsWith("fallback:");
+    }).length
     readonly property bool isAnySpecialMode: root.activePanelId.length > 0
     readonly property string activePanelQuery: {
         if (!root.activePanel)
@@ -341,7 +363,7 @@ Item {
                 root.consumePanelIntent();
         }
     }
-    readonly property bool showSuggestionsPanel: Config.options.search.suggestions.enable && !root.isAnySpecialMode && root.searchingText === ""
+    readonly property bool showSuggestionsPanel: Config.options.search.suggestions.enable && !Config.options.search.alwaysListApps && !root.isAnySpecialMode && root.searchingText === ""
     readonly property bool alwaysListAppsMode: Config.options.search.alwaysListApps && !root.isAnySpecialMode
     readonly property bool showIdleNowPlaying: searchingText === ""
         && !isAnySpecialMode
@@ -428,6 +450,7 @@ Item {
             if (GlobalStates.overviewOpen) {
                 exitHoldTimer.stop();
                 root.exiting = false;
+                root.resultCategoryId = "all";
                 // Suppress transitions while panel is animating open
                 root.suppressItemTransitions = true;
                 // Wipe stale results immediately so panel opens empty (no ghost expansion)
@@ -780,10 +803,97 @@ Item {
     // Settings. A group the user removed from that list is simply not iterated
     // below, so its results never reach the model — the list is the on/off
     // switch as much as it is the order.
+    readonly property bool bestMatchActive: Config.options.search.bestMatch?.enable === true
+    readonly property bool bestMatchUniformList: Config.options.search.bestMatch?.uniformList !== false
+
     readonly property var sectionOrder: SearchResultSectionRegistry.activeOrder
+
+    // Category filtering is a view concern: providers still rank one complete
+    // result set, while Tab changes which classes the normal Search exposes.
+    // Keeping it here also means utility prefixes and hosted panels retain
+    // their existing query semantics.
+    property string resultCategoryId: "all"
+    readonly property var resultCategoryDefinitions: [
+        { id: "all", label: Translation.tr("All"), icon: "category", sections: [] },
+        { id: "apps", label: Translation.tr("Apps"), icon: "apps", sections: ["apps"] },
+        { id: "controls", label: Translation.tr("Controls"), icon: "tune", sections: ["controls"] },
+        { id: "tools", label: Translation.tr("Tools"), icon: "widgets", sections: ["tools", "actions"] },
+        { id: "content", label: Translation.tr("Content"), icon: "article", sections: ["content", "files"] },
+        { id: "media", label: Translation.tr("Media"), icon: "music_note", sections: ["media"] },
+        { id: "settings", label: Translation.tr("Settings"), icon: "settings", sections: ["settings"] },
+        { id: "other", label: Translation.tr("Other"), icon: "more_horiz", sections: ["other"] }
+    ]
+    readonly property var availableResultCategories: root.resultCategoryDefinitions.filter(category => {
+        if (category.id === "all")
+            return true;
+        return category.sections.some(sectionId => root.sectionOrder.indexOf(sectionId) !== -1);
+    })
+    readonly property var activeResultCategory: root.availableResultCategories.find(category => category.id === root.resultCategoryId)
+        ?? root.resultCategoryDefinitions[0]
+    readonly property bool showNormalCategoryFilter: !root.isAnySpecialMode
+        && !root.showSuggestionsPanel
+        && !root.queryHasAnyPrefix
+        && (root.searchingText.trim().length > 0 || root.alwaysListAppsMode)
+
+    function categoryAcceptsSection(sectionId: string): bool {
+        if (root.queryHasAnyPrefix)
+            return true;
+        const category = root.activeResultCategory;
+        return category.id === "all" || category.sections.indexOf(sectionId) !== -1;
+    }
+
+    function cycleResultCategory(step: int) {
+        const categories = root.availableResultCategories;
+        if (categories.length < 2)
+            return;
+        let index = categories.findIndex(category => category.id === root.activeResultCategory.id);
+        if (index < 0)
+            index = 0;
+        const direction = step < 0 ? -1 : 1;
+        index = (index + direction + categories.length) % categories.length;
+        root.resultCategoryId = categories[index].id;
+        root.loadedResultsCount = root.resultPageSize;
+        categoryApplyTimer.restart();
+    }
+
+    readonly property var emptyFallbackActions: [
+        { id: "command", label: Translation.tr("Run command"), icon: "terminal", enabled: Config.options.search.modules.shellCommand },
+        { id: "ai", label: Translation.tr("Ask AI"), icon: "auto_awesome", enabled: Ai.enabled },
+        { id: "web", label: Translation.tr("Search the web"), icon: "travel_explore", enabled: Config.options.search.modules.webSearch }
+    ].filter(action => action.enabled)
+    readonly property int matchingCategoryResultCount: LauncherSearch.results.filter(item => {
+        if (!item)
+            return false;
+        const sectionId = root.resultSectionId(item);
+        return sectionId !== "continue" && root.categoryAcceptsSection(sectionId);
+    }).length
+    readonly property bool showContinuationRows: root.resultCategoryId === "all"
+        && !root.queryHasAnyPrefix
+        && root.realResultCount > 0
+    readonly property bool showEmptySearchState: root.showNormalCategoryFilter
+        && !root.queryHasAnyPrefix
+        && root.searchingText.trim().length > 0
+        && root.matchingCategoryResultCount === 0
+
+    function executeEmptyFallback(actionId: string) {
+        const query = root.searchingText.trim();
+        if (query.length === 0)
+            return;
+        if (actionId === "command") {
+            GlobalStates.overviewOpen = false;
+            LauncherSearch.runCommandQuery(query);
+        } else if (actionId === "web") {
+            GlobalStates.overviewOpen = false;
+            LauncherSearch.openWebSearch(query);
+        } else if (actionId === "ai") {
+            LauncherSearch.askAiQuery(query);
+        }
+    }
 
     function resultSectionId(item): string {
         const key = String(item?.key ?? "");
+        if (item?.isFallback === true)
+            return "continue";
         if (key.startsWith("app:") || item?.type === Translation.tr("App Alias"))
             return "apps";
         // The idle now-playing bubble is the only media row, and it used to land
@@ -802,7 +912,9 @@ Item {
             return "files";
         if (/^(quicklink:|alias:|text-snippet:)/.test(key))
             return "content";
-        if (/^(cmd:shell|web:search|ai:ask|fallback:|math:)/.test(key))
+        if (key.startsWith("math:"))
+            return "tools";
+        if (/^(cmd:shell|web:search|ai:ask|fallback:)/.test(key))
             return "continue";
         if (/^(action:|snippet:|shell:|process:|generator:|sports:)/.test(key))
             return "actions";
@@ -849,6 +961,13 @@ Item {
                 seenKeys.add(key);
             }
             const sectionId = root.resultSectionId(item);
+            // Generic continuations are rendered by the intentional empty
+            // state. Explicit command/web/math prefixes still keep their
+            // single result row and exact Enter behavior.
+            if (sectionId === "continue" && !root.queryHasAnyPrefix && !root.showContinuationRows)
+                continue;
+            if (!root.categoryAcceptsSection(sectionId))
+                continue;
             if (sectionId === "apps")
                 hasApplications = true;
             unique.push(item);
@@ -859,7 +978,7 @@ Item {
         // command surface when no application matches, and never promote
         // Settings: configuration discovery is useful, but intentionally
         // secondary to things the user can launch or act on immediately.
-        if (!hasApplications && query.length >= 2 && root.sectionOrder.indexOf("best") !== -1) {
+        if (root.resultCategoryId === "all" && !hasApplications && query.length >= 2 && root.sectionOrder.indexOf("best") !== -1) {
             let bestIndex = -1;
             for (let i = 0; i < unique.length; i++) {
                 const key = String(unique[i].key ?? "");
@@ -925,7 +1044,11 @@ Item {
             if ((takes[root.sectionOrder[s]] ?? 0) > 0)
                 groupCount++;
         }
-        const showCaptions = groupCount > 1;
+        // Best-match mode answers the question the captions were organising an
+        // answer to, so the rest reads better as one uninterrupted list.
+        const heroActive = root.bestMatchActive && query.length > 0;
+        const showCaptions = root.resultCategoryId === "all" && groupCount > 1
+            && !(heroActive && root.bestMatchUniformList);
 
         const rows = [];
         for (let s = 0; s < root.sectionOrder.length; s++) {
@@ -939,7 +1062,8 @@ Item {
                     key: "section:" + sectionId,
                     sectionId: sectionId,
                     isHeader: true,
-                    isFirst: false,
+                    isHero: false,
+                    isFirst: rows.length === 0,
                     isLast: false,
                     ref: null
                 });
@@ -949,10 +1073,26 @@ Item {
                     key: String(item.key ?? (sectionId + ":" + i)),
                     sectionId: sectionId,
                     isHeader: false,
+                    isHero: false,
                     isFirst: i === 0,
                     isLast: i === take - 1,
                     ref: item
                 });
+            }
+        }
+
+        // The prominent row is whichever result the cursor would have landed on
+        // anyway, so what Enter does and what the row shows can never disagree.
+        if (heroActive) {
+            for (let i = 0; i < rows.length; i++) {
+                if (rows[i].isHeader)
+                    continue;
+                rows[i].isHero = true;
+                // It stands alone, so the row under it starts the next group.
+                rows[i].isLast = true;
+                if (i + 1 < rows.length && !rows[i + 1].isHeader)
+                    rows[i + 1].isFirst = true;
+                break;
             }
         }
         return rows;
@@ -1009,6 +1149,11 @@ Item {
                     else
                         aiPanelLoader.item.focusNext();
                 }
+                event.accepted = true;
+                return;
+            }
+            if (root.showNormalCategoryFilter) {
+                root.cycleResultCategory(event.key === Qt.Key_Backtab || (event.modifiers & Qt.ShiftModifier) ? -1 : 1);
                 event.accepted = true;
                 return;
             }
@@ -1236,6 +1381,9 @@ Item {
                 isMediaDownloaderPanelFocused: root.isMediaDownloaderMode && root.activePanelItem && root.activePanelItem.focusedControlIndex !== -1
                 isMaterialSymbolsPanelFocused: root.isMaterialSymbolsMode && root.activePanelItem && root.activePanelItem.focusedControlIndex !== -1
                 showSuggestionsPanel: root.showSuggestionsPanel
+                showCategoryFilter: root.showNormalCategoryFilter
+                categoryFilterLabel: root.activeResultCategory.label
+                categoryFilterIcon: root.activeResultCategory.icon
                 enabled: !root.isAiMode
                 opacity: root.isAiMode ? 0 : 1
 
@@ -1289,6 +1437,7 @@ Item {
                 onToggleFavorite: {
                     LauncherSearch.toggleFavorite(LauncherSearch.selectedResult);
                 }
+                onCycleCategoryFilter: step => root.cycleResultCategory(step)
 
                 onEscapeToSearch: {
                     root.handleEscape();
@@ -1297,6 +1446,12 @@ Item {
                 onSendMessage: {
                     if (root.isAiMode)
                         root.sendAiMessage();
+                }
+
+                onRunSecondaryAction: index => {
+                    const row = root.selectedResultRow();
+                    if (row && typeof row.runSecondary === "function")
+                        row.runSecondary(index);
                 }
 
                 onNavigateSectionUp: searchKeyRouter.dispatch("sectionPrevious")
@@ -1377,7 +1532,9 @@ Item {
                     ? 0
                     : (root.showSkeletons
                         ? searchSkeletons.implicitHeight + (GlobalStates.searchConnectActive ? 12 : 16)
-                        : Math.min(root.maxResultsHeight, appResults.contentHeight + appResults.topMargin + appResults.bottomMargin))
+                        : (root.showEmptySearchState
+                            ? emptySearchState.implicitHeight
+                            : Math.min(root.maxResultsHeight, appResults.contentHeight + appResults.topMargin + appResults.bottomMargin)))
 
                 Behavior on opacity {
                     NumberAnimation {
@@ -1396,8 +1553,8 @@ Item {
                 ListView {
                     id: appResults
                     anchors.fill: parent
-                    visible: opacity > 0
-                    opacity: root.showSkeletons ? 0.0 : 1.0
+                    visible: opacity > 0 && !root.showEmptySearchState
+                    opacity: root.showSkeletons || root.showEmptySearchState ? 0.0 : 1.0
                     Behavior on opacity {
                         enabled: !root.inNotchMode
                         NumberAnimation {
@@ -1715,6 +1872,7 @@ Item {
                                     key: rowData.key,
                                     sectionId: rowData.sectionId,
                                     isHeader: rowData.isHeader,
+                                    isHero: rowData.isHero,
                                     isFirst: rowData.isFirst,
                                     isLast: rowData.isLast,
                                     modelRef: rowData.ref
@@ -1735,6 +1893,8 @@ Item {
                             const row = resultModel.get(newIndex);
                             if (row.sectionId !== rowData.sectionId)
                                 resultModel.setProperty(newIndex, "sectionId", rowData.sectionId);
+                            if (row.isHero !== rowData.isHero)
+                                resultModel.setProperty(newIndex, "isHero", rowData.isHero);
                             if (row.isFirst !== rowData.isFirst)
                                 resultModel.setProperty(newIndex, "isFirst", rowData.isFirst);
                             if (row.isLast !== rowData.isLast)
@@ -1814,6 +1974,8 @@ Item {
                         sourceComponent: {
                             if (resultDelegate.modelData.isHeader)
                                 return sectionCaption;
+                            if (resultDelegate.modelData.isHero === true)
+                                return bestMatchRow;
                             return resultDelegate.modelData.modelRef?.settingRef ? settingResultCard : normalSearchItem;
                         }
                         onLoaded: root.refreshSelectedResultNavigation()
@@ -1856,21 +2018,26 @@ Item {
                             id: sectionCaption
 
                             Item {
-                                implicitHeight: 30
+                                readonly property real topGap: resultDelegate.modelData.isFirst
+                                    ? 0
+                                    : Appearance.sizes.elevationMargin
+                                readonly property real bottomGap: Appearance.sizes.elevationMargin * 0.4
+                                implicitHeight: captionRow.implicitHeight + topGap + bottomGap
 
                                 RowLayout {
+                                    id: captionRow
                                     anchors.left: parent.left
                                     anchors.right: parent.right
-                                    anchors.bottom: parent.bottom
+                                    anchors.top: parent.top
                                     anchors.leftMargin: Appearance.sizes.elevationMargin + 6
                                     anchors.rightMargin: Appearance.sizes.elevationMargin + 6
-                                    anchors.bottomMargin: 3
+                                    anchors.topMargin: parent.topGap
                                     spacing: 7
 
                                     MaterialSymbol {
                                         text: root.sectionPresentation(resultDelegate.modelData.sectionId).icon
                                         iconSize: Appearance.font.pixelSize.small
-                                        color: Appearance.colors.colOnSurfaceVariant
+                                        color: Appearance.colors.colOutline
                                     }
 
                                     StyledText {
@@ -1880,6 +2047,44 @@ Item {
                                         font.pixelSize: Appearance.font.pixelSize.small
                                         font.weight: Font.Medium
                                     }
+                                }
+                            }
+                        }
+
+                        Component {
+                            id: bestMatchRow
+
+                            // Inset to the same edge as every other row, so the
+                            // prominence comes from its shape rather than from
+                            // it sitting in a different place.
+                            Item {
+                                implicitHeight: heroItem.implicitHeight
+
+                                function activate(): bool {
+                                    return heroItem.activate();
+                                }
+
+                                function clicked(): bool {
+                                    heroItem.clicked();
+                                    return true;
+                                }
+
+                                function runSecondary(index: int) {
+                                    heroItem.runSecondary(index);
+                                }
+
+                                SearchBestMatch {
+                                    id: heroItem
+                                    anchors.left: parent.left
+                                    anchors.right: parent.right
+                                    anchors.leftMargin: root.rowSideMargin
+                                    anchors.rightMargin: root.rowSideMargin
+                                    entry: resultDelegate.modelData.modelRef
+                                    query: root.searchingText
+                                    listIndex: resultDelegate.index
+                                    listCurrentIndex: appResults.currentIndex
+                                    secondaryLimit: Config.options.search.bestMatch?.secondaryActions ?? 4
+                                    onResultExecuted: feedbackText => root.showActionFeedback(feedbackText)
                                 }
                             }
                         }
@@ -1975,16 +2180,20 @@ Item {
                                             root.focusSearchInput();
                                         }
                                         event.accepted = true;
-                                    } else if (event.key === Qt.Key_Tab) {
+                                    } else if (event.key === Qt.Key_Tab || event.key === Qt.Key_Backtab) {
                                         if (searchItem.actionPanelOpen)
                                             return;
-                                        if (!resultDelegate.modelData.modelRef)
+                                        if (root.showNormalCategoryFilter) {
+                                            root.cycleResultCategory(event.key === Qt.Key_Backtab || (event.modifiers & Qt.ShiftModifier) ? -1 : 1);
+                                        } else if (event.key === Qt.Key_Tab && resultDelegate.modelData.modelRef) {
+                                            const tabbedText = resultDelegate.modelData.modelRef.name;
+                                            LauncherSearch.query = tabbedText;
+                                            searchBar.searchInput.text = tabbedText;
+                                            root.focusSearchInput();
+                                        } else {
                                             return;
-                                        const tabbedText = resultDelegate.modelData.modelRef.name;
-                                        LauncherSearch.query = tabbedText;
-                                        searchBar.searchInput.text = tabbedText;
+                                        }
                                         event.accepted = true;
-                                        root.focusSearchInput();
                                     }
                                 }
                             }
@@ -2031,6 +2240,101 @@ Item {
                     // what actually reads as a removal anyway: the rows below close
                     // the gap. The vanishing row itself was never the motion the eye
                     // was following.
+                }
+
+                Item {
+                    id: emptySearchState
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.top: parent.top
+                    implicitHeight: emptyStateContent.implicitHeight + Appearance.sizes.elevationMargin * 4
+                    visible: opacity > 0.01
+                    opacity: root.showEmptySearchState && !root.showSkeletons ? 1.0 : 0.0
+
+                    transform: Translate {
+                        y: emptySearchState.opacity > 0 ? 0 : Appearance.sizes.elevationMargin
+                    }
+
+                    Behavior on opacity {
+                        NumberAnimation {
+                            duration: Appearance.animation.elementMoveFast.duration
+                            easing.type: Appearance.animation.elementMoveFast.type
+                            easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+                        }
+                    }
+
+                    ColumnLayout {
+                        id: emptyStateContent
+                        anchors.centerIn: parent
+                        width: Math.min(implicitWidth, parent.width - Appearance.sizes.elevationMargin * 4)
+                        spacing: Appearance.sizes.elevationMargin
+
+                        MaterialShapeWrappedMaterialSymbol {
+                            Layout.alignment: Qt.AlignHCenter
+                            shape: MaterialShape.Shape.SoftBurst
+                            text: "search_off"
+                            iconSize: Appearance.font.pixelSize.huge
+                            color: Appearance.colors.colSecondaryContainer
+                            colSymbol: Appearance.colors.colOnSecondaryContainer
+                        }
+
+                        StyledText {
+                            Layout.alignment: Qt.AlignHCenter
+                            Layout.maximumWidth: emptySearchState.width - Appearance.sizes.elevationMargin * 4
+                            text: Translation.tr("Nothing found for %1").arg(String(root.searchingText.trim()))
+                            color: Appearance.colors.colOnSurface
+                            font.pixelSize: Appearance.font.pixelSize.large
+                            font.weight: Font.DemiBold
+                            elide: Text.ElideMiddle
+                        }
+
+                        StyledText {
+                            Layout.alignment: Qt.AlignHCenter
+                            text: Translation.tr("Try another category or continue with an action")
+                            color: Appearance.colors.colOnSurfaceVariant
+                            font.pixelSize: Appearance.font.pixelSize.small
+                        }
+
+                        RowLayout {
+                            Layout.alignment: Qt.AlignHCenter
+                            spacing: Appearance.sizes.elevationMargin / 2
+
+                            Repeater {
+                                model: root.emptyFallbackActions
+
+                                RippleButton {
+                                    id: fallbackChip
+                                    required property var modelData
+                                    implicitWidth: fallbackChipContent.implicitWidth + Appearance.sizes.elevationMargin * 2
+                                    implicitHeight: Appearance.sizes.elevationMargin * 4
+                                    buttonRadius: Appearance.rounding.full
+                                    colBackground: Appearance.colors.colSurfaceContainerHigh
+                                    colBackgroundHover: Appearance.colors.colSecondaryContainerHover
+                                    colRipple: Appearance.colors.colSecondaryContainerActive
+                                    onClicked: root.executeEmptyFallback(modelData.id)
+
+                                    contentItem: RowLayout {
+                                        id: fallbackChipContent
+                                        anchors.centerIn: parent
+                                        spacing: Appearance.sizes.elevationMargin / 2
+
+                                        MaterialSymbol {
+                                            text: fallbackChip.modelData.icon
+                                            iconSize: Appearance.font.pixelSize.normal
+                                            color: Appearance.colors.colOnSurface
+                                        }
+
+                                        StyledText {
+                                            text: fallbackChip.modelData.label
+                                            color: Appearance.colors.colOnSurface
+                                            font.pixelSize: Appearance.font.pixelSize.small
+                                            font.weight: Font.Medium
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
 
                 Rectangle {

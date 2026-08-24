@@ -3682,6 +3682,20 @@ Singleton {
                 // And anything below this fraction of the best hit is noise
                 // *next to that hit*, whatever its absolute score.
                 property real fuzzyRelativeCutoff: 0.35
+                property JsonObject bestMatch: JsonObject {
+                    // Render the top result as one prominent row with its own
+                    // actions on it, and the rest as a single uniform list.
+                    // A launcher's promise is that the first thing on screen is
+                    // the thing you meant; showing it at the same weight as the
+                    // nine rows below makes you verify that promise every time.
+                    property bool enable: false
+                    // Actions shown inline on the row. Four fit without turning
+                    // it into a menu; the action panel still holds every one.
+                    property int secondaryActions: 4
+                    // Group captions are what the prominent row replaces: with
+                    // one answer at the top, the rest reads better as one list.
+                    property bool uniformList: true
+                }
                 property JsonObject typoTolerance: JsonObject {
                     // Myers bit-parallel edit distance as a last tier: it runs
                     // only when the exact and layout-corrected passes found

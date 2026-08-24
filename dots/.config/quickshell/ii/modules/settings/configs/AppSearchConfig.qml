@@ -94,10 +94,19 @@ ContentPage {
                 checked: Config.options.search.alwaysListApps
                 onCheckedChanged: {
                     Config.options.search.alwaysListApps = checked;
+                    if (checked)
+                        Config.options.overview.enable = false;
                 }
                 StyledToolTip {
                     text: Translation.tr("Opens the app list immediately when search is opened with no query, bypassing the workspace overview")
                 }
+            }
+
+            NoticeBox {
+                Layout.fillWidth: true
+                visible: Config.options.search.alwaysListApps
+                materialIcon: "apps"
+                text: Translation.tr("Search now opens directly with applications. The workspace Overview has been disabled and remains locked until this option is turned off.")
             }
 
             ConfigSwitch {

@@ -29,6 +29,9 @@ RowLayout {
     property bool isMediaDownloaderPanelFocused: false
     property bool isMaterialSymbolsPanelFocused: false
     property bool showSuggestionsPanel: false
+    property bool showCategoryFilter: false
+    property string categoryFilterLabel: ""
+    property string categoryFilterIcon: "category"
     readonly property bool selectedResultSupportsHorizontalNavigation: {
         const type = String(root.selectedResultRef?.settingRef?.type ?? "");
         return type === "bool" || type === "int" || type === "real" || type === "enum";
@@ -58,6 +61,7 @@ RowLayout {
     signal navigateDown
     signal navigateSectionUp
     signal navigateSectionDown
+    signal runSecondaryAction(int index)
     signal navigateLeft
     signal navigateRight
     signal activate
@@ -77,6 +81,7 @@ RowLayout {
     signal historyPrevious
     signal historyNext
     signal toggleFavorite
+    signal cycleCategoryFilter(int step)
     // Fired when Esc is pressed while the text is empty in AI mode — asks the
     // host to leave AI chat and return to the plain search.
     signal escapeToSearch
@@ -555,8 +560,21 @@ RowLayout {
                 event.accepted = true;
                 return;
             }
+            if (!root.activePanelMode && root.showCategoryFilter
+                    && (event.key === Qt.Key_Tab || event.key === Qt.Key_Backtab)) {
+                root.cycleCategoryFilter(event.key === Qt.Key_Backtab || (event.modifiers & Qt.ShiftModifier) ? -1 : 1);
+                event.accepted = true;
+                return;
+            }
             if (root.matchesShortcut(event, "section", "Tab") && root.activePanelMode && root.supportsPanelSectionToggle) {
                 root.togglePanelSection();
+                event.accepted = true;
+                return;
+            }
+            // Alt+digit rather than a bare digit: the field keeps every plain
+            // key for the query itself.
+            if ((event.modifiers & Qt.AltModifier) && event.key >= Qt.Key_1 && event.key <= Qt.Key_9) {
+                root.runSecondaryAction(event.key - Qt.Key_1);
                 event.accepted = true;
                 return;
             }
@@ -683,6 +701,49 @@ RowLayout {
                 }
                 event.accepted = true;
             }
+        }
+    }
+
+    RippleButton {
+        id: categoryFilterChip
+        visible: root.showCategoryFilter
+        Layout.alignment: Qt.AlignVCenter
+        implicitWidth: categoryFilterContent.implicitWidth + Appearance.sizes.elevationMargin * 2
+        implicitHeight: searchInput.implicitHeight
+        buttonRadius: Appearance.rounding.full
+        colBackground: Appearance.colors.colSecondaryContainer
+        colBackgroundHover: Appearance.colors.colSecondaryContainerHover
+        colRipple: Appearance.colors.colSecondaryContainerActive
+        onClicked: root.cycleCategoryFilter(1)
+
+        contentItem: RowLayout {
+            id: categoryFilterContent
+            anchors.centerIn: parent
+            spacing: Appearance.sizes.elevationMargin / 2
+
+            MaterialSymbol {
+                text: root.categoryFilterIcon
+                iconSize: Appearance.font.pixelSize.normal
+                color: Appearance.colors.colOnSecondaryContainer
+            }
+
+            StyledText {
+                text: root.categoryFilterLabel
+                color: Appearance.colors.colOnSecondaryContainer
+                font.pixelSize: Appearance.font.pixelSize.small
+                font.weight: Font.Medium
+            }
+
+            KeyHint {
+                visible: Config.options.search.appearance.showKeyHints
+                keys: ["Tab"]
+                surface: Appearance.colors.colSecondaryContainer
+                onSurface: Appearance.colors.colOnSecondaryContainer
+            }
+        }
+
+        StyledToolTip {
+            text: Translation.tr("Filter result category · Tab")
         }
     }
 

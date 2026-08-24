@@ -35,6 +35,34 @@ Item {
                     onCheckedChanged: Config.options.search.frecency = checked
                 }
                 ConfigSwitch {
+                    buttonIcon: "stars"
+                    text: Translation.tr("Best match row")
+                    description: Translation.tr("Renders the top result as one prominent row carrying its own actions, and the rest as a single uniform list. You read one line instead of scanning seven groups.")
+                    checked: Config.options.search.bestMatch.enable
+                    onCheckedChanged: Config.options.search.bestMatch.enable = checked
+                }
+                ConfigSpinBox {
+                    icon: "bolt"
+                    text: Translation.tr("Actions shown on the best match")
+                    value: Config.options.search.bestMatch.secondaryActions
+                    from: 0
+                    to: 6
+                    stepSize: 1
+                    enabled: Config.options.search.bestMatch.enable
+                    onValueChanged: Config.options.search.bestMatch.secondaryActions = value
+                    StyledToolTip {
+                        text: Translation.tr("Actions from the result itself, placed on the row and reachable with Alt+1…n. The action panel (Ctrl+K) still holds every one of them.")
+                    }
+                }
+                ConfigSwitch {
+                    buttonIcon: "reorder"
+                    text: Translation.tr("Hide group captions in best match mode")
+                    description: Translation.tr("With one answer at the top, the remaining results read better as one list. Turn this off to keep the category groups underneath it.")
+                    checked: Config.options.search.bestMatch.uniformList
+                    enabled: Config.options.search.bestMatch.enable
+                    onCheckedChanged: Config.options.search.bestMatch.uniformList = checked
+                }
+                ConfigSwitch {
                     buttonIcon: "keyboard_alt"
                     text: Translation.tr("Correct wrong keyboard layout")
                     description: Translation.tr("Maps a query typed with another layout active back through the physical keys, so ‘ашкуащч’ still finds Firefox. Cyrillic is transliterated as well.")
@@ -78,7 +106,17 @@ Item {
                     text: Translation.tr("Always list apps on empty query")
                     description: Translation.tr("Shows applications before you type instead of keeping Search as a compact empty field.")
                     checked: Config.options.search.alwaysListApps
-                    onCheckedChanged: Config.options.search.alwaysListApps = checked
+                    onCheckedChanged: {
+                        Config.options.search.alwaysListApps = checked;
+                        if (checked)
+                            Config.options.overview.enable = false;
+                    }
+                }
+                NoticeBox {
+                    Layout.fillWidth: true
+                    visible: Config.options.search.alwaysListApps
+                    materialIcon: "apps"
+                    text: Translation.tr("Search now opens directly with applications. The workspace Overview has been disabled and remains locked until this option is turned off.")
                 }
                 ConfigSwitch {
                     buttonIcon: "center_focus_strong"

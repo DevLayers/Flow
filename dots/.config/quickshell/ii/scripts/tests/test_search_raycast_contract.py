@@ -229,6 +229,105 @@ class SearchRaycastContractTests(unittest.TestCase):
         self.assertIn("dynamicRoles: true", widget)
         self.assertIn("result.length === 0", launcher)
 
+    def test_normal_search_has_category_filter_and_intentional_empty_state(self):
+        widget = source("modules/ii/overview/SearchWidget.qml")
+        search_bar = source("modules/ii/overview/SearchBar.qml")
+        item = source("modules/ii/overview/SearchItem.qml")
+
+        # Tab belongs to a visible category chip in plain Search. Hosted panels
+        # keep their own Tab routing, and a specific category no longer needs
+        # section captions repeating the chip's label.
+        self.assertIn("property string resultCategoryId: \"all\"", widget)
+        self.assertIn("function cycleResultCategory(step: int)", widget)
+        category_block = widget.split("readonly property var resultCategoryDefinitions", 1)[1].split("readonly property var availableResultCategories", 1)[0]
+        self.assertLess(category_block.index('id: "all"'), category_block.index('id: "apps"'))
+        self.assertLess(category_block.index('id: "apps"'), category_block.index('id: "controls"'))
+        self.assertLess(category_block.index('id: "controls"'), category_block.index('id: "tools"'))
+        self.assertIn("showCategoryFilter: root.showNormalCategoryFilter", widget)
+        self.assertIn("onCycleCategoryFilter: step => root.cycleResultCategory(step)", widget)
+        self.assertIn("signal cycleCategoryFilter(int step)", search_bar)
+        self.assertIn('root.resultCategoryId === "all" && groupCount > 1', widget)
+
+        # No-match continuations are actions, not faux search results.
+        self.assertIn("readonly property bool showEmptySearchState", widget)
+        self.assertIn("id: emptySearchState", widget)
+        self.assertIn("readonly property var emptyFallbackActions", widget)
+        self.assertIn("function executeEmptyFallback(actionId: string)", widget)
+        self.assertIn("Nothing found for %1", widget)
+        self.assertIn("RippleButton", widget)
+        self.assertIn("property bool isFallback: false", source("modules/common/models/LauncherSearchResult.qml"))
+        self.assertIn('root.createSearchPanelResult(SearchPanelRegistry.byId("tasks"), true)', source("services/LauncherSearch.qml"))
+        for fallback_id in ('id: "command"', 'id: "ai"', 'id: "web"'):
+            self.assertIn(fallback_id, widget)
+
+        # When real matches exist, the original command/AI/web continuations
+        # remain available as the final section. With no real match the empty
+        # state owns those same intentions as chips instead of duplicate rows.
+        launcher = source("services/LauncherSearch.qml")
+        self.assertIn("readonly property bool showContinuationRows", widget)
+        self.assertIn("root.showContinuationRows", widget)
+        self.assertIn("const showNormalContinuations", launcher)
+        continuation_block = launcher.split("const showNormalContinuations", 1)[1].split("// Filter out duplicate", 1)[0]
+        self.assertNotIn("result.length === 0", continuation_block)
+        for result_name in ("commandResultObject", "aiAskResultObject", "webSearchResultObject"):
+            self.assertIn("result.push(" + result_name + ")", continuation_block)
+
+        # Captions recede, long distinguishing suffixes survive, and fuzzy
+        # highlighting creates at most one rich-text emphasis run.
+        self.assertIn("color: Appearance.colors.colOutline", widget)
+        self.assertIn("readonly property real topGap", widget)
+        self.assertIn("Appearance.sizes.elevationMargin * 0.4", widget)
+        self.assertIn("spacing: 2", widget)
+        self.assertIn("Text.ElideMiddle", item)
+        highlight = item.split("function highlightContent(content, query)", 1)[1].split("property string displayContent", 1)[0]
+        self.assertEqual(highlight.count("root.highlightPrefix"), 1)
+
+    def test_always_list_apps_refreshes_the_idle_surface(self):
+        config = source("modules/common/Config.qml")
+        launcher = source("services/LauncherSearch.qml")
+        dynamic_island = source("modules/ii/dynamicIsland/DynamicIslandPanel.qml")
+        search_drop = source("modules/ii/topLayer/search/SearchDrop.qml")
+        background = source("modules/ii/background/BackgroundWidgetsWindow.qml")
+
+        # Opt-in by default, and once enabled it replaces every Overview grid
+        # host with the application list instead of stacking both surfaces.
+        self.assertIn("property bool alwaysListApps: false", config)
+        for host in (dynamic_island, search_drop, background):
+            self.assertIn("!Config.options.search.alwaysListApps", host)
+
+        # The empty-query result set must be refreshed by every source that can
+        # make it stale. Query edits alone are insufficient during first boot.
+        self.assertIn("readonly property bool alwaysListAppsEnabled", launcher)
+        self.assertIn("onAlwaysListAppsEnabledChanged:", launcher)
+        self.assertIn("onOverviewEnabledChanged: root.enforceAlwaysListAppsOverviewPolicy()", launcher)
+        app_list_handler = launcher.split("target: AppSearch", 1)[1].split("function createAppResultObject", 1)[0]
+        self.assertIn("root._scheduleResultsUpdate()", app_list_handler)
+        overview_handler = launcher.split("function onOverviewOpenChanged()", 1)[1].split("Component.onCompleted", 1)[0]
+        self.assertIn("if (GlobalStates.overviewOpen)", overview_handler)
+        self.assertIn("root._scheduleResultsUpdate()", overview_handler)
+
+        widget = source("modules/ii/overview/SearchWidget.qml")
+        suggestions_binding = widget.split("readonly property bool showSuggestionsPanel:", 1)[1].splitlines()[0]
+        self.assertIn("!Config.options.search.alwaysListApps", suggestions_binding)
+
+        # This is a configuration policy, not only a visibility trick: every
+        # way of enabling the app list disables the persisted Overview option.
+        self.assertIn("function enforceAlwaysListAppsOverviewPolicy()", launcher)
+        policy_block = launcher.split("function enforceAlwaysListAppsOverviewPolicy()", 1)[1].split("Connections {", 1)[0]
+        self.assertIn("Config.options.overview.enable = false", policy_block)
+
+        overview_config = source("modules/settings/configs/OverviewConfig.qml")
+        self.assertIn("readonly property bool overviewLockedByAppList", overview_config)
+        self.assertIn("visible: page.overviewLockedByAppList", overview_config)
+        self.assertIn("enabled: !page.overviewLockedByAppList", overview_config)
+        self.assertIn("if (!page.overviewLockedByAppList)", overview_config)
+
+        for settings_path in ("modules/settings/configs/LauncherConfig.qml", "modules/settings/configs/AppSearchConfig.qml"):
+            settings_page = source(settings_path)
+            self.assertIn("Config.options.overview.enable = false", settings_page)
+            self.assertIn("visible: Config.options.search.alwaysListApps", settings_page)
+            self.assertIn("Search now opens directly with applications", settings_page)
+
     def test_result_rows_cannot_outlive_their_model_row(self):
         widget = source("modules/ii/overview/SearchWidget.qml")
         # A `remove` transition keeps a delegate alive after its model row is
@@ -372,12 +471,14 @@ class SearchRaycastContractTests(unittest.TestCase):
         self.assertIn("function trimFuzzyResults(results: var): var", appsearch)
         self.assertIn("threshold: root.fuzzyThreshold", appsearch)
         # 3.2 — a lone group's caption names nothing.
-        self.assertIn("const showCaptions = groupCount > 1", widget)
+        self.assertIn('const showCaptions = root.resultCategoryId === "all" && groupCount > 1', widget)
         # 3.4 — reaching the last group a row at a time costs ten keystrokes.
         self.assertIn("function sectionJump(step: int): bool", widget)
         self.assertIn('case "sectionNext":', router)
-        # 3.5 — one tag pair per contiguous run, not per character.
-        self.assertIn("pieces.push(root.highlightPrefix", item)
+        # 3.5 — one tag pair for the first contiguous run, not confetti across
+        # every later fuzzy-match island.
+        highlight = item.split("function highlightContent(content, query)", 1)[1].split("property string displayContent", 1)[0]
+        self.assertEqual(highlight.count("root.highlightPrefix"), 1)
         # 3.6 — app rows depend on the entry, not on the keystroke.
         self.assertIn("property var appResultCache", launcher)
         # 3.7 — row durations have to follow the animation multiplier.
@@ -404,6 +505,53 @@ class SearchRaycastContractTests(unittest.TestCase):
         self.assertIn("root.exiting ? root.exitHeight : implicitHeight", widget)
         # And released on the way back in, so a fast reopen is not stuck frozen.
         self.assertIn("exitHoldTimer.stop();\n                root.exiting = false;", widget)
+
+    def test_best_match_row_is_the_row_the_cursor_lands_on(self):
+        widget = source("modules/ii/overview/SearchWidget.qml")
+        hero = source("modules/ii/overview/SearchBestMatch.qml")
+        bar = source("modules/ii/overview/SearchBar.qml")
+        config = source("modules/common/Config.qml")
+        launcher_page = source("modules/settings/configs/LauncherConfig.qml")
+
+        self.assertIn("property bool enable: false", config)
+        self.assertIn("property int secondaryActions: 4", config)
+        # The action set is shared with the Ctrl+K panel rather than being the
+        # result's own `actions`, which most desktop entries never define.
+        actions = source("modules/common/SearchResultActions.qml")
+        item = source("modules/ii/overview/SearchItem.qml")
+        self.assertIn("function build(entry: var, callbacks: var): var", actions)
+        self.assertIn("SearchResultActions.build(root.entry", item)
+        self.assertIn("SearchResultActions.build(root.entry", hero)
+        # A result's own actions outrank the launcher's housekeeping ones for
+        # the few slots the row can show.
+        self.assertLess(actions.index("const entryActions = entry.actions"),
+                        actions.index('Translation.tr("Pin to Dock")'))
+        self.assertIn("property bool uniformList: true", config)
+        self.assertIn("Config.options.search.bestMatch.enable = checked", launcher_page)
+
+        # Promotion picks the first emitted row, so what Enter does and what the
+        # prominent row shows can never disagree.
+        self.assertIn("rows[i].isHero = true", widget)
+        self.assertIn("const heroActive = root.bestMatchActive && query.length > 0", widget)
+        # And the captions the prominent row replaces go away with it.
+        self.assertIn("!(heroActive && root.bestMatchUniformList)", widget)
+        self.assertIn('if (resultDelegate.modelData.isHero === true)', widget)
+
+        # Actions that used to exist only behind Ctrl+K are on the row, and
+        # reachable without the mouse.
+        self.assertIn("readonly property var secondaryActions", hero)
+        self.assertIn("function runSecondary(index: int)", hero)
+        # A RowLayout cannot shrink children below their implicit width, so the
+        # chips ran off the panel. They wrap instead, and a single overlong
+        # action name elides rather than widening the row past it.
+        self.assertIn("Flow {", hero)
+        self.assertNotIn("Item {\n                Layout.fillWidth: true\n            }", hero)
+        self.assertIn("Layout.maximumWidth: 150", hero)
+        self.assertIn("Layout.preferredHeight: actionFlow.implicitHeight", hero)
+        self.assertIn("event.key >= Qt.Key_1 && event.key <= Qt.Key_9", bar)
+        self.assertIn("signal runSecondaryAction(int index)", bar)
+        # The panel stays the home of the complete set.
+        self.assertIn('keys: ["Ctrl", "K"]', hero)
 
     def test_collapsed_search_does_not_reserve_hidden_result_margins(self):
         widget = source("modules/ii/overview/SearchWidget.qml")

@@ -30,6 +30,7 @@ QtObject {
     property list<string> keywords: []
     property bool isMath: false
     property bool isBuiltin: false
+    property bool isFallback: false
     property bool keepOverviewOpen: false
     property var settingRef: null
     property string controlKind: ""

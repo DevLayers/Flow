@@ -19,6 +19,8 @@ Singleton {
     property string processConfirmKey: ""
     readonly property int quickToggleRevision: QuickToggleRegistry.revision
     readonly property bool barOpenForSearch: GlobalStates.barOpen
+    readonly property bool alwaysListAppsEnabled: Config.options.search.alwaysListApps
+    readonly property bool overviewEnabled: Config.options.overview.enable
     // Published by the visible Overview delegate. It is metadata only and is
     // never sent unless the user explicitly attaches it from an AI composer.
     property var selectedResult: null
@@ -30,11 +32,26 @@ Singleton {
     onSettingsIndexReadyChanged: root._scheduleResultsUpdate()
     onQuickToggleRevisionChanged: root._scheduleResultsUpdate()
     onBarOpenForSearchChanged: root._scheduleResultsUpdate()
+    onAlwaysListAppsEnabledChanged: {
+        root.enforceAlwaysListAppsOverviewPolicy();
+        root._scheduleResultsUpdate();
+    }
+    onOverviewEnabledChanged: root.enforceAlwaysListAppsOverviewPolicy()
+
+    function enforceAlwaysListAppsOverviewPolicy() {
+        if (root.alwaysListAppsEnabled && Config.options.overview.enable)
+            Config.options.overview.enable = false;
+    }
 
     Connections {
         target: GlobalStates
         function onOverviewOpenChanged() {
-            if (!GlobalStates.overviewOpen) {
+            if (GlobalStates.overviewOpen) {
+                // `query` is commonly already empty, so opening Search does not
+                // emit onQueryChanged. Refresh the idle result set explicitly;
+                // otherwise it can retain the empty result computed at boot.
+                root._scheduleResultsUpdate();
+            } else {
                 root.rememberQuery(root.query);
                 root.query = "";
                 root.selectedResult = null;
@@ -42,7 +59,10 @@ Singleton {
         }
     }
 
-    Component.onCompleted: Qt.callLater(_scheduleResultsUpdate)
+    Component.onCompleted: Qt.callLater(() => {
+        root.enforceAlwaysListAppsOverviewPolicy();
+        root._scheduleResultsUpdate();
+    })
 
     function enabledUtilityPrefixes(): var {
         const prefixes = Config.options.search.prefix;
@@ -64,6 +84,33 @@ Singleton {
         } else {
             root.query = prefix + root.query;
         }
+    }
+
+    function runCommandQuery(queryText: string) {
+        let command = StringUtils.cleanPrefix(String(queryText ?? ""), Config.options.search.prefix.shellCommand).replace("file://", "");
+        if (command.length === 0)
+            return;
+        Quickshell.execDetached(["bash", "-c", command.startsWith("sudo")
+            ? `${Config.options.apps.terminal} fish -C '${StringUtils.shellSingleQuoteEscape(command)}'`
+            : command]);
+    }
+
+    function openWebSearch(queryText: string) {
+        const query = StringUtils.cleanPrefix(String(queryText ?? ""), Config.options.search.prefix.webSearch).trim();
+        if (query.length === 0)
+            return;
+        let searchTerms = query;
+        for (const site of Config.options.search.excludedSites)
+            searchTerms += ` -site:${site}`;
+        Qt.openUrlExternally(Config.options.search.engineBaseUrl + encodeURIComponent(searchTerms));
+    }
+
+    function askAiQuery(queryText: string) {
+        const query = StringUtils.cleanPrefix(String(queryText ?? ""), Config.options.search.prefix.ai).trim();
+        if (query.length === 0)
+            return;
+        // Query replacement rebuilds the list and may destroy the caller.
+        Qt.callLater(() => root.query = Config.options.search.prefix.ai + query);
     }
 
     function fileBrowserQueryForPath(path): string {
@@ -315,9 +362,10 @@ Singleton {
         });
     }
 
-    function createSearchPanelResult(panel: var): var {
+    function createSearchPanelResult(panel, fallbackFlag) {
+        const isFallback = fallbackFlag === true;
         return resultComp.createObject(null, {
-            key: "panel:" + panel.id,
+            key: (isFallback ? "fallback:panel:" : "panel:") + panel.id,
             name: panel.label,
             iconName: panel.icon,
             iconType: LauncherSearchResult.IconType.Material,
@@ -325,6 +373,7 @@ Singleton {
             verb: Translation.tr("Open"),
             comment: Translation.tr("Search tools"),
             panelId: panel.id,
+            isFallback: isFallback,
             keepOverviewOpen: true,
             execute: () => {
                 root.query = "";
@@ -689,9 +738,9 @@ Singleton {
         if (actions.includes("web") && Config.options.search.modules.webSearch)
             output.push(root.createResult({ key: "fallback:web", name: Translation.tr("Search the web"), type: Translation.tr("Fallback"), verb: Translation.tr("Search"), iconName: "travel_explore", iconType: LauncherSearchResult.IconType.Material, execute: () => Qt.openUrlExternally(Config.options.search.engineBaseUrl + encodeURIComponent(root.query)) }));
         if (actions.includes("tasks") && SearchPanelRegistry.byId("tasks")?.enabled())
-            output.push(root.createSearchPanelResult(SearchPanelRegistry.byId("tasks")));
+            output.push(root.createSearchPanelResult(SearchPanelRegistry.byId("tasks"), true));
         if (actions.includes("calendar") && SearchPanelRegistry.byId("calendar")?.enabled())
-            output.push(root.createSearchPanelResult(SearchPanelRegistry.byId("calendar")));
+            output.push(root.createSearchPanelResult(SearchPanelRegistry.byId("calendar"), true));
         return output;
     }
 
@@ -1235,6 +1284,10 @@ Singleton {
         target: AppSearch
         function onListChanged() {
             root.appResultCache = ({});
+            // Desktop entries are populated asynchronously. An empty query has
+            // no keystroke to trigger another pass, so publish the newly ready
+            // catalogue immediately for always-list-apps mode.
+            root._scheduleResultsUpdate();
         }
     }
 
@@ -1565,14 +1618,7 @@ Singleton {
             fontType: LauncherSearchResult.FontType.Monospace,
             iconName: 'terminal',
             iconType: LauncherSearchResult.IconType.Material,
-            execute: () => {
-                let cleanedCommand = root.query.replace("file://", "");
-                cleanedCommand = StringUtils.cleanPrefix(cleanedCommand, Config.options.search.prefix.shellCommand);
-                if (cleanedCommand.startsWith(Config.options.search.prefix.shellCommand)) {
-                    cleanedCommand = cleanedCommand.slice(Config.options.search.prefix.shellCommand.length);
-                }
-                Quickshell.execDetached(["bash", "-c", root.query.startsWith('sudo') ? `${Config.options.apps.terminal} fish -C '${cleanedCommand}'` : cleanedCommand]);
-            }
+            execute: () => root.runCommandQuery(root.query)
         });
         const webSearchResultObject = resultComp.createObject(null, {
             key: "web:search",
@@ -1581,14 +1627,7 @@ Singleton {
             type: Translation.tr("Web search"),
             iconName: 'travel_explore',
             iconType: LauncherSearchResult.IconType.Material,
-            execute: () => {
-                let query = StringUtils.cleanPrefix(root.query, Config.options.search.prefix.webSearch);
-                let url = Config.options.search.engineBaseUrl + query;
-                for (let site of Config.options.search.excludedSites) {
-                    url += ` -site:${site}`;
-                }
-                Qt.openUrlExternally(url);
-            }
+            execute: () => root.openWebSearch(root.query)
         });
         const aiAskResultObject = resultComp.createObject(null, {
             key: "ai:ask",
@@ -1598,17 +1637,7 @@ Singleton {
             iconName: 'auto_awesome',
             iconType: LauncherSearchResult.IconType.Material,
             keepOverviewOpen: true,
-            execute: () => {
-                const query = StringUtils.cleanPrefix(root.query, Config.options.search.prefix.ai);
-                // Defer: mutating the query synchronously rebuilds the result
-                // list and destroys this delegate while its click event is
-                // still being processed, which can re-dispatch the click onto
-                // whatever row lands under the cursor and immediately undo
-                // the mode switch.
-                Qt.callLater(() => {
-                    root.query = Config.options.search.prefix.ai + query;
-                });
-            }
+            execute: () => root.askAiQuery(root.query)
         });
         const launcherActionObjects = root.allActions.map(action => {
             const actionString = `${Config.options.search.prefix.action}${action.action}`;
@@ -2134,18 +2163,18 @@ Singleton {
         if (root.query.trim().length > 0 && result.length === 0 && !root.queryUsesPrefix(root.query))
             result = result.concat(root.fallbackResults());
 
-        /// Math result, command, web search ///
-        // Generic command/AI/web continuations are progressive fallbacks. A
-        // broad query such as "bluetooth" must not append three unrelated
-        // actions after already finding apps, controls and its dedicated panel.
-        if (Config.options.search.prefix.showDefaultActionsWithoutPrefix && result.length === 0) {
+        /// Command, AI and web continuations ///
+        // The normal Search keeps these as its final section even when other
+        // classes matched: a sentence may be both an app/file match and an AI
+        // question, and a command name may resemble an installed application.
+        // Explicit prefixes own their result set and must not receive this trio.
+        const showNormalContinuations = Config.options.search.prefix.showDefaultActionsWithoutPrefix
+            && root.query.trim().length > 0
+            && !root.queryUsesPrefix(root.query);
+        if (showNormalContinuations) {
             if (Config.options.search.modules.shellCommand && !startsWithShellCommandPrefix)
                 result.push(commandResultObject);
-            if (!isMath && mathResultObject)
-                result.push(mathResultObject);
-            if ((Config.options.search.ai?.trigger ?? "prefix") === "suggest"
-                && Ai.enabled
-                && !root.query.startsWith(Config.options.search.prefix.ai))
+            if (Ai.enabled)
                 result.push(aiAskResultObject);
             if (Config.options.search.modules.webSearch && !startsWithWebSearchPrefix)
                 result.push(webSearchResultObject);
@@ -2233,6 +2262,7 @@ Singleton {
             keywords: properties.keywords || [],
             isMath: !!properties.isMath,
             isBuiltin: !!properties.isBuiltin,
+            isFallback: !!properties.isFallback,
             keepOverviewOpen: !!properties.keepOverviewOpen,
             controlKind: properties.controlKind || "",
             controlValue: properties.controlValue ?? null,
