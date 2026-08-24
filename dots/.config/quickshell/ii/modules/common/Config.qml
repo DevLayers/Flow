@@ -581,7 +581,7 @@ Singleton {
     //
     // Bump `currentConfigVersion` and add a matching block to `migrateRaw()`
     // whenever an existing key changes type or meaning.
-    readonly property int currentConfigVersion: 10
+    readonly property int currentConfigVersion: 11
     // Defaults have to be captured before the file lands, because deserializing
     // is what destroys them. FileView loads asynchronously, so at component
     // completion the adapter still holds nothing but the QML defaults.
@@ -815,6 +815,19 @@ Singleton {
                 && typeof raw.dictation === "object" && raw.dictation.outputMode === "type") {
             raw.dictation.outputMode = "paste";
             console.log("[Config] Migrated dictation output mode: type -> paste");
+        }
+
+        // v10 -> v11: screen recording quality stops being a raw bitrate. Mbps
+        // means nothing without knowing the resolution it is spent on, so the
+        // recorder now derives it from the picture size, the frame rate and a
+        // three-step quality choice. An existing bitrate is read as the intent
+        // behind it and mapped onto that choice.
+        if (from < 11 && raw.screenRecord !== undefined && raw.screenRecord !== null
+                && typeof raw.screenRecord === "object" && typeof raw.screenRecord.bitrate === "number") {
+            const oldBitrate = raw.screenRecord.bitrate;
+            raw.screenRecord.quality = oldBitrate <= 6 ? "low" : (oldBitrate >= 16 ? "high" : "balanced");
+            delete raw.screenRecord.bitrate;
+            console.log(`[Config] Migrated screen recording bitrate ${oldBitrate} Mbps -> quality "${raw.screenRecord.quality}"`);
         }
 
         raw.configVersion = root.currentConfigVersion;
@@ -3802,11 +3815,21 @@ Singleton {
                 property string service: "wf-recorder"
                 property bool useGpu: true
                 property string codec: "auto"
-                property int bitrate: 8
+                // Recorded size, as a target box the picture is fitted into
+                // without distorting it: "native" | "2160p" | "1440p" | "1080p" | "720p" | "480p"
+                property string resolution: "native"
+                // Picks the bits-per-pixel the bitrate is derived from, so the
+                // user never has to think in Mbps: "low" | "balanced" | "high"
+                property string quality: "balanced"
                 property int framerate: 60
+                // "cfr" duplicates frames to hold the target rate, which is what
+                // editors expect; "vfr" records only on screen updates, which is
+                // smaller but harder to cut.
+                property string frameSync: "cfr"
                 property bool showNotifications: true
                 property bool showEditPrompt: true
                 property bool openInLosslessCut: false
+
             }
 
             property JsonObject screenSnip: JsonObject {

@@ -7,6 +7,7 @@ import qs.modules.common
 import qs.modules.common.functions
 import qs.modules.common.widgets
 import qs.services
+import "../../../common/functions/recordingQuality.js" as RecordingQuality
 
 Item {
     id: subPageRoot
@@ -14,6 +15,23 @@ Item {
 
     property bool showBackButton: false
     signal goBack()
+
+    // The estimate is only ever as good as the screen it is made for, so it is
+    // made for the one the settings window is on.
+    readonly property var estimateScreen: (QsWindow.window as QsWindow)?.screen ?? (Quickshell.screens[0] ?? null)
+    readonly property int sourceWidth: subPageRoot.estimateScreen
+        ? Math.round(subPageRoot.estimateScreen.width * subPageRoot.estimateScreen.devicePixelRatio) : 1920
+    readonly property int sourceHeight: subPageRoot.estimateScreen
+        ? Math.round(subPageRoot.estimateScreen.height * subPageRoot.estimateScreen.devicePixelRatio) : 1080
+    readonly property var outputSize: RecordingQuality.outputSize(subPageRoot.sourceWidth, subPageRoot.sourceHeight,
+        Config.options.screenRecord.resolution)
+    readonly property real estimatedMbps: RecordingQuality.estimateMbps(subPageRoot.outputSize[0], subPageRoot.outputSize[1],
+        Config.options.screenRecord.framerate, Config.options.screenRecord.quality)
+    readonly property string estimateSummary: Translation.tr("≈ %1 Mbps · %2×%3 · %4 fps on this screen")
+        .arg(subPageRoot.estimatedMbps)
+        .arg(subPageRoot.outputSize[0])
+        .arg(subPageRoot.outputSize[1])
+        .arg(Config.options.screenRecord.framerate)
 
     ContentPage {
         id: page
@@ -229,23 +247,88 @@ Item {
                 }
             }
 
-            ConfigSlider {
-                buttonIcon: "speed"
-                text: Translation.tr("Bitrate (Mbps)")
-                value: Config.options.screenRecord.bitrate
-                from: 1
-                to: 50
-                stepSize: 1
-                usePercentTooltip: false
-                onValueChanged: {
-                    Config.options.screenRecord.bitrate = value;
+            ContentSubsectionLabel {
+                text: Translation.tr("Resolution")
+            }
+
+            StyledComboBox {
+                id: recorderResolutionSelector
+                buttonIcon: "aspect_ratio"
+                textRole: "displayName"
+                model: [{
+                    "displayName": Translation.tr("Native (no scaling)"),
+                    "value": "native"
+                }, {
+                    "displayName": "2160p — 3840×2160",
+                    "value": "2160p"
+                }, {
+                    "displayName": "1440p — 2560×1440",
+                    "value": "1440p"
+                }, {
+                    "displayName": "1080p — 1920×1080",
+                    "value": "1080p"
+                }, {
+                    "displayName": "720p — 1280×720",
+                    "value": "720p"
+                }, {
+                    "displayName": "480p — 854×480",
+                    "value": "480p"
+                }]
+                currentIndex: {
+                    const index = model.findIndex((item) => {
+                        return item.value === Config.options.screenRecord.resolution;
+                    });
+                    return index !== -1 ? index : 0;
                 }
+                onActivated: (index) => {
+                    Config.options.screenRecord.resolution = model[index].value;
+                }
+
                 StyledToolTip {
-                    text: Translation.tr("Higher bitrate increases video quality but uses more disk space. 6-12 Mbps is ideal for 1080p recording.")
+                    parent: recorderResolutionSelector
+                    text: Translation.tr("The recording is fitted inside this size without distorting it, so a region or an ultrawide screen keeps its shape. Anything already smaller is left alone rather than scaled up.")
+                }
+            }
+
+            ContentSubsection {
+                title: Translation.tr("Quality")
+                icon: "high_quality"
+                tooltip: Translation.tr("Sets how many bits each pixel is worth. The resulting bitrate follows from the resolution and frame rate, so you never have to pick an Mbps figure yourself.")
+                Layout.fillWidth: true
+
+                ConfigSelectionArray {
+                    currentValue: Config.options.screenRecord.quality
+                    onSelected: (newValue) => {
+                        Config.options.screenRecord.quality = newValue;
+                    }
+                    options: [{
+                        "displayName": Translation.tr("Low"),
+                        "value": "low",
+                        "icon": "data_saver_on"
+                    }, {
+                        "displayName": Translation.tr("Balanced"),
+                        "value": "balanced",
+                        "icon": "balance"
+                    }, {
+                        "displayName": Translation.tr("High"),
+                        "value": "high",
+                        "icon": "hd"
+                    }]
+                }
+
+                StyledText {
+                    Layout.fillWidth: true
+                    Layout.leftMargin: 4
+                    text: subPageRoot.estimateSummary
+                    wrapMode: Text.Wrap
+                    font.pixelSize: Appearance.font.pixelSize.smaller
+                    color: Appearance.colors.colSubtext
                 }
             }
 
             ConfigSlider {
+                enabled: Config.options.screenRecord.frameSync !== "vfr"
+                opacity: enabled ? 1 : 0.5
                 buttonIcon: "av_timer"
                 text: Translation.tr("Target Frame Rate (FPS)")
                 value: Config.options.screenRecord.framerate
@@ -257,9 +340,43 @@ Item {
                     Config.options.screenRecord.framerate = value;
                 }
                 StyledToolTip {
-                    text: Translation.tr("Target frames per second for the recording. 60 FPS is standard for smooth desktop recordings.")
+                    text: Translation.tr("Target frames per second for the recording. 60 FPS is standard for smooth desktop recordings. Ignored while the frame timing is variable, where the screen itself decides when a frame exists.")
+                }
+            }
+
+            ContentSubsection {
+                title: Translation.tr("Frame timing")
+                icon: "schedule"
+                Layout.fillWidth: true
+
+                ConfigSelectionArray {
+                    currentValue: Config.options.screenRecord.frameSync
+                    onSelected: (newValue) => {
+                        Config.options.screenRecord.frameSync = newValue;
+                    }
+                    options: [{
+                        "displayName": Translation.tr("Constant"),
+                        "value": "cfr",
+                        "icon": "straighten"
+                    }, {
+                        "displayName": Translation.tr("Variable"),
+                        "value": "vfr",
+                        "icon": "compress"
+                    }]
+                }
+
+                StyledText {
+                    Layout.fillWidth: true
+                    Layout.leftMargin: 4
+                    text: Config.options.screenRecord.frameSync === "vfr"
+                        ? Translation.tr("A frame is only recorded when the screen changes. Much smaller files, but some editors handle the uneven timing badly.")
+                        : Translation.tr("Frames are held at the target rate even when nothing moves. Bigger files, and what video editors expect.")
+                    wrapMode: Text.Wrap
+                    font.pixelSize: Appearance.font.pixelSize.smaller
+                    color: Appearance.colors.colSubtext
                 }
             }
         }
+
     }
 }

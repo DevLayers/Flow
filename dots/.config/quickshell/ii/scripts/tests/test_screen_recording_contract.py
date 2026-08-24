@@ -14,6 +14,7 @@ RECORD = (ROOT / "scripts/videos/record.sh").read_text()
 SCREENSHOT_ACTION = (ROOT / "modules/common/utils/ScreenshotAction.qml").read_text()
 REGION_SELECTION = (ROOT / "modules/ii/regionSelector/RegionSelection.qml").read_text()
 WAFFLE_REGION_SELECTION = (ROOT / "modules/waffle/screenSnip/WRegionSelectionPanel.qml").read_text()
+QUALITY_JS = (ROOT / "modules/common/functions/recordingQuality.js").read_text()
 
 
 class ScreenRecordingContractTests(unittest.TestCase):
@@ -39,6 +40,55 @@ class ScreenRecordingContractTests(unittest.TestCase):
         region_body = RECORD.split("# If a manual region was provided", 1)[1]
         region_body = region_body.split("# Post recording action", 1)[0]
         self.assertNotIn('wf-recorder -o "$(getactivemonitor)"', region_body)
+
+    def test_constant_frame_rate_is_the_only_thing_that_passes_r(self):
+        """`-r` *is* wf-recorder's CFR switch, so the variable mode must omit it
+        entirely rather than pass a rate nobody honours."""
+        body = RECORD.split("CODEC_OPTS=(\"-c\" \"$CODEC\")", 1)[1].split("apply_quality", 1)[0]
+        self.assertIn('if [[ "$REC_FRAME_SYNC" != "vfr" ]]; then', body)
+        self.assertIn('CODEC_OPTS+=("-r" "$REC_FRAMERATE")', body)
+        self.assertNotIn('CODEC_OPTS=("-c" "$CODEC" "-r"', RECORD)
+
+    def test_vaapi_scales_with_the_vaapi_scaler(self):
+        """VAAPI frames are on the GPU by the time the filter runs; the CPU
+        `scale` filter would never see them."""
+        body = RECORD.split("apply_quality() {", 1)[1].split("\n}\n", 1)[0]
+        self.assertIn('if [[ "$codec" == *_vaapi ]]', body)
+        self.assertIn("scale_vaapi=w=${box_w}:h=${box_h}", body)
+        self.assertIn("scale=${box_w}:${box_h}", body)
+        self.assertIn("force_original_aspect_ratio=decrease", body)
+        self.assertIn("force_divisible_by=2", body)
+        # A smaller source must be left alone rather than blown up to the box.
+        self.assertIn("(( src_w > box_w || src_h > box_h ))", body)
+
+    def test_bitrate_is_derived_and_never_asked_for(self):
+        self.assertNotIn("screenRecord.bitrate", RECORD)
+        self.assertIn('jq -r ".screenRecord.quality"', RECORD)
+        self.assertIn('jq -r ".screenRecord.resolution"', RECORD)
+        self.assertIn('jq -r ".screenRecord.frameSync"', RECORD)
+
+    def test_quality_constants_match_between_the_script_and_the_settings_page(self):
+        """The settings page shows the bitrate the script will pick, so the two
+        copies of the formula have to agree."""
+        for name, value in (
+            ("QUALITY_BPP_LOW", "0.05"),
+            ("QUALITY_BPP_BALANCED", "0.09"),
+            ("QUALITY_BPP_HIGH", "0.15"),
+            ("BITRATE_FLOOR_MBPS", "1.5"),
+            ("BITRATE_CEILING_MBPS", "80"),
+        ):
+            self.assertIn(f'{name}="{value}"', RECORD, f"{name} missing from record.sh")
+            self.assertIn(f"var {name} = {value};", QUALITY_JS, f"{name} missing from recordingQuality.js")
+
+        for preset, box in (
+            ("2160p", "3840 2160"),
+            ("1440p", "2560 1440"),
+            ("1080p", "1920 1080"),
+            ("720p", "1280 720"),
+            ("480p", "854 480"),
+        ):
+            self.assertIn(f'{preset}) echo "{box}" ;;', RECORD)
+            self.assertIn(f'"{preset}": [{box.replace(" ", ", ")}]', QUALITY_JS)
 
     def test_recording_does_not_open_the_screenshot_overlay(self):
         snip_body = REGION_SELECTION.split("function snip()", 1)[1]
