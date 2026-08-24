@@ -5,6 +5,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import Quickshell.Bluetooth
+import qs.services
 import qs.modules.common.functions
 
 /**
@@ -44,6 +45,49 @@ Singleton {
     readonly property var typedRequestKinds: ["pincode", "passkey"]
     readonly property bool needsValue: root.hasRequest
         && root.typedRequestKinds.indexOf(root.request.type) !== -1
+
+    /** How many surfaces are already showing this conversation in place. */
+    property int inlineHosts: 0
+    readonly property bool handledInline: root.inlineHosts > 0
+
+    // The Bluetooth settings tab answers a request where it stands, and says so
+    // here, so the shell-wide prompt does not stack a second copy of the same
+    // question on top of the page the user is already reading it on.
+    function claimInline(): void {
+        root.inlineHosts += 1;
+    }
+
+    function releaseInline(): void {
+        root.inlineHosts = Math.max(0, root.inlineHosts - 1);
+    }
+
+    // A passkey is six digits and is compared against another screen, so the
+    // leading zeros BlueZ drops on the way through an integer have to come back.
+    function formatPasskey(value): string {
+        const digits = `${value ?? 0}`;
+        return digits.length >= 6 ? digits : "0".repeat(6 - digits.length) + digits;
+    }
+
+    function requestName(request): string {
+        if (!request)
+            return "";
+        const name = request.name ?? "";
+        return name.length > 0 ? name : (request.address ?? Translation.tr("A device"));
+    }
+
+    function requestTitle(request): string {
+        if (!request)
+            return "";
+        if (request.type === "confirm")
+            return Translation.tr("Does %1 show this code?").arg(root.requestName(request));
+        if (request.type === "pincode")
+            return Translation.tr("Type the PIN shown on %1").arg(root.requestName(request));
+        if (request.type === "passkey")
+            return Translation.tr("Type the passkey shown on %1").arg(root.requestName(request));
+        if (request.type === "authorize-service")
+            return Translation.tr("%1 wants to use a service").arg(root.requestName(request));
+        return Translation.tr("%1 wants to pair").arg(root.requestName(request));
+    }
 
     function respond(id: int, action: string, value): void {
         if (!agentProcess.running)

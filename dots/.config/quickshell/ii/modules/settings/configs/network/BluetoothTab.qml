@@ -24,34 +24,17 @@ ContentPage {
     readonly property var pairingDisplay: BluetoothAgent.display
     readonly property bool showPairing: root.pairingRequest !== null || root.pairingDisplay !== null
 
-    function formatPasskey(value): string {
-        const digits = `${value ?? 0}`;
-        return digits.length >= 6 ? digits : "0".repeat(6 - digits.length) + digits;
+    // Wording and formatting live on the agent because the shell-wide prompt
+    // asks the same questions with the same words when this page is not open.
+    Component.onCompleted: {
+        BluetoothStatus.startDiscovery();
+        BluetoothAgent.claimInline();
     }
 
-    function requestTitle(request): string {
-        if (!request)
-            return "";
-        if (request.type === "confirm")
-            return Translation.tr("Does %1 show this code?").arg(root.requestName(request));
-        if (request.type === "pincode")
-            return Translation.tr("Type the PIN shown on %1").arg(root.requestName(request));
-        if (request.type === "passkey")
-            return Translation.tr("Type the passkey shown on %1").arg(root.requestName(request));
-        if (request.type === "authorize-service")
-            return Translation.tr("%1 wants to use a service").arg(root.requestName(request));
-        return Translation.tr("%1 wants to pair").arg(root.requestName(request));
+    Component.onDestruction: {
+        BluetoothStatus.stopDiscovery();
+        BluetoothAgent.releaseInline();
     }
-
-    function requestName(request): string {
-        if (!request)
-            return "";
-        const name = request.name ?? "";
-        return name.length > 0 ? name : (request.address ?? Translation.tr("A device"));
-    }
-
-    Component.onCompleted: BluetoothStatus.startDiscovery()
-    Component.onDestruction: BluetoothStatus.stopDiscovery()
 
     // The adapter may still have been powering on when the tab appeared, in
     // which case the scan above was refused and has to be started again.
@@ -181,7 +164,7 @@ ContentPage {
             StyledText {
                 Layout.fillWidth: true
                 wrapMode: Text.Wrap
-                text: root.requestTitle(root.pairingRequest)
+                text: BluetoothAgent.requestTitle(root.pairingRequest)
                 font.pixelSize: Appearance.font.pixelSize.normal
                 font.weight: Font.DemiBold
                 color: Appearance.colors.colOnLayer1
@@ -199,7 +182,7 @@ ContentPage {
                 Layout.fillWidth: true
                 visible: root.pairingRequest?.type === "confirm"
                 horizontalAlignment: Text.AlignHCenter
-                text: root.formatPasskey(root.pairingRequest?.passkey)
+                text: BluetoothAgent.formatPasskey(root.pairingRequest?.passkey)
                 font.pixelSize: Appearance.font.pixelSize.huge
                 font.weight: Font.Bold
                 font.family: Appearance.font.family.monospace
@@ -266,7 +249,7 @@ ContentPage {
             StyledText {
                 Layout.fillWidth: true
                 wrapMode: Text.Wrap
-                text: Translation.tr("Enter this code on %1").arg(root.requestName(root.pairingDisplay))
+                text: Translation.tr("Enter this code on %1").arg(BluetoothAgent.requestName(root.pairingDisplay))
                 font.pixelSize: Appearance.font.pixelSize.normal
                 font.weight: Font.DemiBold
                 color: Appearance.colors.colOnLayer1
@@ -276,7 +259,7 @@ ContentPage {
                 Layout.fillWidth: true
                 horizontalAlignment: Text.AlignHCenter
                 text: root.pairingDisplay?.type === "pincode" ? (root.pairingDisplay?.pin ?? "")
-                    : root.formatPasskey(root.pairingDisplay?.passkey)
+                    : BluetoothAgent.formatPasskey(root.pairingDisplay?.passkey)
                 font.pixelSize: Appearance.font.pixelSize.huge
                 font.weight: Font.Bold
                 font.family: Appearance.font.family.monospace
