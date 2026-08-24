@@ -795,25 +795,10 @@ Singleton {
         }
     }
 
-    // File browser: debounce browse calls to avoid Process flicker
-    Timer {
-        id: fileBrowserDebounce
-        interval: 100
-        repeat: false
-        onTriggered: {
-            if (root._fileBrowserDir) {
-                fileBrowserProc.browse(root._fileBrowserDir);
-            }
-        }
-    }
-
-    property string _fileBrowserDir: ""
-
     onQueryChanged: {
         root.selectedResult = null;
         root.processConfirmKey = "";
         fileProc.running = false;
-        fileBrowserProc.running = false;
         mathProc.running = false; // Stop active math calculation instantly to resolve race conditions and QML coalescing
 
         // Files are the slow lane: a process launch and a filesystem walk. The
@@ -832,19 +817,6 @@ Singleton {
             root._fileQuery = "";
             if (root.fileResults.length > 0)
                 root.fileResults = [];
-        }
-
-        if (Config.options.search.modules.fileBrowser && root.query.startsWith(Config.options.search.prefix.fileBrowser)) {
-            const rawPath = root.query.slice(Config.options.search.prefix.fileBrowser.length);
-            const homePath = FileUtils.trimFileProtocol(Directories.home);
-            const expandedPath = rawPath.startsWith("/") ? rawPath : (homePath + "/" + rawPath);
-            const lastSlash = expandedPath.lastIndexOf("/");
-            const dirPath = lastSlash >= 0 ? expandedPath.slice(0, lastSlash + 1) : expandedPath;
-            root._fileBrowserDir = dirPath;
-            fileBrowserDebounce.restart();
-        } else {
-            root._fileBrowserDir = "";
-            root.fileBrowserResults = [];
         }
 
         if (!root.isMathQuery(root.query)) {
@@ -972,35 +944,75 @@ Singleton {
         return path;
     }
 
+    /**
+     * Symbol per file kind.
+     *
+     * Built once into a lookup rather than walked as a switch: it is consulted
+     * for every file row of every result update, and a row without an icon reads
+     * as a broken row.
+     */
+    readonly property var fileIconsByExtension: {
+        const groups = [
+            ["image", ["png", "jpg", "jpeg", "webp", "gif", "bmp", "tif", "tiff", "svg", "svgz", "ico", "avif", "heic", "heif", "psd", "xcf", "raw", "cr2", "nef", "dng"]],
+            ["movie", ["mp4", "mkv", "webm", "mov", "avi", "flv", "wmv", "m4v", "mpg", "mpeg", "3gp", "ogv", "ts", "m2ts"]],
+            ["music_note", ["mp3", "flac", "wav", "ogg", "opus", "m4a", "aac", "wma", "aiff", "mid", "midi"]],
+            ["picture_as_pdf", ["pdf"]],
+            ["folder_zip", ["zip", "tar", "gz", "bz2", "xz", "zst", "7z", "rar", "tgz", "txz", "tbz", "lz4", "iso", "img", "dmg"]],
+            ["article", ["doc", "docx", "odt", "rtf", "pages"]],
+            ["table", ["xls", "xlsx", "ods", "csv", "tsv", "numbers"]],
+            ["slideshow", ["ppt", "pptx", "odp", "key"]],
+            ["description", ["txt", "md", "rst", "org", "log", "adoc", "tex", "nfo"]],
+            ["code", ["qml", "js", "mjs", "cjs", "jsx", "ts", "tsx", "py", "rs", "go", "c", "h", "cpp", "hpp", "cc", "cxx", "java", "kt", "kts", "swift", "rb", "php", "lua", "pl", "sh", "bash", "zsh", "fish", "vim", "el", "scm", "hs", "ml", "ex", "exs", "dart", "scala", "r", "css", "scss", "html", "htm", "vue", "svelte"]],
+            ["data_object", ["json", "jsonc", "yaml", "yml", "toml", "ini", "conf", "cfg", "xml", "plist", "env", "properties"]],
+            ["database", ["db", "sqlite", "sqlite3", "sql", "parquet"]],
+            ["font_download", ["ttf", "otf", "woff", "woff2", "ttc", "pfb"]],
+            ["menu_book", ["epub", "mobi", "azw3", "djvu", "fb2", "cbz", "cbr"]],
+            ["deployed_code", ["appimage", "exe", "msi", "deb", "rpm", "pkg", "apk", "flatpakref", "snap", "blend", "obj", "stl", "fbx", "gltf", "glb"]],
+            ["subtitles", ["srt", "vtt", "ass", "ssa", "sub"]],
+            ["key", ["pem", "crt", "cer", "gpg", "asc", "kdbx", "p12", "pub"]],
+            ["hard_drive", ["qcow2", "vdi", "vmdk", "vhd", "vhdx"]],
+            ["difference", ["patch", "diff"]],
+            ["launch", ["desktop"]],
+            ["science", ["ipynb"]],
+            ["downloading", ["torrent"]]
+        ];
+        const map = ({});
+        for (let g = 0; g < groups.length; g++) {
+            const icon = groups[g][0];
+            const extensions = groups[g][1];
+            for (let e = 0; e < extensions.length; e++)
+                map[extensions[e]] = icon;
+        }
+        return map;
+    }
+
+    // Formats Qt can decode for the row thumbnail. Deliberately narrower than
+    // the icon map: an extension we cannot draw must fall back to its symbol
+    // rather than leave the row's icon slot empty.
+    readonly property var previewableExtensions: ["png", "jpg", "jpeg", "webp", "gif", "bmp", "tif", "tiff", "svg", "ico"]
+
+    function fileExtensionOf(name: string): string {
+        const dot = String(name).lastIndexOf(".");
+        return dot > 0 ? String(name).slice(dot + 1).toLowerCase() : "";
+    }
+
     function fileResultIcon(name: string, isDirectory: bool): string {
         if (isDirectory)
             return "folder";
-        const dot = name.lastIndexOf(".");
-        const extension = dot > 0 ? name.slice(dot + 1).toLowerCase() : "";
-        switch (extension) {
-        case "png": case "jpg": case "jpeg": case "gif": case "webp": case "bmp": case "svg": case "avif":
-            return "image";
-        case "mp4": case "mkv": case "webm": case "mov": case "avi":
-            return "movie";
-        case "mp3": case "flac": case "wav": case "ogg": case "opus": case "m4a":
-            return "music_note";
-        case "pdf":
-            return "picture_as_pdf";
-        case "zip": case "tar": case "gz": case "xz": case "zst": case "7z": case "rar":
-            return "folder_zip";
-        case "qml": case "js": case "ts": case "py": case "rs": case "go": case "c": case "cpp": case "h": case "sh": case "json": case "yaml": case "yml": case "toml":
-            return "code";
-        case "md": case "txt": case "rst": case "org":
-            return "description";
-        case "odt": case "doc": case "docx": case "rtf":
-            return "article";
-        case "ods": case "xls": case "xlsx": case "csv":
-            return "table";
-        case "odp": case "ppt": case "pptx":
-            return "slideshow";
-        default:
-            return "draft";
-        }
+        return root.fileIconsByExtension[root.fileExtensionOf(name)] ?? "draft";
+    }
+
+    /**
+     * Path to draw in the row's icon slot, or "" to use the symbol.
+     *
+     * Images and vectors are the one case where the file *is* its own icon, and
+     * they are also the case with no meaningful symbol to show. Everything else
+     * keeps its symbol, and so does every image when previews are turned off.
+     */
+    function fileResultPreview(path: string, isDirectory: bool): string {
+        if (isDirectory || Config.options.search.blurFileSearchResultPreviews)
+            return "";
+        return root.previewableExtensions.indexOf(root.fileExtensionOf(path)) !== -1 ? path : "";
     }
 
     Timer {
@@ -1078,28 +1090,6 @@ Singleton {
                 const settings = Config.options.search.fileSearch;
                 const limit = root._fileQueryPrefixed ? 60 : Math.max(1, settings?.maxResults ?? 8);
                 root.fileResults = root.rankFilePaths(lines, root._fileQuery, limit);
-            }
-        }
-    }
-
-    // ========== File Browser (directory navigation) ==========
-    property var fileBrowserResults: []
-    Process {
-        id: fileBrowserProc
-        function browse(path) {
-            if (path.length < 1)
-                return;
-            fileBrowserProc.running = false;
-            // List directory contents, dirs first, with trailing slash for dirs
-            fileBrowserProc.command = ["bash", "-c", `ls -1 -p "${path}" 2>/dev/null`];
-            fileBrowserProc.running = true;
-        }
-        stdout: StdioCollector {
-            id: fileBrowserCollector
-            onStreamFinished: {
-                const rawResult = fileBrowserCollector.text;
-                const result = rawResult.split('\n').filter(l => l.length > 0);
-                root.fileBrowserResults = result;
             }
         }
     }
@@ -1356,62 +1346,6 @@ Singleton {
                         })]
                 });
             }).filter(Boolean);
-        } else if (Config.options.search.modules.fileBrowser && root.query.startsWith(Config.options.search.prefix.fileBrowser)) {
-            // File browser / directory navigation
-            // Process call is debounced via onQueryChanged, results are in fileBrowserResults
-            const rawPath = root.query.slice(Config.options.search.prefix.fileBrowser.length);
-            const homePath = FileUtils.trimFileProtocol(Directories.home);
-            const expandedPath = rawPath.startsWith("/") ? rawPath : (homePath + "/" + rawPath);
-
-            // Find the directory part and the filter part
-            const lastSlash = expandedPath.lastIndexOf("/");
-            const dirPath = lastSlash >= 0 ? expandedPath.slice(0, lastSlash + 1) : expandedPath;
-            const filter = lastSlash >= 0 ? expandedPath.slice(lastSlash + 1).toLowerCase() : "";
-
-            const filtered = root.fileBrowserResults.filter(entry => {
-                if (filter === "")
-                    return true;
-                return entry.toLowerCase().includes(filter);
-            });
-
-            return filtered.slice(0, 100).map(entry => {
-                const isDir = entry.endsWith("/");
-                const fullPath = dirPath + entry;
-                const isImage = !isDir && Images.isValidImageByName(fullPath);
-                const fileIcon = isDir ? "folder" : (isImage ? "image" : "description");
-                return resultComp.createObject(null, {
-                    key: "file:" + fullPath,
-                    name: isImage ? fullPath : entry,
-                    type: isDir ? Translation.tr("Directory") : Translation.tr("File"),
-                    verb: isDir ? Translation.tr("Browse") : Translation.tr("Open"),
-                    iconName: fileIcon,
-                    iconType: LauncherSearchResult.IconType.Material,
-                    comment: fullPath,
-                    execute: () => {
-                        if (isDir) {
-                            const newQuery = Config.options.search.prefix.fileBrowser + fullPath.replace(homePath, "");
-                            root.query = newQuery;
-                        } else {
-                            Quickshell.execDetached(["xdg-open", fullPath]);
-                        }
-                    },
-                    actions: [resultComp.createObject(null, {
-                            name: Translation.tr("Copy path"),
-                            iconName: "content_copy",
-                            iconType: LauncherSearchResult.IconType.Material,
-                            execute: () => {
-                                Quickshell.clipboardText = fullPath;
-                            }
-                        }), resultComp.createObject(null, {
-                            name: Translation.tr("Open in file manager"),
-                            iconName: "folder_open",
-                            iconType: LauncherSearchResult.IconType.Material,
-                            execute: () => {
-                                Quickshell.execDetached(["xdg-open", isDir ? fullPath : dirPath]);
-                            }
-                        })]
-                });
-            }).filter(Boolean);
         }
 
         ////////////////// Init ///////////////////
@@ -1437,6 +1371,7 @@ Singleton {
             const separator = path.lastIndexOf("/");
             const displayName = separator >= 0 ? path.slice(separator + 1) : path;
             const parent = separator > 0 ? path.slice(0, separator) : "/";
+            const preview = root.fileResultPreview(path, isDirectory);
             return resultComp.createObject(null, {
                 key: "fsearch:" + entry,
                 // "Directory" is the type SearchItem keys its folder actions off.
@@ -1448,8 +1383,12 @@ Singleton {
                 category: "filepath",
                 filePath: path,
                 verb: Translation.tr("Open"),
-                iconName: root.fileResultIcon(displayName, isDirectory),
-                iconType: LauncherSearchResult.IconType.Material,
+                // An image is its own icon; everything else gets the symbol for
+                // its kind. Either way the row's icon slot is filled — a file
+                // row with an empty slot reads as a broken row.
+                iconName: preview.length > 0 ? preview : root.fileResultIcon(displayName, isDirectory),
+                iconType: preview.length > 0 ? LauncherSearchResult.IconType.Image : LauncherSearchResult.IconType.Material,
+                fallbackIconName: root.fileResultIcon(displayName, isDirectory),
                 execute: () => {
                     Quickshell.execDetached(["xdg-open", path]);
                 },

@@ -37,14 +37,7 @@ RippleButton {
     property string bigText: entry?.iconType === LauncherSearchResult.IconType.Text ? entry?.iconName ?? "" : ""
     property string materialSymbol: entry?.iconType === LauncherSearchResult.IconType.Material ? entry?.iconName ?? "" : ""
     property string cliphistRawString: entry?.rawValue ?? ""
-    // Results that carry an explicit path show the label in `name`, so the
-    // preview has to read the path from the result rather than from the label.
-    property string filePath: {
-        const explicit = entry?.filePath ?? "";
-        if (explicit.length > 0)
-            return Images.isValidImageByName(explicit) ? explicit : "";
-        return Images.isValidImageByName(entry?.name) ? entry?.name : "";
-    }
+    readonly property string fallbackIconName: entry?.fallbackIconName ?? ""
     property bool blurImage: entry?.blurImage ?? false
     readonly property bool hasInlineSwitch: entry?.controlKind === "switch"
 
@@ -490,7 +483,9 @@ RippleButton {
                             anchors.centerIn: parent
                             visible: root.iconType === LauncherSearchResult.IconType.Material
                                 || (root.iconType === LauncherSearchResult.IconType.Image && resultImage.status !== Image.Ready)
-                            text: root.iconType === LauncherSearchResult.IconType.Image ? "link" : root.materialSymbol
+                            text: root.iconType === LauncherSearchResult.IconType.Image
+                                ? (root.fallbackIconName.length > 0 ? root.fallbackIconName : "link")
+                                : root.materialSymbol
                             iconSize: 26
                             fill: root.isSelected ? 1.0 : 0.0
                             color: root.colForeground
@@ -501,14 +496,31 @@ RippleButton {
                             }
                         }
 
-                        StyledImage {
-                            id: resultImage
-                            anchors.fill: parent
+                        // Rounded so a photo reads as part of the row rather than
+                        // a rectangle dropped into it.
+                        ClippingRectangle {
+                            anchors.centerIn: parent
+                            implicitWidth: 32
+                            implicitHeight: 32
                             visible: root.iconType === LauncherSearchResult.IconType.Image
-                            source: visible ? root.iconName : ""
-                            fillMode: Image.PreserveAspectFit
-                            asynchronous: true
-                            cache: true
+                                && resultImage.status === Image.Ready
+                            color: "transparent"
+                            radius: Appearance.rounding.verysmall
+
+                            StyledImage {
+                                id: resultImage
+                                anchors.fill: parent
+                                // Without a source size Qt decodes the file at full
+                                // resolution to paint 32 pixels — a wallpaper hit
+                                // would cost tens of megabytes per row.
+                                sourceSize.width: 64
+                                sourceSize.height: 64
+                                visible: root.iconType === LauncherSearchResult.IconType.Image
+                                source: visible ? root.iconName : ""
+                                fillMode: Image.PreserveAspectCrop
+                                asynchronous: true
+                                cache: true
+                            }
                         }
 
                         Item {
@@ -715,16 +727,6 @@ RippleButton {
                             }
                         }
 
-                        Loader {
-                            active: root.filePath != ""
-                            sourceComponent: FileSearchImage {
-                                Layout.fillWidth: true
-                                imagePath: root.filePath
-                                maxWidth: contentColumn.width
-                                maxHeight: 140
-                                blur: Config.options.search.blurFileSearchResultPreviews
-                            }
-                        }
                     }
 
                     StyledText {

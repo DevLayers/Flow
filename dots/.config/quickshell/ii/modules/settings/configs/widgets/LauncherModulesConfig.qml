@@ -94,6 +94,14 @@ Item {
                     }
 
                     ConfigSwitch {
+                        buttonIcon: "hide_image"
+                        text: Translation.tr("Hide image thumbnails")
+                        description: Translation.tr("Image and vector hits draw themselves in the row's icon slot. This leaves the file kind's symbol there instead.")
+                        checked: Config.options.search.blurFileSearchResultPreviews
+                        onCheckedChanged: Config.options.search.blurFileSearchResultPreviews = checked
+                    }
+
+                    ConfigSwitch {
                         buttonIcon: "visibility"
                         text: Translation.tr("Include hidden files and folders")
                         description: Translation.tr("Covers dotfiles such as ~/.config, at the cost of walking every cache and state folder a home directory accumulates.")

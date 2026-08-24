@@ -617,15 +617,21 @@ Item {
             root.exitAiMode();
             return true;
         }
-        if (root.activePanelItem && typeof root.activePanelItem.navigateBack === "function"
-                && root.activePanelItem.navigateBack())
-            return true;
         root.requestedPanelId = "";
         root.searchingText = "";
         LauncherSearch.query = "";
         searchBar.searchInput.text = "";
         Qt.callLater(root.focusSearchInput);
         return true;
+    }
+
+    function handlePanelBackspace(): bool {
+        if (!root.isAnySpecialMode)
+            return false;
+        if (root.activePanelItem && typeof root.activePanelItem.navigateBack === "function"
+                && root.activePanelItem.navigateBack())
+            return true;
+        return root.exitActivePanel();
     }
 
     // One Escape path for the whole overview surface. A PanelWindow cannot
@@ -638,6 +644,9 @@ Item {
             root.exitAiMode();
             return true;
         }
+        if (root.activePanelItem && typeof root.activePanelItem.handleEscape === "function"
+                && root.activePanelItem.handleEscape())
+            return true;
         return root.exitActivePanel();
     }
 
@@ -948,7 +957,7 @@ Item {
                 return;
             }
             if (root.isAnySpecialMode && root.activePanelQuery.trim().length === 0) {
-                root.exitActivePanel();
+                root.handlePanelBackspace();
                 event.accepted = true;
                 return;
             }
@@ -1174,10 +1183,15 @@ Item {
                 }
 
                 onCtrlKPressed: {
-                    if (appResults.visible) {
+                    if (root.activePanelItem) {
+                        searchKeyRouter.dispatch("toggleActions");
+                    } else if (appResults.visible) {
                         root.requestToggleActions();
                     }
                 }
+
+                onBackspaceOnEmpty: root.handlePanelBackspace()
+                onPanelShortcut: methodName => searchKeyRouter.dispatch(methodName)
 
                 onTogglePanelSection: {
                     searchKeyRouter.dispatch("toggleSection");

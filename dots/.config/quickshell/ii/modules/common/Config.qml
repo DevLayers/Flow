@@ -856,7 +856,14 @@ Singleton {
                     { actionId: "create", shortcut: "Ctrl+N" },
                     { actionId: "copyDispatch", shortcut: "Ctrl+Shift+K" },
                     { actionId: "delete", shortcut: "Shift+Delete" },
-                    { actionId: "section", shortcut: "Tab" }
+                    { actionId: "section", shortcut: "Tab" },
+                    { actionId: "select", shortcut: "Ctrl+Space" },
+                    { actionId: "cut", shortcut: "Ctrl+X" },
+                    { actionId: "paste", shortcut: "Ctrl+V" },
+                    { actionId: "createFolder", shortcut: "Ctrl+Shift+N" },
+                    { actionId: "duplicate", shortcut: "Ctrl+D" },
+                    { actionId: "toggleHidden", shortcut: "Ctrl+H" },
+                    { actionId: "refresh", shortcut: "Ctrl+R" }
                 ];
             console.log("[Config] Added Search v2 content defaults");
         }
@@ -3681,6 +3688,10 @@ Singleton {
                     { "id": "continue" }
                 ]
                 property string fileSearchDirectory: "/home"
+                // Image and vector hits draw themselves in the row's icon slot.
+                // Turning this on drops the thumbnail and leaves the file kind's
+                // symbol there instead — hiding the picture outright rather than
+                // blurring 32 pixels of it.
                 property bool blurFileSearchResultPreviews: false
                 property JsonObject fileSearch: JsonObject {
                     // Show files and folders from the indexed directory for a
@@ -3866,7 +3877,14 @@ Singleton {
                     { actionId: "create", shortcut: "Ctrl+N" },
                     { actionId: "copyDispatch", shortcut: "Ctrl+Shift+K" },
                     { actionId: "delete", shortcut: "Shift+Delete" },
-                    { actionId: "section", shortcut: "Tab" }
+                    { actionId: "section", shortcut: "Tab" },
+                    { actionId: "select", shortcut: "Ctrl+Space" },
+                    { actionId: "cut", shortcut: "Ctrl+X" },
+                    { actionId: "paste", shortcut: "Ctrl+V" },
+                    { actionId: "createFolder", shortcut: "Ctrl+Shift+N" },
+                    { actionId: "duplicate", shortcut: "Ctrl+D" },
+                    { actionId: "toggleHidden", shortcut: "Ctrl+H" },
+                    { actionId: "refresh", shortcut: "Ctrl+R" }
                 ]
                 property JsonObject appearance: JsonObject {
                     property bool accentPanels: true

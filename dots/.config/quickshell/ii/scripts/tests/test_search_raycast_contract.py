@@ -310,6 +310,30 @@ class SearchRaycastContractTests(unittest.TestCase):
         self.assertIn("root.componentInfo(modelData.id)", entry)
         self.assertIn("infoProvider: id => SearchResultSectionRegistry.getComponent(id)", launcher_page)
 
+    def test_every_file_row_has_an_icon_and_no_row_sized_preview(self):
+        launcher = source("services/LauncherSearch.qml")
+        item = source("modules/ii/overview/SearchItem.qml")
+        model = source("modules/common/models/LauncherSearchResult.qml")
+
+        # A row's height is fixed, so a preview sized in its own right drew past
+        # the row and over its neighbours.
+        self.assertNotIn("FileSearchImage", item)
+        self.assertNotIn("imagePath: root.filePath", item)
+
+        # An image is its own icon; everything else gets a symbol, and there is
+        # always a fallback so no slot can end up empty.
+        self.assertIn("readonly property var fileIconsByExtension", launcher)
+        self.assertIn("function fileResultPreview(path: string, isDirectory: bool): string", launcher)
+        self.assertIn('?? "draft"', launcher)
+        self.assertIn("property string fallbackIconName", model)
+        self.assertIn("fallbackIconName: root.fileResultIcon(displayName, isDirectory)", launcher)
+        self.assertIn("root.fallbackIconName.length > 0 ? root.fallbackIconName", item)
+
+        # Decoding a wallpaper at full resolution to paint 32 pixels is the
+        # difference between a thumbnail and a memory leak.
+        self.assertIn("sourceSize.width: 64", item)
+        self.assertIn("ClippingRectangle", item)
+
     def test_collapsed_search_does_not_reserve_hidden_result_margins(self):
         widget = source("modules/ii/overview/SearchWidget.qml")
         self.assertIn("implicitHeight: !resultsActive", widget)

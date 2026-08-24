@@ -25,6 +25,10 @@ KeyHint {
             return "→";
         case "delete":
             return "Del";
+        case "space":
+            return "Space";
+        case "backspace":
+            return "Backspace";
         default:
             return String(key);
         }

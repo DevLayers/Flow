@@ -42,6 +42,9 @@ QtObject {
     // Absolute path behind a result whose `name` is only the display label, so
     // a preview or a file action does not have to reconstruct it.
     property string filePath: ""
+    // Symbol to draw when `iconType` is Image and the image cannot be loaded.
+    // A thumbnail that fails is still a row that needs an icon.
+    property string fallbackIconName: ""
 
     // Extra stuff to allow for more flexibility
     property string category: type

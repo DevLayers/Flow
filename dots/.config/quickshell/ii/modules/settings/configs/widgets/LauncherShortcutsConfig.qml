@@ -23,7 +23,14 @@ Item {
         { actionId: "create", name: Translation.tr("Create from search"), keys: "Ctrl+N", icon: "add" },
         { actionId: "copyDispatch", name: Translation.tr("Copy window dispatch"), keys: "Ctrl+Shift+K", icon: "code" },
         { actionId: "delete", name: Translation.tr("Delete selected item"), keys: "Shift+Delete", icon: "delete" },
-        { actionId: "section", name: Translation.tr("Switch panel section"), keys: "Tab", icon: "tab" }
+        { actionId: "section", name: Translation.tr("Switch panel section"), keys: "Tab", icon: "tab" },
+        { actionId: "select", name: Translation.tr("Mark selected file"), keys: "Ctrl+Space", icon: "select_check_box" },
+        { actionId: "cut", name: Translation.tr("Cut selected file"), keys: "Ctrl+X", icon: "content_cut" },
+        { actionId: "paste", name: Translation.tr("Paste files"), keys: "Ctrl+V", icon: "content_paste" },
+        { actionId: "createFolder", name: Translation.tr("Create folder"), keys: "Ctrl+Shift+N", icon: "create_new_folder" },
+        { actionId: "duplicate", name: Translation.tr("Duplicate selected file"), keys: "Ctrl+D", icon: "control_point_duplicate" },
+        { actionId: "toggleHidden", name: Translation.tr("Show or hide dotfiles"), keys: "Ctrl+H", icon: "visibility" },
+        { actionId: "refresh", name: Translation.tr("Refresh current panel"), keys: "Ctrl+R", icon: "refresh" }
     ]
     property string collisionActionId: ""
 

@@ -61,6 +61,8 @@ RowLayout {
     signal activate
     signal deleteSelected
     signal ctrlKPressed
+    signal backspaceOnEmpty
+    signal panelShortcut(string methodName)
     signal copySvgPressed
     signal togglePanelSection
     signal copySelected
@@ -114,6 +116,10 @@ RowLayout {
             key = "tab";
         else if (event.key === Qt.Key_Delete)
             key = "delete";
+        else if (event.key === Qt.Key_Space)
+            key = "space";
+        else if (event.key === Qt.Key_Backspace)
+            key = "backspace";
         else if (event.key >= Qt.Key_A && event.key <= Qt.Key_Z)
             key = String.fromCharCode(event.key).toLocaleLowerCase();
         return parts.concat(key ? [key] : []).join("+");
@@ -136,7 +142,6 @@ RowLayout {
         ShellCommand,
         WebSearch,
         WindowSearch,
-        FileBrowser,
         Translator,
         MediaDownloader,
         MaterialSymbols,
@@ -162,8 +167,6 @@ RowLayout {
             return SearchBar.SearchPrefixType.WebSearch;
         if (root.searchingText.startsWith(Config.options.search.prefix.windowSearch))
             return SearchBar.SearchPrefixType.WindowSearch;
-        if (root.searchingText.startsWith(Config.options.search.prefix.fileBrowser))
-            return SearchBar.SearchPrefixType.FileBrowser;
         if (root.searchingText.startsWith(Config.options.search.prefix.translator))
             return SearchBar.SearchPrefixType.Translator;
         if (Config.options.mediaDownloader.enabled && root.searchingText.startsWith(Config.options.search.prefix.mediaDownloader))
@@ -207,8 +210,6 @@ RowLayout {
                 return 45;      // SoftBurst
             case SearchBar.SearchPrefixType.WindowSearch:
                 return 360;  // Arch
-            case SearchBar.SearchPrefixType.FileBrowser:
-                return 90;    // Square
             case SearchBar.SearchPrefixType.Translator:
                 return 60;     // Cookie6Sided
             case SearchBar.SearchPrefixType.MediaDownloader:
@@ -290,8 +291,6 @@ RowLayout {
                 return MaterialShape.Shape.SoftBurst;
             case SearchBar.SearchPrefixType.WindowSearch:
                 return MaterialShape.Shape.Arch;
-            case SearchBar.SearchPrefixType.FileBrowser:
-                return MaterialShape.Shape.Square;
             case SearchBar.SearchPrefixType.Translator:
                 return MaterialShape.Shape.Cookie6Sided;
             case SearchBar.SearchPrefixType.MediaDownloader:
@@ -327,8 +326,6 @@ RowLayout {
                 return "travel_explore";
             case SearchBar.SearchPrefixType.WindowSearch:
                 return "select_window";
-            case SearchBar.SearchPrefixType.FileBrowser:
-                return "folder_open";
             case SearchBar.SearchPrefixType.Translator:
                 return "translate";
             case SearchBar.SearchPrefixType.MediaDownloader:
@@ -414,7 +411,7 @@ RowLayout {
 
         Keys.onPressed: event => {
             if (event.key === Qt.Key_Backspace && root.activePanelMode && root.activePanelQueryEmpty) {
-                root.escapeToSearch();
+                root.backspaceOnEmpty();
                 event.accepted = true;
                 return;
             }
@@ -480,6 +477,41 @@ RowLayout {
             }
             if (root.activePanelMode && root.matchesShortcut(event, "delete", "Shift+Delete")) {
                 root.deleteSelected();
+                event.accepted = true;
+                return;
+            }
+            if (root.activePanelMode && root.matchesShortcut(event, "select", "Ctrl+Space")) {
+                root.panelShortcut("toggleSelection");
+                event.accepted = true;
+                return;
+            }
+            if (root.activePanelMode && root.matchesShortcut(event, "cut", "Ctrl+X")) {
+                root.panelShortcut("cutSelected");
+                event.accepted = true;
+                return;
+            }
+            if (root.activePanelMode && root.matchesShortcut(event, "paste", "Ctrl+V")) {
+                root.panelShortcut("pasteClipboard");
+                event.accepted = true;
+                return;
+            }
+            if (root.activePanelMode && root.matchesShortcut(event, "createFolder", "Ctrl+Shift+N")) {
+                root.panelShortcut("createFolder");
+                event.accepted = true;
+                return;
+            }
+            if (root.activePanelMode && root.matchesShortcut(event, "duplicate", "Ctrl+D")) {
+                root.panelShortcut("duplicateSelected");
+                event.accepted = true;
+                return;
+            }
+            if (root.activePanelMode && root.matchesShortcut(event, "toggleHidden", "Ctrl+H")) {
+                root.panelShortcut("toggleHidden");
+                event.accepted = true;
+                return;
+            }
+            if (root.activePanelMode && root.matchesShortcut(event, "refresh", "Ctrl+R")) {
+                root.panelShortcut("refreshDirectory");
                 event.accepted = true;
                 return;
             }
