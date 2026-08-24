@@ -356,12 +356,16 @@ function themeTokenForCalendarColor(color) {
     }
 }
 
-// Distinct hue per event so a month full of chips stays readable. An explicit
-// event token wins, followed by the calendar token, then the existing themed
-// rotation for calendars that do not opt into a colour.
-function chipColor(event, palette) {
+// Distinct hue per event so a month full of chips stays readable.
+//
+// `googleOverride` is a concrete hex the caller resolved from the Google
+// Calendar API, and it wins: it is the colour the user literally picked in
+// Google. Everything below it is a theme token that follows the wallpaper.
+function chipColor(event, palette, googleOverride) {
     if (!event)
         return palette.colSecondaryContainer;
+    if (googleOverride)
+        return googleOverride;
     const explicit = themeColorForToken(event.colorToken, palette);
     if (explicit)
         return explicit;

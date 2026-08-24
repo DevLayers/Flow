@@ -256,7 +256,7 @@ Row {
                         delegate: Rectangle {
                             width: allDayChipColumn.width
                             height: allDayChipHeight
-                            color: H.chipColor(modelData, Appearance.colors)
+                            color: H.chipColor(modelData, Appearance.colors, GoogleCalendarService.colorForEvent(modelData))
                             radius: Appearance.rounding.verysmall
 
                             StyledText {

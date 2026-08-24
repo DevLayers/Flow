@@ -507,7 +507,14 @@ Singleton {
         root.enqueueCalendarRequest(request);
     }
 
-    function moveEvent(event, newDate) {
+    /**
+     * Move an event to another day, keeping its clock time.
+     *
+     * `scope` matters only for a recurring master: a plain `save` on it rewrites
+     * DTSTART and therefore drags every occurrence along, so "this" writes an
+     * override for the dragged date and "future" splits the series instead.
+     */
+    function moveEvent(event, newDate, scope = "all") {
         if (!root.khalAvailable || !event?.uid || !newDate)
             return;
         const allDay = root.isAllDayEvent(event);
@@ -518,16 +525,13 @@ Singleton {
         if (!allDay && movedEnd <= movedStart)
             movedEnd.setDate(movedEnd.getDate() + 1);
         const nextDay = new Date(newDate.getFullYear(), newDate.getMonth(), newDate.getDate() + 1);
-        root.enqueueCalendarRequest({
-            op: "save",
-            calendar: event.calendar ?? "",
-            event: {
-                uid: String(event.uid),
-                allDay: allDay,
-                start: allDay ? Qt.formatDate(newDate, "yyyy-MM-dd") : root.localIso(movedStart, Qt.formatTime(movedStart, "hh:mm")),
-                end: allDay ? Qt.formatDate(nextDay, "yyyy-MM-dd") : root.localIso(movedEnd, Qt.formatTime(movedEnd, "hh:mm"))
-            }
-        });
+        const fields = {
+            uid: String(event.uid),
+            allDay: allDay,
+            start: allDay ? Qt.formatDate(newDate, "yyyy-MM-dd") : root.localIso(movedStart, Qt.formatTime(movedStart, "hh:mm")),
+            end: allDay ? Qt.formatDate(nextDay, "yyyy-MM-dd") : root.localIso(movedEnd, Qt.formatTime(movedEnd, "hh:mm"))
+        };
+        root.saveEventFields(event, fields, scope);
     }
 
     Process {

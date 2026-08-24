@@ -75,6 +75,9 @@ Item {
             SportsService.acquireTimetableSubscriber();
             root.sportsSubscriberAcquired = true;
             root.sportsReady = true;
+            // Google colours are cached on disk, so this only reaches the
+            // network once the cache is older than the configured window.
+            GoogleCalendarService.refreshColors();
         }
     }
 

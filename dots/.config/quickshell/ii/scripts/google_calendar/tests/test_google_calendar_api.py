@@ -52,6 +52,36 @@ class GoogleCalendarApiTests(unittest.TestCase):
         self.assertEqual(request.headers.get("Authorization"), "Bearer token")
 
     @patch("urllib.request.urlopen")
+    def test_event_colors_keys_on_the_recurring_master(self, mock_urlopen):
+        # singleEvents=false is what makes iCalUID the master's UID, which is the
+        # only id a khal calendar file carries.
+        mock_urlopen.side_effect = [
+            response({"items": [{"id": "a", "iCalUID": "a@google.com", "colorId": "5"}], "nextPageToken": "next"}),
+            response({"items": [{"id": "b", "iCalUID": "b@google.com"}]}),
+        ]
+
+        result = api.event_colors("token", "family@group.calendar.google.com")
+
+        self.assertTrue(result["ok"])
+        self.assertEqual([item["iCalUID"] for item in result["data"]["items"]], ["a@google.com", "b@google.com"])
+        first = mock_urlopen.call_args_list[0].args[0].full_url
+        self.assertIn("singleEvents=false", first)
+        self.assertIn("family%40group.calendar.google.com/events", first)
+        # The projection is what keeps a whole-account scan affordable.
+        self.assertIn("fields=items%28id%2CiCalUID%2CcolorId%2CrecurringEventId%29%2CnextPageToken", first)
+        self.assertIn("pageToken=next", mock_urlopen.call_args_list[1].args[0].full_url)
+
+    @patch("urllib.request.urlopen")
+    def test_colors_reads_the_account_palette(self, mock_urlopen):
+        mock_urlopen.return_value = response({"event": {"5": {"background": "#ffb878", "foreground": "#1d1d1d"}}})
+
+        result = api.colors("token")
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["data"]["event"]["5"]["background"], "#ffb878")
+        self.assertTrue(mock_urlopen.call_args.args[0].full_url.endswith("/colors"))
+
+    @patch("urllib.request.urlopen")
     def test_create_event_keeps_unicode_body_and_primary_default(self, mock_urlopen):
         mock_urlopen.return_value = response({"id": "event-id"})
         body = {"summary": "Reunião Café ☕", "start": {"dateTime": "2026-08-23T14:00:00-03:00"}}

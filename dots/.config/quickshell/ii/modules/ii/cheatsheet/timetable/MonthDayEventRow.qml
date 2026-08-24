@@ -36,7 +36,7 @@ RippleButton {
             Layout.topMargin: 10
             Layout.bottomMargin: 10
             radius: Appearance.rounding.full
-            color: H.chipColor(root.eventData, Appearance.colors)
+            color: H.chipColor(root.eventData, Appearance.colors, GoogleCalendarService.colorForEvent(root.eventData))
         }
 
         MaterialShapeWrappedMaterialSymbol {

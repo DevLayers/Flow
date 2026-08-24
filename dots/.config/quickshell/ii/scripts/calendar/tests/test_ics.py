@@ -111,6 +111,61 @@ class IcsHelperTests(unittest.TestCase):
                 values.extend(item["uid"] for item in json.loads(line))
         return values
 
+    def listed_days(self, uid: str) -> list[str]:
+        completed = subprocess.run(
+            ["khal", "--config", str(self.config), "list", "--json", "uid", "--json", "start-date", "01/09/2026", "30/09/2026"],
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=True,
+        )
+        days = []
+        for line in completed.stdout.splitlines():
+            line = line.strip()
+            if line and line != "[]":
+                days.extend(item["start-date"] for item in json.loads(line) if item["uid"] == uid)
+        return days
+
+    def plant_synced_event(self, href: str, uid: str, start: str, end: str) -> Path:
+        """Write the file the way vdirsyncer does: random href, server-side UID."""
+        path = self.calendar_dir / href
+        path.write_text(
+            "\r\n".join([
+                "BEGIN:VCALENDAR",
+                "VERSION:2.0",
+                "PRODID:-//Google Inc//Google Calendar 70.9054//EN",
+                "BEGIN:VEVENT",
+                f"UID:{uid}",
+                "DTSTAMP:20260823T030000Z",
+                "SUMMARY:Synced meeting",
+                f"DTSTART:{start}",
+                f"DTEND:{end}",
+                "END:VEVENT",
+                "END:VCALENDAR",
+                "",
+            ]),
+            encoding="utf-8",
+        )
+        return path
+
+    def test_editing_a_synced_event_keeps_one_file_and_reindexes(self) -> None:
+        # A vdirsyncer href is a random UUID, so it never matches the UID that
+        # the server assigned.  ``khal import`` names files after the UID, which
+        # used to leave this file behind: the event was then listed on both the
+        # old and the new day.
+        uid = "0259f5utk0k2k0lrlp7g0hb7sp@google.com"
+        href = "0a7df412-2b8d-42ed-b85f-104482f0713d.ics"
+        self.plant_synced_event(href, uid, "20260907T140000", "20260907T150000")
+        self.assertEqual(self.listed_days(uid), ["07/09/2026"])
+
+        moved = self.request({"op": "save", "event": {"uid": uid, "start": "2026-09-11T14:00:00", "end": "2026-09-11T15:00:00"}})
+        self.assertTrue(moved["ok"])
+        self.assertEqual(moved["uid"], uid)
+
+        self.assertEqual([path.name for path in self.calendar_dir.rglob("*.ics")], [href])
+        self.assertEqual(self.listed_days(uid), ["11/09/2026"])
+        self.assertEqual(str(self.load_event(uid).get("SUMMARY")), "Synced meeting")
+
     def test_save_update_move_preserves_recurrence_url_categories_and_alarm(self) -> None:
         created = self.request({"op": "save", "calendar": "work", "event": self.event()})
         self.assertTrue(created["ok"])

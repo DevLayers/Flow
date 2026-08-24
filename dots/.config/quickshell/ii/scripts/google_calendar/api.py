@@ -113,6 +113,42 @@ def events(token: str, calendar_id: str, time_min: str, time_max: str):
             return {"ok": True, "data": {"items": items}}
 
 
+def colors(token: str):
+    """The account's colour palette: id -> {background, foreground}."""
+    return request_json("GET", "/colors", token)
+
+
+def event_colors(token: str, calendar_id: str):
+    """Map every event's iCalUID to its colour id.
+
+    ``singleEvents=false`` is deliberate: khal stores the recurring master's UID,
+    so keying on the master is what lets a colour be looked up from a calendar
+    file.  Exceptions come back as their own items carrying ``recurringEventId``.
+
+    The field projection keeps this cheap enough to run over a whole account:
+    only the ids and the colour travel, never summaries or attendees.
+    """
+    items = []
+    page_token = ""
+    while True:
+        query = {
+            "singleEvents": "false",
+            "showDeleted": "false",
+            "maxResults": 2500,
+            "fields": "items(id,iCalUID,colorId,recurringEventId),nextPageToken",
+        }
+        if page_token:
+            query["pageToken"] = page_token
+        result = request_json("GET", "/calendars/" + quoted(calendar_id) + "/events", token, query=query)
+        if not result.get("ok"):
+            return result
+        data = result.get("data", {})
+        items.extend(data.get("items", []))
+        page_token = data.get("nextPageToken", "")
+        if not page_token:
+            return {"ok": True, "data": {"items": items}}
+
+
 def create_event(token: str, calendar_id: str, body):
     return request_json("POST", "/calendars/" + quoted(calendar_id or "primary") + "/events", token, body=body)
 
@@ -127,7 +163,7 @@ def delete_event(token: str, calendar_id: str, event_id: str):
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Google Calendar v3 client")
-    parser.add_argument("operation", choices=["calendars", "events", "create", "update", "delete"])
+    parser.add_argument("operation", choices=["calendars", "events", "colors", "eventColors", "create", "update", "delete"])
     args = parser.parse_args()
     try:
         payload = json.loads(sys.stdin.read() or "{}")
@@ -141,6 +177,10 @@ def main() -> int:
         result = calendar_list(token)
     elif args.operation == "events":
         result = events(token, calendar_id or "primary", str(payload.get("timeMin", "")), str(payload.get("timeMax", "")))
+    elif args.operation == "colors":
+        result = colors(token)
+    elif args.operation == "eventColors":
+        result = event_colors(token, calendar_id or "primary")
     elif args.operation == "create":
         result = create_event(token, calendar_id, payload.get("body", {}))
     elif args.operation == "update":

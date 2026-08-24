@@ -27,11 +27,17 @@ Item {
     property string densityMode: "compact"
     property real recurrenceLaneOffset: 0
     property bool keyboardSelected: false
+    /**
+     * Open tasks with no due date, shown on today only and as one chip.
+     * They belong to no day, so listing them per cell would bury the calendar.
+     */
+    property int undatedTaskCount: 0
 
     signal createRequested(var date)
     signal dayActivated(var date)
     signal eventActivated(var eventData)
     signal taskCompletionRequested(var task)
+    signal undatedTasksActivated
     signal eventDragBegan(var eventData, real x, real y, real w, real h)
     signal eventDragMoved(real x, real y)
     signal eventDragEnded
@@ -70,10 +76,14 @@ Item {
     }
     readonly property var sportEvents: root.sportsEnabled ? SportsService.gamesForDate(root.cellData?.date) : []
 
-    readonly property real headerHeight: 22
+    // The header band is measured from the top of the cell, inset included, so
+    // the chip area below it cannot drift when the inset changes.
+    readonly property real headerTopInset: 5
+    readonly property real headerContentHeight: 20
+    readonly property real headerHeight: root.headerTopInset + root.headerContentHeight
     readonly property real headerEventSpacing: 2
     readonly property real chipSpacing: 2
-    readonly property real cellPadding: 7
+    readonly property real cellPadding: 9
     readonly property bool compactChips: root.densityMode !== "comfortable"
     readonly property real chipHeight: root.densityMode === "comfortable" ? 24 : 16
     readonly property real chipAreaHeight: Math.max(0, root.height - root.headerHeight - root.headerEventSpacing - root.recurrenceLaneOffset - root.cellPadding)
@@ -90,6 +100,8 @@ Item {
             result.push({ kind: "sport", data: sportData });
         for (const taskData of (root.tasks ?? []))
             result.push({ kind: "task", data: taskData });
+        if (root.undatedTaskCount > 0)
+            result.push({ kind: "taskGroup", data: { count: root.undatedTaskCount } });
         return result;
     }
     readonly property int entryCount: root.entries.length
@@ -105,17 +117,26 @@ Item {
     function entryColor(entry) {
         if (entry?.kind === "birthday" || entry?.kind === "sport")
             return Appearance.colors.colTertiary;
-        if (entry?.kind === "task")
+        if (entry?.kind === "task" || entry?.kind === "taskGroup")
             return Appearance.colors.colSecondary;
-        return H.chipColor(entry?.data, Appearance.colors);
+        return H.chipColor(entry?.data, Appearance.colors, GoogleCalendarService.colorForEvent(entry?.data));
     }
 
     function entryTitle(entry) {
+        if (entry?.kind === "taskGroup")
+            return Translation.tr("%1 task(s) with no date").arg(String(entry.data?.count ?? 0));
         if (entry?.kind === "task")
             return entry.data?.content ?? entry.data?.title ?? Translation.tr("Task");
         if (entry?.kind === "birthday")
             return entry.data?.name ?? entry.data?.content ?? Translation.tr("Birthday");
         return entry?.data?.content ?? entry?.data?.title ?? Translation.tr("Event");
+    }
+
+    // A weekend is marked with a texture rather than another surface colour, so
+    // it survives the today / holiday / hover / drop fills stacked on the plate.
+    readonly property color weekendHatchColor: {
+        const tertiary = Qt.color(Appearance.colors.colTertiary);
+        return Qt.hsla(tertiary.hslHue, tertiary.hslSaturation * 0.3, tertiary.hslLightness, root.inMonth ? 0.15 : 0.06);
     }
 
     Rectangle {
@@ -142,6 +163,14 @@ Item {
         Behavior on color {
             animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(surface)
         }
+
+        DiagonalHatch {
+            anchors.fill: parent
+            visible: root.isWeekend
+            lineColor: root.weekendHatchColor
+            lineSpacing: 9
+            plateRadius: surface.radius
+        }
     }
 
     // A drop target reads as a lifted plate rather than a coloured box.
@@ -166,11 +195,11 @@ Item {
             top: parent.top
             left: parent.left
             right: parent.right
-            topMargin: 2
-            leftMargin: root.cellPadding - 1
-            rightMargin: 4
+            topMargin: root.headerTopInset
+            leftMargin: root.cellPadding
+            rightMargin: root.cellPadding - 2
         }
-        height: root.headerHeight - 2
+        height: root.headerContentHeight
 
         Rectangle {
             id: dayBadge
@@ -392,6 +421,47 @@ Item {
                     compact: root.compactChips
                     opacity: root.inMonth ? 1 : 0.6
                     onCompletionRequested: task => root.taskCompletionRequested(task)
+                }
+
+                // One plate for the whole undated backlog: the count is the
+                // information, the list belongs in the rail.
+                RippleButton {
+                    id: taskGroupChip
+                    readonly property string label: root.entryTitle(parent.modelData)
+
+                    anchors.fill: parent
+                    visible: parent.modelData.kind === "taskGroup"
+                    buttonRadius: Appearance.rounding.verysmall
+                    colBackground: Appearance.colors.colSecondaryContainer
+                    colBackgroundHover: Appearance.colors.colSecondaryContainerHover
+                    colRipple: Appearance.colors.colSecondaryContainerActive
+                    opacity: root.inMonth ? 1 : 0.6
+                    onClicked: root.undatedTasksActivated()
+
+                    contentItem: Row {
+                        anchors.fill: parent
+                        anchors.leftMargin: 5
+                        anchors.rightMargin: 6
+                        spacing: 4
+
+                        MaterialSymbol {
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: "checklist"
+                            iconSize: root.compactChips ? Appearance.font.pixelSize.small : Appearance.font.pixelSize.normal
+                            color: Appearance.colors.colOnSecondaryContainer
+                        }
+
+                        StyledText {
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: Math.max(0, parent.width - x)
+                            text: taskGroupChip.label
+                            elide: Text.ElideRight
+                            maximumLineCount: 1
+                            font.pixelSize: root.compactChips ? Appearance.font.pixelSize.smallest : Appearance.font.pixelSize.smaller
+                            font.weight: Font.DemiBold
+                            color: Appearance.colors.colOnSecondaryContainer
+                        }
+                    }
                 }
             }
         }

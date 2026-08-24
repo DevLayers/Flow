@@ -235,6 +235,105 @@ ContentPage {
     }
 
     ContentSection {
+        icon: "colorize"
+        title: Translation.tr("Google event colors")
+
+        StyledText {
+            Layout.fillWidth: true
+            text: Translation.tr("Google does not export per-event colors over CalDAV, so the synced .ics files carry none. Reading and writing them goes through the Google Calendar API, which needs its own authorization: the Google Tasks grant does not cover calendars.")
+            font.pixelSize: Appearance.font.pixelSize.small
+            color: Appearance.colors.colOnLayer1
+            wrapMode: Text.Wrap
+        }
+
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: 10
+
+            RippleButtonWithIcon {
+                materialIcon: GoogleCalendarService.available ? "link_off" : "link"
+                mainText: GoogleCalendarService.available ? Translation.tr("Disconnect") : Translation.tr("Connect Google Calendar")
+                centerContent: true
+                enabled: GoogleCalendarService.credentialsConfigured && !GoogleCalendarService.authenticating
+                onClicked: {
+                    if (GoogleCalendarService.available)
+                        GoogleCalendarService.disconnect();
+                    else
+                        GoogleCalendarService.startOAuth();
+                }
+            }
+
+            StyledText {
+                Layout.fillWidth: true
+                text: GoogleCalendarService.authenticating
+                    ? Translation.tr("Waiting for the browser…")
+                    : (GoogleCalendarService.available
+                        ? GoogleCalendarService.activeAccountEmail
+                        : (GoogleCalendarService.credentialsConfigured
+                            ? Translation.tr("Not connected")
+                            : Translation.tr("Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET first")))
+                font.pixelSize: Appearance.font.pixelSize.smallie
+                color: Appearance.colors.colOnSurfaceVariant
+                wrapMode: Text.Wrap
+            }
+        }
+
+        ConfigSwitch {
+            buttonIcon: "palette"
+            text: Translation.tr("Show Google event colors")
+            checked: Config.options.calendar.timetable.googleColors.enable
+            onCheckedChanged: {
+                Config.options.calendar.timetable.googleColors.enable = checked;
+                if (checked)
+                    GoogleCalendarService.refreshColors(true);
+            }
+        }
+
+        ConfigSpinBox {
+            icon: "schedule"
+            text: Translation.tr("Refresh interval (hours)")
+            value: Config.options.calendar.timetable.googleColors.refreshHours
+            from: 1
+            to: 168
+            stepSize: 1
+            enabled: Config.options.calendar.timetable.googleColors.enable
+            onValueChanged: Config.options.calendar.timetable.googleColors.refreshHours = value
+        }
+
+        NoticeBox {
+            Layout.fillWidth: true
+            visible: Config.options.calendar.timetable.googleColors.enable && !GoogleCalendarService.available
+            materialIcon: "warning"
+            text: Translation.tr("Connect a Google account to read event colors.")
+        }
+
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: 10
+
+            RippleButtonWithIcon {
+                materialIcon: GoogleCalendarService.colorsSyncing ? "sync" : "refresh"
+                mainText: GoogleCalendarService.colorsSyncing ? Translation.tr("Syncing…") : Translation.tr("Refresh colors")
+                centerContent: true
+                enabled: GoogleCalendarService.available
+                    && Config.options.calendar.timetable.googleColors.enable
+                    && !GoogleCalendarService.colorsSyncing
+                onClicked: GoogleCalendarService.refreshColors(true)
+            }
+
+            StyledText {
+                Layout.fillWidth: true
+                text: GoogleCalendarService.colorsFetchedAt > 0
+                    ? Translation.tr("%1 event(s) mapped").arg(String(Object.keys(GoogleCalendarService.colorByUid).length))
+                    : Translation.tr("Not fetched yet")
+                font.pixelSize: Appearance.font.pixelSize.smallie
+                color: Appearance.colors.colOnSurfaceVariant
+                wrapMode: Text.Wrap
+            }
+        }
+    }
+
+    ContentSection {
         icon: "calendar_add_on"
         title: Translation.tr("Subscribed calendars")
 

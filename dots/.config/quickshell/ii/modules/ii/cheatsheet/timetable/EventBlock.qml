@@ -47,7 +47,7 @@ Rectangle {
     }
     readonly property color semanticColor: eventBlock.sportEvent
         ? Appearance.colors.colTertiaryContainer
-        : H.chipColor(eventData, Appearance.colors)
+        : H.chipColor(eventData, Appearance.colors, GoogleCalendarService.colorForEvent(eventData))
 
     readonly property int eventStartMinutes: H.eventStartMinutes(eventData) ?? 0
     readonly property int eventEndMinutes: H.eventEndMinutes(eventData) ?? eventStartMinutes

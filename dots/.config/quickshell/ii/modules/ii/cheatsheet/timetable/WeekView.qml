@@ -102,6 +102,7 @@ Item {
             const games = root.sportsEnabled && Array.isArray(sportsGames) ? SportsService.gamesForDate(date) : [];
             result.push({
                 name: Qt.formatDate(date, "dddd"),
+                date: date,
                 events: calendarEvents?.[H.dayKeyOf(date)] ?? [],
                 sportsDate: date,
                 sportsCount: games.length
@@ -1193,7 +1194,7 @@ Item {
         width: Math.max(32, root.dayColumnWidth - 10)
         height: H.timedBlockHeight(root.timedMutationStartMinutes, root.timedMutationEndMinutes, root.pixelsPerMinute, root.spacing / 2)
         radius: Appearance.rounding.normal
-        color: H.chipColor(root.timedMutationEvent, Appearance.colors)
+        color: H.chipColor(root.timedMutationEvent, Appearance.colors, GoogleCalendarService.colorForEvent(root.timedMutationEvent))
         opacity: 0.96
         x: {
             const point = eventsRow.mapToItem(root, root.timedMutationDayIndex * (root.dayColumnWidth + root.spacing) + 5, 0);
@@ -1241,8 +1242,15 @@ Item {
             sportsListOnly: false
             onSaveRequested: payload => root.applySidebarPayload(payload)
             onTaskCreateRequested: task => Todo.addItem(task)
+            onTaskCompletionRequested: task => Todo.markDone(task)
             onDeleteRequested: (eventData, scope) => CalendarService.deleteEventWithScope(eventData, scope)
             onEventFieldsMutationRequested: (eventData, fields, scope) => CalendarService.saveEventFields(eventData, fields, scope)
+            onMoveRequested: (eventData, newDate, scope) => {
+                if (!eventData || !newDate)
+                    return;
+                CalendarService.moveEvent(eventData, newDate, scope);
+                root.viewWeekStart = root.rangeStartFor(newDate);
+            }
             onTimePickerRequested: (which, startHour, startMinute) => {
                 timePicker.target = which;
                 timePicker.open(startHour, startMinute, which === "start" ? Translation.tr("Starts at") : Translation.tr("Ends at"));

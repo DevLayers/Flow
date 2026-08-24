@@ -58,6 +58,15 @@ Item {
     property var pendingPayload: null
     property var pendingMutationFields: null
     property string pendingAction: ""
+    property var pendingMoveDate: null
+    /** Open tasks with no due date; the month grid shows only their count. */
+    readonly property var undatedTasks: Todo.getUndatedTasks()
+    readonly property bool googleColorAvailable: GoogleCalendarService.colorsEnabled
+        && !root.sportsEvent
+        && !root.birthdayEvent
+        && !root.eventReadOnly
+        && GoogleCalendarService.knowsEvent(root.event?.uid ?? "")
+    readonly property string googleColorId: GoogleCalendarService.colorIdForUid(root.event?.uid ?? "")
     property bool showCalendarSelector: false
 
     readonly property bool rangeValid: root.formAllDay || root.formEndMinutes > root.formStartMinutes
@@ -73,8 +82,9 @@ Item {
     signal taskCreateRequested(var task)
     signal deleteRequested(var eventData, string scope)
     signal eventFieldsMutationRequested(var eventData, var fields, string scope)
-    signal moveRequested(var eventData, var newDate)
+    signal moveRequested(var eventData, var newDate, string scope)
     signal closeRequested
+    signal taskCompletionRequested(var task)
     signal timePickerRequested(string which, int startHour, int startMinute)
     signal datePickerRequested(string purpose, var date)
 
@@ -164,6 +174,25 @@ Item {
         root.close();
     }
 
+    /**
+     * Move an event to another day.  A recurring master cannot be rewritten
+     * silently: `save` on it would shift every occurrence, so the scope page
+     * asks first, exactly like delete does.
+     */
+    function requestMove(eventData, date) {
+        if (!eventData?.uid || eventData.readOnly === true || !date)
+            return;
+        root.event = eventData;
+        if (String(eventData.repeatSymbol ?? "").length > 0) {
+            root.pendingAction = "move";
+            root.pendingMoveDate = H.startOfDay(date);
+            root.setMode("scope");
+            return;
+        }
+        root.moveRequested(eventData, date, "all");
+        root.close();
+    }
+
     function exceptionLabel(value) {
         const date = root.localCalendarDate(value);
         return isNaN(date.getTime()) ? String(value ?? "") : Qt.formatDate(date, "ddd, d MMM yyyy");
@@ -171,6 +200,15 @@ Item {
 
     function startCreate(date) {
         root.startCreateAt(date, -1, -1);
+    }
+
+    function showUndatedTasks() {
+        root.setMode("tasks");
+    }
+
+    function startCreateTask(date) {
+        root.startCreateAt(date, -1, -1);
+        root.createKind = "task";
     }
 
     function startCreateAt(date, startMinutes, endMinutes) {
@@ -240,6 +278,12 @@ Item {
     }
 
     function close() {
+        // Backing out of the scope page must not leave a mutation armed for the
+        // next event the rail opens.
+        root.pendingPayload = null;
+        root.pendingMutationFields = null;
+        root.pendingMoveDate = null;
+        root.pendingAction = "";
         if (root.sportsEvent)
             SportsService.clearFocusedGame(root.event?.id);
         root.setMode("");
@@ -297,8 +341,7 @@ Item {
 
     function applyPickedDate(purpose, date) {
         if (purpose === "reschedule") {
-            root.moveRequested(root.event, date);
-            root.close();
+            root.requestMove(root.event, date);
             return;
         }
         if (purpose === "repeatUntil") {
@@ -405,10 +448,12 @@ Item {
 
     function chooseScope(scope) {
         if (root.pendingAction === "delete") root.deleteRequested(root.event, scope);
+        else if (root.pendingMoveDate) root.moveRequested(root.event, root.pendingMoveDate, scope);
         else if (root.pendingMutationFields) root.eventFieldsMutationRequested(root.event, root.pendingMutationFields, scope);
         else if (root.pendingPayload) { root.pendingPayload.scope = scope; root.saveRequested(root.pendingPayload); }
         root.pendingPayload = null;
         root.pendingMutationFields = null;
+        root.pendingMoveDate = null;
         root.pendingAction = "";
         root.close();
     }
@@ -421,7 +466,7 @@ Item {
     readonly property var dayHolidays: (Config.options.calendar.holidays.enable && Config.options.calendar.holidays.showInMonthView) ? (Holidays.byDayKey[H.dayKeyOf(root.day)] ?? []) : []
     readonly property color accent: (root.sportsEvent || root.birthdayEvent)
         ? Appearance.colors.colTertiary
-        : (root.event ? H.chipColor(root.event, Appearance.colors) : Appearance.colors.colPrimary)
+        : (root.event ? H.chipColor(root.event, Appearance.colors, GoogleCalendarService.colorForEvent(root.event)) : Appearance.colors.colPrimary)
     readonly property bool isDayToday: H.sameDate(root.day, DateTime.clock.date)
 
     readonly property bool eventAllDay: root.birthdayEvent || (root.event ? CalendarService.isAllDayEvent(root.event) : false)
@@ -785,6 +830,95 @@ Item {
                     }
                 }
 
+                // ══ Tasks with no date ══
+                Item {
+                    anchors.fill: parent
+                    visible: root.mode === "tasks"
+
+                    ColumnLayout {
+                        anchors.fill: parent
+                        spacing: 10
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 12
+
+                            Rectangle {
+                                Layout.preferredWidth: 62
+                                Layout.preferredHeight: 62
+                                radius: Appearance.rounding.normal
+                                color: Appearance.colors.colSecondaryContainer
+
+                                MaterialSymbol {
+                                    anchors.centerIn: parent
+                                    text: "checklist"
+                                    iconSize: 32
+                                    color: Appearance.colors.colOnSecondaryContainer
+                                }
+                            }
+
+                            ColumnLayout {
+                                Layout.fillWidth: true
+                                spacing: 2
+
+                                StyledText {
+                                    Layout.fillWidth: true
+                                    text: Translation.tr("No date")
+                                    font.pixelSize: Appearance.font.pixelSize.normal
+                                    font.weight: Font.Bold
+                                    color: Appearance.colors.colOnSurface
+                                    elide: Text.ElideRight
+                                }
+
+                                StyledText {
+                                    Layout.fillWidth: true
+                                    text: root.undatedTasks.length === 0
+                                        ? Translation.tr("Nothing left over")
+                                        : Translation.tr("%1 task(s) waiting for a day").arg(String(root.undatedTasks.length))
+                                    font.pixelSize: Appearance.font.pixelSize.smallie
+                                    font.weight: Font.Medium
+                                    color: Appearance.colors.colOnSurfaceVariant
+                                    elide: Text.ElideRight
+                                }
+                            }
+                        }
+
+                        StyledFlickable {
+                            id: undatedList
+                            Layout.fillWidth: true
+                            Layout.fillHeight: true
+                            clip: true
+                            contentWidth: width
+                            contentHeight: undatedColumn.implicitHeight
+
+                            ColumnLayout {
+                                id: undatedColumn
+                                width: undatedList.width
+                                spacing: 4
+
+                                Repeater {
+                                    model: root.undatedTasks
+
+                                    delegate: TaskChip {
+                                        required property var modelData
+
+                                        Layout.fillWidth: true
+                                        Layout.preferredHeight: 42
+                                        taskData: modelData
+                                        onCompletionRequested: task => root.taskCompletionRequested(task)
+                                    }
+                                }
+                            }
+                        }
+
+                        PrimaryAction {
+                            label: Translation.tr("New task")
+                            symbol: "add_task"
+                            onTriggered: root.startCreateTask(root.day)
+                        }
+                    }
+                }
+
                 // ══ Details ══
                 Item {
                     anchors.fill: parent
@@ -1030,6 +1164,30 @@ Item {
                                 caption: Translation.tr("Notes")
                                 value: root.event?.description ?? ""
                                 multiline: true
+                            }
+
+                            // Writing back to Google needs the API's own event
+                            // id, which only the colour scan carries — so this
+                            // appears exactly for events that scan reached.
+                            ColumnLayout {
+                                Layout.fillWidth: true
+                                visible: root.googleColorAvailable
+                                spacing: 6
+
+                                StyledText {
+                                    Layout.fillWidth: true
+                                    text: Translation.tr("Google colour")
+                                    font.pixelSize: Appearance.font.pixelSize.smallest
+                                    font.weight: Font.Bold
+                                    color: Appearance.colors.colOnSurfaceVariant
+                                }
+
+                                ColorPickerRow {
+                                    Layout.fillWidth: true
+                                    googleMode: true
+                                    currentColorId: root.googleColorId
+                                    onGoogleColorSelected: colorId => GoogleCalendarService.setEventColor(root.event?.uid ?? "", colorId)
+                                }
                             }
                             }
                         }

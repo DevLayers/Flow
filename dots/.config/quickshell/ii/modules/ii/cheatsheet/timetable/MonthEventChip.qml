@@ -36,7 +36,7 @@ Item {
 
     implicitHeight: compact ? 20 : 24
 
-    readonly property color accent: H.chipColor(root.eventData, Appearance.colors)
+    readonly property color accent: H.chipColor(root.eventData, Appearance.colors, GoogleCalendarService.colorForEvent(root.eventData))
     readonly property bool sportEvent: root.eventData?.sportEvent === true
     readonly property bool hasExceptions: (root.eventData?.exdates?.length ?? CalendarService.eventDetailsForUid(root.eventData?.uid)?.exdates?.length ?? 0) > 0
     readonly property string titleText: root.eventData?.content ?? Translation.tr("Event")

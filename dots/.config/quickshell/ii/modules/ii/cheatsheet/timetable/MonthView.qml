@@ -44,6 +44,7 @@ Item {
     readonly property bool holidaysVisible: (Config.options.calendar.holidays.enable ?? false) && (Config.options.calendar.holidays.showInMonthView ?? false)
     readonly property var holidayMap: root.holidaysVisible ? Holidays.byDayKey : ({})
     readonly property var overdueTasks: Todo.getOverdueTasks(DateTime.clock.date)
+    readonly property var undatedTasks: Todo.getUndatedTasks()
     readonly property var availableCategories: {
         const seen = new Set();
         for (const event of CalendarService.events ?? []) {
@@ -415,7 +416,9 @@ Item {
             return;
         if (H.sameDate(target.date, moved.startDate))
             return;
-        CalendarService.moveEvent(moved, target.date);
+        // A recurring master would drag its whole series along, so the drop asks
+        // for a scope in the rail instead of guessing.
+        eventSidebar.requestMove(moved, target.date);
     }
 
     function cancelEventDrag() {
@@ -559,35 +562,48 @@ Item {
                     }
                 }
 
-                ToolbarTabBar {
-                    id: densityTabs
-                    requestOnly: true
-                    currentIndex: Math.max(0, root.densityModes.indexOf(root.densityMode))
-                    tabButtonList: [
-                        {
-                            "icon": "density_large",
-                            "name": ""
-                        },
-                        {
-                            "icon": "density_medium",
-                            "name": ""
-                        },
-                        {
-                            "icon": "scatter_plot",
-                            "name": ""
+                // Wrapped in a Toolbar so the three densities read as one
+                // segmented control, like the view switch in the header, rather
+                // than three loose round buttons.
+                Toolbar {
+                    // colLayer2 resolves to the same value as the timetable
+                    // plate, so the container needs the opaque step this module
+                    // already uses for surfaces that must separate from it.
+                    enableShadow: false
+                    implicitHeight: 42
+                    padding: 1
+                    colBackground: Appearance.m3colors.m3surfaceContainerHigh
+
+                    ToolbarTabBar {
+                        id: densityTabs
+                        requestOnly: true
+                        currentIndex: Math.max(0, root.densityModes.indexOf(root.densityMode))
+                        tabButtonList: [
+                            {
+                                "icon": "density_large",
+                                "name": ""
+                            },
+                            {
+                                "icon": "density_medium",
+                                "name": ""
+                            },
+                            {
+                                "icon": "scatter_plot",
+                                "name": ""
+                            }
+                        ]
+                        onIndexSelected: index => Persistent.states.cheatsheet.timetableMonthDensity = root.densityModes[index]
+
+                        HoverHandler {
+                            id: densityHover
                         }
-                    ]
-                    onIndexSelected: index => Persistent.states.cheatsheet.timetableMonthDensity = root.densityModes[index]
 
-                    HoverHandler {
-                        id: densityHover
-                    }
-
-                    StyledToolTip {
-                        extraVisibleCondition: densityHover.hovered
-                        text: root.densityMode === "dots"
-                            ? Translation.tr("Month density: dots")
-                            : (root.densityMode === "comfortable" ? Translation.tr("Month density: comfortable") : Translation.tr("Month density: compact"))
+                        StyledToolTip {
+                            extraVisibleCondition: densityHover.hovered
+                            text: root.densityMode === "dots"
+                                ? Translation.tr("Month density: dots")
+                                : (root.densityMode === "comfortable" ? Translation.tr("Month density: comfortable") : Translation.tr("Month density: compact"))
+                        }
                     }
                 }
 
@@ -825,11 +841,13 @@ Item {
                             draggedEvent: root.dragEvent
                             entranceKey: root.entranceKey
                             keyboardSelected: root.keyboardNavigationActive && H.sameDate(root.keyboardDate, cellLoader.modelData.date)
+                            undatedTaskCount: cellLoader.modelData.isToday ? root.undatedTasks.length : 0
 
                             onCreateRequested: date => root.requestCreate(date)
                             onDayActivated: date => root.requestDay(date)
                             onEventActivated: eventData => root.requestOpen(eventData)
                             onTaskCompletionRequested: task => Todo.markDone(task)
+                            onUndatedTasksActivated: eventSidebar.showUndatedTasks()
                             onEventDragBegan: (eventData, x, y, w, h) => root.beginEventDrag(eventData, x, y, w, h)
                             onEventDragMoved: (x, y) => root.moveEventDrag(x, y)
                             onEventDragEnded: root.endEventDrag()
@@ -845,7 +863,7 @@ Item {
                         id: recurringBand
                         required property var modelData
 
-                        readonly property color accent: H.chipColor(recurringBand.modelData.event, Appearance.colors)
+                        readonly property color accent: H.chipColor(recurringBand.modelData.event, Appearance.colors, GoogleCalendarService.colorForEvent(recurringBand.modelData.event))
                         x: recurringBand.modelData.startColumn * (gridArea.cellWidth + root.gridGap) + 5
                         y: recurringBand.modelData.row * (gridArea.cellHeight + root.gridGap)
                             + 24 + recurringBand.modelData.lane * 18
@@ -912,11 +930,12 @@ Item {
 
                 onSaveRequested: payload => root.applySidebarPayload(payload)
                 onTaskCreateRequested: task => Todo.addItem(task)
+                onTaskCompletionRequested: task => Todo.markDone(task)
                 onDeleteRequested: (eventData, scope) => root.deleteEvent(eventData, scope)
-                onMoveRequested: (eventData, newDate) => {
+                onMoveRequested: (eventData, newDate, scope) => {
                     if (!eventData || !newDate)
                         return;
-                    CalendarService.moveEvent(eventData, newDate);
+                    CalendarService.moveEvent(eventData, newDate, scope);
                     root.goToMonth(newDate.getFullYear(), newDate.getMonth(), 0);
                 }
                 onTimePickerRequested: (which, startHour, startMinute) => {
@@ -957,7 +976,7 @@ Item {
         width: Math.max(120, root.dragProxyW)
         height: Math.max(26, root.dragProxyH)
         radius: Math.min(height / 2, Appearance.rounding.small)
-        color: H.chipColor(root.dragEvent, Appearance.colors)
+        color: H.chipColor(root.dragEvent, Appearance.colors, GoogleCalendarService.colorForEvent(root.dragEvent))
         opacity: 0.96
         scale: 1.06
         z: 120

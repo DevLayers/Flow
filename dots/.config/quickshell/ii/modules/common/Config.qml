@@ -3071,6 +3071,14 @@ Singleton {
                         // never create or mutate khal events.
                         property bool enable: false
                     }
+                    property JsonObject googleColors: JsonObject {
+                        // Per-event colour exists only in the Google Calendar API
+                        // (colorId); the synced .ics files carry no COLOR at all.
+                        // Opt-in because it needs the authorized account.
+                        property bool enable: false
+                        // Hours before the colour map is fetched again.
+                        property int refreshHours: 6
+                    }
                     property JsonObject notifications: JsonObject {
                         property bool enable: true
                         property list<string> offsets: ["-15m"]

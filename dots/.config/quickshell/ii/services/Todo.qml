@@ -234,6 +234,13 @@ Singleton {
         return Qt.formatDate(date, "yyyy-MM-dd") + "T00:00:00.000Z";
     }
 
+    /**
+     * Tasks due on one day.
+     *
+     * `hasDate` is the gate, not `date`: providers fill `date` with *now* for a
+     * task that has no due date, so matching on the date alone pins the whole
+     * undated backlog onto today.
+     */
     function getTasksByDate(currentDate) {
         const res = [];
 
@@ -242,6 +249,8 @@ Singleton {
         const currentYear = currentDate.getFullYear();
 
         for (let i = 0; i < root.list.length; i++) {
+            if (root.list[i]?.hasDate !== true)
+                continue;
             const taskDate = new Date(root.list[i]['date']);
             if (
                 taskDate.getDate() === currentDay &&
@@ -253,6 +262,11 @@ Singleton {
         }
 
         return res;
+    }
+
+    /** Open tasks with no due date, which belong to no day in the calendar. */
+    function getUndatedTasks() {
+        return root.list.filter(task => task && task.hasDate !== true && !task.done);
     }
 
     function getOverdueTasks(currentDate = new Date()) {

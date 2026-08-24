@@ -3,9 +3,11 @@
 
 Requests and replies are JSON Lines.  Calendar data only ever travels in a
 JSON request or an ICS payload on stdin to khal; no event field is interpolated
-into a shell command.  ``khal import --batch`` is intentionally the only
-writer: it keeps khal's index and vdirsyncer collections in their supported
-code path while preserving UIDs on edits.
+into a shell command.  New events go through ``khal import --batch`` so khal
+picks the href and indexes them itself.  Editing an event that already exists
+rewrites its own file instead: ``khal import`` names files after the UID, so on
+a vdirsyncer collection (whose hrefs are random UUIDs) it would leave the
+original file behind and the event would exist twice.
 """
 
 from __future__ import annotations
@@ -13,8 +15,10 @@ from __future__ import annotations
 import argparse
 import copy
 import json
+import os
 import subprocess
 import sys
+import tempfile
 import uuid
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
@@ -417,13 +421,36 @@ def _import(store: CalendarStore, calendar: CalendarInfo, container: Calendar) -
         raise CalendarError(message or "khal could not import the event.")
 
 
+def _write_in_place(stored: StoredEvent) -> None:
+    """Rewrite an existing event's own file, keeping its href and reindexing.
+
+    Two reasons this is not ``khal import``.  khal names imported files after
+    the UID, so on a vdirsyncer collection the original random-UUID file would
+    survive next to the new one and the event would be listed twice.  And khal
+    compares a collection's ctag, which is the *directory* mtime, before it
+    reindexes: replacing the file atomically bumps that mtime, while writing
+    over the file in place would leave khal serving the stale row.
+    """
+    payload = stored.container.to_ical()
+    handle = tempfile.NamedTemporaryFile("wb", dir=stored.path.parent, prefix=".ii-timetable-", suffix=".tmp", delete=False)
+    try:
+        with handle as stream:
+            stream.write(payload)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(handle.name, stored.path)
+    except BaseException:
+        Path(handle.name).unlink(missing_ok=True)
+        raise
+
+
 def _delete_storage(stored: StoredEvent) -> None:
     components = [item for item in stored.container.subcomponents if item is not stored.component]
     if not components:
         stored.path.unlink(missing_ok=True)
         return
     stored.container.subcomponents = components
-    stored.path.write_bytes(stored.container.to_ical())
+    _write_in_place(stored)
 
 
 def _save(store: CalendarStore, request: dict[str, Any]) -> dict[str, Any]:
@@ -448,9 +475,12 @@ def _save(store: CalendarStore, request: dict[str, Any]) -> dict[str, Any]:
         component.add("UID", uid or str(uuid.uuid4()))
         container.add_component(component)
     _apply_event(component, event, stored is not None)
-    _import(store, target, container)
-    if stored and stored.calendar.name != target.name:
-        _delete_storage(stored)
+    if stored and stored.calendar.name == target.name:
+        _write_in_place(stored)
+    else:
+        _import(store, target, container)
+        if stored:
+            _delete_storage(stored)
     return {"ok": True, "uid": str(component.get("UID"))}
 
 
@@ -480,7 +510,7 @@ def _delete_occurrence(store: CalendarStore, request: dict[str, Any]) -> dict[st
     recurrence_id = _date_or_datetime(request.get("recurrenceId"))
     stored.component.add("EXDATE", recurrence_id)
     _touch(stored.component, True)
-    _import(store, stored.calendar, stored.container)
+    _write_in_place(stored)
     return {"ok": True}
 
 
@@ -505,7 +535,7 @@ def _override_occurrence(store: CalendarStore, request: dict[str, Any]) -> dict[
     fields.setdefault("end", _as_iso(_as_datetime(recurrence_id) + duration))
     _apply_event(override, fields, True)
     stored.container.add_component(override)
-    _import(store, stored.calendar, stored.container)
+    _write_in_place(stored)
     return {"ok": True}
 
 
@@ -533,7 +563,7 @@ def _truncate_series(store: CalendarStore, request: dict[str, Any]) -> dict[str,
     if not stored.component.get("RRULE"):
         raise CalendarError("This and future requires a recurring event.")
     _end_series_before(stored.component, _date_or_datetime(request.get("recurrenceId")))
-    _import(store, stored.calendar, stored.container)
+    _write_in_place(stored)
     return {"ok": True}
 
 
@@ -550,7 +580,6 @@ def _split_series(store: CalendarStore, request: dict[str, Any]) -> dict[str, An
         raise CalendarError("This and future requires a recurring event and fields.")
     original_rule = copy.deepcopy(stored.component.get("RRULE"))
     _end_series_before(stored.component, recurrence_id)
-    old_rule = copy.deepcopy(stored.component.get("RRULE"))
 
     followup = copy.deepcopy(stored.component)
     _set(followup, "UID", str(uuid.uuid4()))
@@ -568,7 +597,7 @@ def _split_series(store: CalendarStore, request: dict[str, Any]) -> dict[str, An
     new_container.add("VERSION", "2.0")
     new_container.add("PRODID", "-//ii Quickshell//Timetable//EN")
     new_container.add_component(followup)
-    _import(store, stored.calendar, stored.container)
+    _write_in_place(stored)
     _import(store, stored.calendar, new_container)
     return {"ok": True, "uid": str(followup.get("UID"))}
 

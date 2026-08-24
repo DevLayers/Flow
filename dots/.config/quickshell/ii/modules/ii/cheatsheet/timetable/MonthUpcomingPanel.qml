@@ -457,7 +457,7 @@ Item {
                             buttonRadius: Appearance.rounding.small
                             onClicked: root.eventActivated(rowItem.modelData.event)
 
-                            readonly property color accent: H.chipColor(rowItem.modelData.event, Appearance.colors)
+                            readonly property color accent: H.chipColor(rowItem.modelData.event, Appearance.colors, GoogleCalendarService.colorForEvent(rowItem.modelData.event))
                             readonly property bool allDay: CalendarService.isAllDayEvent(rowItem.modelData.event)
                             readonly property bool cancelled: String(rowItem.modelData.event?.status ?? "").toUpperCase() === "CANCELLED"
                             readonly property bool featured: rowItem.modelData.rowKey === root.featuredEventRowKey

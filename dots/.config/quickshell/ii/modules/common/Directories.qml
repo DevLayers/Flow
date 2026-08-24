@@ -66,6 +66,9 @@ Singleton {
     // ESPN scoreboards and per-game summaries shared by the sports widgets
     // and the timetable. Kept outside calendar storage by design.
     property string sportsCachePath: FileUtils.trimFileProtocol(`${Directories.state}/user/generated/sports.json`)
+    // iCalUID -> Google colorId, plus the account palette. The synced .ics files
+    // carry no COLOR, so this is the only place that mapping can live locally.
+    property string googleCalendarColorsPath: FileUtils.trimFileProtocol(`${Directories.state}/user/generated/google_calendar_colors.json`)
     property string generateLockscreenColorsScriptPath: FileUtils.trimFileProtocol(`${Directories.scriptPath}/colors/generate-lockscreen-colors.sh`)
     property string gammaControlScriptPath: FileUtils.trimFileProtocol(`${Directories.scriptPath}/brightness/ii-gamma-control`)
     property string swapLockscreenColorsScriptPath: FileUtils.trimFileProtocol(`${Directories.scriptPath}/colors/swap-lockscreen-colors.sh`)

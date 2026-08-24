@@ -32,6 +32,82 @@ Singleton {
     readonly property bool hasRefreshToken: root.refreshToken.length > 0
     readonly property bool available: root.credentialsConfigured && root.hasRefreshToken && !root.reauthorizationRequired
 
+    // ── Event colours ─────────────────────────────────────────────
+    // Google exports no COLOR property over CalDAV, so the colour a user picked
+    // in Google Calendar cannot be read from the .ics files vdirsyncer stores.
+    // It lives only as `colorId` on the API resource, resolved against the
+    // account palette from /colors.
+    readonly property bool colorsEnabled: Config.options.calendar.timetable.googleColors?.enable ?? false
+    property var colorPalette: ({})
+    property var colorByUid: ({})
+    property bool colorsSyncing: false
+    property real colorsFetchedAt: 0
+    property var _colorQueue: []
+    property var _colorAccumulator: ({})
+
+    readonly property var colorOptions: {
+        const entries = [];
+        for (const id in root.colorPalette)
+            entries.push({ id: String(id), background: String(root.colorPalette[id]?.background ?? ""), foreground: String(root.colorPalette[id]?.foreground ?? "") });
+        return entries.sort((left, right) => Number(left.id) - Number(right.id));
+    }
+
+    /** Background hex for one calendar UID, or "" when Google has no colour. */
+    function colorForUid(uid) {
+        const entry = root.colorByUid[String(uid ?? "")];
+        if (!entry)
+            return "";
+        return String(root.colorPalette[String(entry.colorId ?? "")]?.background ?? "");
+    }
+
+    function colorIdForUid(uid) {
+        return String(root.colorByUid[String(uid ?? "")]?.colorId ?? "");
+    }
+
+    /** Whether a PATCH can address this UID, i.e. the scan saw the event. */
+    function knowsEvent(uid) {
+        return String(root.colorByUid[String(uid ?? "")]?.eventId ?? "").length > 0;
+    }
+
+    /** Hex for a khal DTO, or "" when the feature is off or Google has none. */
+    function colorForEvent(event) {
+        if (!root.colorsEnabled)
+            return "";
+        return root.colorForUid(event?.uid ?? "");
+    }
+
+    function refreshColors(force = false) {
+        if (!root.available || !root.colorsEnabled || root.colorsSyncing)
+            return;
+        const staleAfter = Math.max(1, Config.options.calendar.timetable.googleColors?.refreshHours ?? 6) * 3600000;
+        if (!force && root.colorsFetchedAt > 0 && Date.now() - root.colorsFetchedAt < staleAfter)
+            return;
+        root.colorsSyncing = true;
+        root._ensureValidToken({ operation: "colors" });
+    }
+
+    /**
+     * Push a colour back to Google.
+     *
+     * Addressing needs the API's own event id, which only the colour scan
+     * carries; a calendar file knows the iCalUID and nothing else.
+     */
+    function setEventColor(uid, colorId) {
+        const entry = root.colorByUid[String(uid ?? "")];
+        if (!root.available || !entry?.eventId)
+            return false;
+        root._pendingColorWrite = { uid: String(uid), colorId: String(colorId ?? "") };
+        root._ensureValidToken({
+            operation: "colorPatch",
+            calendarId: String(entry.calendarId ?? "primary"),
+            eventId: String(entry.eventId),
+            body: { colorId: String(colorId ?? "") || null }
+        });
+        return true;
+    }
+
+    property var _pendingColorWrite: null
+
     function startOAuth() {
         if (root.authenticating)
             return;
@@ -133,6 +209,28 @@ Singleton {
             calendarsProcess.running = true;
             return;
         }
+        // The colour path keeps its own processes so a colour write never
+        // triggers the search panel's full event refetch, and vice versa.
+        if (action.operation === "colors") {
+            colorPaletteProcess.stdinEnabled = true;
+            colorPaletteProcess.running = true;
+            return;
+        }
+        if (action.operation === "colorCalendars") {
+            colorCalendarsProcess.stdinEnabled = true;
+            colorCalendarsProcess.running = true;
+            return;
+        }
+        if (action.operation === "eventColors") {
+            colorEventsProcess.stdinEnabled = true;
+            colorEventsProcess.running = true;
+            return;
+        }
+        if (action.operation === "colorPatch") {
+            colorPatchProcess.stdinEnabled = true;
+            colorPatchProcess.running = true;
+            return;
+        }
         mutationProcess.command = ["python3", Directories.scriptPath + "/google_calendar/api.py", action.operation];
         mutationProcess.stdinEnabled = true;
         mutationProcess.running = true;
@@ -140,6 +238,7 @@ Singleton {
 
     function _apiError(result) {
         root.syncing = false;
+        root.colorsSyncing = false;
         root.lastErrorCode = String(result?.code ?? "api_error");
         root.lastErrorMessage = String(result?.message ?? "");
         root.lastHttpStatus = Number(result?.http_status ?? 0);
@@ -150,6 +249,126 @@ Singleton {
         } else if (root.lastErrorCode === "invalid_grant") {
             root.reauthorizationRequired = true;
         }
+    }
+
+    function _colorError(result) {
+        root.colorsSyncing = false;
+        root._pendingColorWrite = null;
+        root.lastErrorCode = String(result?.code ?? "api_error");
+        root.lastErrorMessage = String(result?.message ?? "");
+        root.lastHttpStatus = Number(result?.http_status ?? 0);
+        if (root.lastErrorCode === "invalid_grant")
+            root.reauthorizationRequired = true;
+    }
+
+    function _handleColorPalette(output) {
+        try {
+            const result = JSON.parse(output.trim());
+            if (!result.ok) {
+                root._colorError(result);
+                return;
+            }
+            root.colorPalette = result.data?.event ?? ({});
+            root._ensureValidToken({ operation: "colorCalendars" });
+        } catch (error) {
+            root._colorError({ code: "parse_error", message: error.message });
+        }
+    }
+
+    function _handleColorCalendars(output) {
+        try {
+            const result = JSON.parse(output.trim());
+            if (!result.ok) {
+                root._colorError(result);
+                return;
+            }
+            root._colorQueue = Array.from(result.data?.items ?? [])
+                .map(calendar => String(calendar?.id ?? ""))
+                .filter(id => id.length > 0);
+            root._colorAccumulator = ({});
+            root._fetchNextColorCalendar();
+        } catch (error) {
+            root._colorError({ code: "parse_error", message: error.message });
+        }
+    }
+
+    function _fetchNextColorCalendar() {
+        if (root._colorQueue.length === 0) {
+            root.colorByUid = root._colorAccumulator;
+            root.colorsFetchedAt = Date.now();
+            root.colorsSyncing = false;
+            root._persistColors();
+            return;
+        }
+        colorEventsProcess.calendarId = String(root._colorQueue[0]);
+        root._ensureValidToken({ operation: "eventColors" });
+    }
+
+    function _handleEventColors(output, calendarId) {
+        // One unreadable calendar (a virtual holidays collection, a share that
+        // was revoked) must not abort the scan for the others.
+        try {
+            const result = JSON.parse(output.trim());
+            if (result.ok) {
+                const map = root._colorAccumulator;
+                for (const item of Array.from(result.data?.items ?? [])) {
+                    const uid = String(item?.iCalUID ?? "");
+                    if (uid.length === 0)
+                        continue;
+                    // The API id is recorded even without a colour: it is the
+                    // only handle a PATCH can use, and a calendar file knows
+                    // nothing but the iCalUID.
+                    const colorId = String(item?.colorId ?? "");
+                    const isException = String(item?.recurringEventId ?? "").length > 0;
+                    // Google reuses the master's iCalUID for its exceptions, so
+                    // the master is the one that describes the series.
+                    if (map[uid] && isException)
+                        continue;
+                    map[uid] = { colorId: colorId, eventId: String(item?.id ?? ""), calendarId: calendarId };
+                }
+                root._colorAccumulator = map;
+            } else {
+                console.warn("[GoogleCalendar] colour scan skipped", calendarId, String(result.code ?? ""));
+            }
+        } catch (error) {
+            console.warn("[GoogleCalendar] colour scan failed", calendarId, error.message);
+        }
+        root._colorQueue = root._colorQueue.slice(1);
+        root._fetchNextColorCalendar();
+    }
+
+    function _handleColorPatch(output) {
+        try {
+            const result = JSON.parse(output.trim());
+            if (!result.ok) {
+                root._colorError(result);
+                return;
+            }
+            const write = root._pendingColorWrite;
+            root._pendingColorWrite = null;
+            if (!write)
+                return;
+            const map = Object.assign({}, root.colorByUid);
+            const entry = map[write.uid];
+            if (entry) {
+                if (write.colorId.length === 0)
+                    delete map[write.uid];
+                else
+                    map[write.uid] = Object.assign({}, entry, { colorId: write.colorId });
+                root.colorByUid = map;
+                root._persistColors();
+            }
+        } catch (error) {
+            root._colorError({ code: "parse_error", message: error.message });
+        }
+    }
+
+    function _persistColors() {
+        colorCacheView.setText(JSON.stringify({
+            fetchedAt: root.colorsFetchedAt,
+            palette: root.colorPalette,
+            byUid: root.colorByUid
+        }));
     }
 
     function _handleCalendars(output) {
@@ -215,7 +434,11 @@ Singleton {
         if (!KeyringStorage.loaded || !KeyringStorage.keyringData)
             return;
         const keyring = KeyringStorage.keyringData;
-        const account = keyring.google_calendar_account ?? (Array.isArray(keyring.google_tasks_accounts) ? keyring.google_tasks_accounts[0] : null);
+        // Only this feature's own grant works here. A refresh token carries the
+        // scopes it was authorized with, so reusing the Google Tasks token makes
+        // `available` true and then fails every call with 403 insufficient
+        // scopes -- verified against the live API.
+        const account = keyring.google_calendar_account ?? null;
         if (!account)
             return;
         root.refreshToken = String(account.refreshToken ?? "");
@@ -332,6 +555,63 @@ Singleton {
                     if (!result.ok) { root._apiError(result); return; }
                     root.refresh();
                 } catch (error) { root._apiError({ code: "parse_error", message: error.message }); }
+            }
+        }
+    }
+
+    Process {
+        id: colorPaletteProcess
+        command: ["python3", Directories.scriptPath + "/google_calendar/api.py", "colors"]
+        stdinEnabled: true
+        onRunningChanged: if (running) { write(JSON.stringify({ accessToken: root.accessToken }) + "\n"); stdinEnabled = false; }
+        stdout: StdioCollector { onStreamFinished: root._handleColorPalette(text) }
+    }
+
+    Process {
+        id: colorCalendarsProcess
+        command: ["python3", Directories.scriptPath + "/google_calendar/api.py", "calendars"]
+        stdinEnabled: true
+        onRunningChanged: if (running) { write(JSON.stringify({ accessToken: root.accessToken }) + "\n"); stdinEnabled = false; }
+        stdout: StdioCollector { onStreamFinished: root._handleColorCalendars(text) }
+    }
+
+    Process {
+        id: colorEventsProcess
+        property string calendarId: ""
+        command: ["python3", Directories.scriptPath + "/google_calendar/api.py", "eventColors"]
+        stdinEnabled: true
+        onRunningChanged: if (running) { write(JSON.stringify({ accessToken: root.accessToken, calendarId: colorEventsProcess.calendarId }) + "\n"); stdinEnabled = false; }
+        stdout: StdioCollector { onStreamFinished: root._handleEventColors(text, colorEventsProcess.calendarId) }
+    }
+
+    Process {
+        id: colorPatchProcess
+        command: ["python3", Directories.scriptPath + "/google_calendar/api.py", "update"]
+        stdinEnabled: true
+        onRunningChanged: if (running) {
+            const action = root._pendingAction ?? ({});
+            write(JSON.stringify({ accessToken: root.accessToken, calendarId: action.calendarId, eventId: action.eventId, body: action.body }) + "\n");
+            stdinEnabled = false;
+        }
+        stdout: StdioCollector { onStreamFinished: root._handleColorPatch(text) }
+    }
+
+    // The map survives restarts so the timetable paints Google colours on the
+    // first frame instead of waiting for a network round-trip.
+    FileView {
+        id: colorCacheView
+        path: Directories.googleCalendarColorsPath
+        atomicWrites: true
+        printErrors: false
+        onLoaded: {
+            try {
+                const cached = JSON.parse(colorCacheView.text());
+                root.colorPalette = cached?.palette ?? ({});
+                root.colorByUid = cached?.byUid ?? ({});
+                root.colorsFetchedAt = Number(cached?.fetchedAt ?? 0);
+            } catch (error) {
+                root.colorPalette = ({});
+                root.colorByUid = ({});
             }
         }
     }

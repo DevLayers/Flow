@@ -81,10 +81,32 @@ Item {
         return Math.max(0, Math.min(1, Number(dayColumn.usageHours?.[hour] ?? 0) / 3600));
     }
 
+    // Same weekend marker as the month grid: a texture, so it survives the
+    // today fill and the solar shades stacked on the column.
+    readonly property bool isWeekend: {
+        const date = dayColumn.dayData?.date;
+        if (!(date instanceof Date))
+            return false;
+        const weekday = date.getDay();
+        return weekday === 0 || weekday === 6;
+    }
+    readonly property color weekendHatchColor: {
+        const tertiary = Qt.color(Appearance.colors.colTertiary);
+        return Qt.hsla(tertiary.hslHue, tertiary.hslSaturation * 0.3, tertiary.hslLightness, 0.13);
+    }
+
     Rectangle {
         anchors.fill: parent
         radius: Appearance.rounding.windowRounding
         color: isToday ? todayHighlightFill : dayIdx % 2 == 0 ? dayBackgroundFill : dayBackgroundFillVariant
+    }
+
+    DiagonalHatch {
+        anchors.fill: parent
+        visible: dayColumn.isWeekend
+        lineColor: dayColumn.weekendHatchColor
+        lineSpacing: 9
+        plateRadius: Appearance.rounding.windowRounding
     }
 
     Rectangle {
