@@ -96,7 +96,8 @@ RippleButton {
     readonly property bool hasActions: root.hasCustomActions || root.itemType === Translation.tr("App")
 
     visible: root.entryShown
-    property int horizontalMargin: 10
+    // Hosts override this; it is the inset the row keeps from the panel edge.
+    property int horizontalMargin: Appearance.sizes.elevationMargin
     property int buttonHorizontalPadding: 10
     property int buttonVerticalPadding: 8
     property bool keyboardDown: false

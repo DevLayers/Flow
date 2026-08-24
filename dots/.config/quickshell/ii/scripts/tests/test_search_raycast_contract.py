@@ -19,6 +19,39 @@ class SearchRaycastContractTests(unittest.TestCase):
             self.assertIn('id: "' + panel_id + '"', registry)
         self.assertGreaterEqual(registry.count("hosted: true"), 12)
 
+    def test_every_new_panel_has_a_distinct_search_bar_identity(self):
+        registry = source("modules/common/SearchPanelRegistry.qml")
+        search_bar = source("modules/ii/overview/SearchBar.qml")
+        widget = source("modules/ii/overview/SearchWidget.qml")
+        expected = {
+            "calendar": ("calendar_month", "Arch"),
+            "tasks": ("task_alt", "Cookie4Sided"),
+            "timers": ("timer", "PuffyDiamond"),
+            "emojis": ("add_reaction", "Sunny"),
+            "screenshots": ("screenshot", "PixelCircle"),
+            "windows": ("splitscreen", "Square"),
+            "settings": ("tune", "Clover8Leaf"),
+            "keybinds": ("keyboard", "PixelTriangle"),
+            "commands": ("terminal", "Ghostish"),
+            "gmail": ("mail", "Heart"),
+            "sports": ("sports_soccer", "VerySunny"),
+            "generators": ("wand_stars", "Burst"),
+        }
+
+        registry_lines = registry.splitlines()
+        for panel_id, (icon, shape) in expected.items():
+            panel_line = next(line for line in registry_lines if 'id: "' + panel_id + '"' in line)
+            self.assertIn('searchIcon: "' + icon + '"', panel_line, panel_id)
+            self.assertIn('searchShape: "' + shape + '"', panel_line, panel_id)
+            self.assertIn("searchRotationStep:", panel_line, panel_id)
+
+        self.assertEqual(len({identity[0] for identity in expected.values()}), len(expected))
+        self.assertEqual(len({identity[1] for identity in expected.values()}), len(expected))
+        self.assertIn("property var activePanel: null", search_bar)
+        self.assertIn("root.activePanel?.searchShape", search_bar)
+        self.assertIn("root.activePanel?.searchIcon", search_bar)
+        self.assertIn("activePanel: root.activePanel", widget)
+
     def test_hosted_panel_uses_the_single_results_surface(self):
         widget = source("modules/ii/overview/SearchWidget.qml")
         self.assertIn("SearchPanelHost", widget)

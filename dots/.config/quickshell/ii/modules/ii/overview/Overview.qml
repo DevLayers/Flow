@@ -102,14 +102,11 @@ Scope {
                             if (!root._overviewRevealInitialized)
                                 return;
 
+                            if (!GlobalStates.overviewOpen)
+                                return;
+
                             const shouldShow = root.overviewShouldShow;
                             overviewRevealAnim.stop();
-
-                            if (!GlobalStates.overviewOpen) {
-                                root.overviewRevealProgress = shouldShow ? 1.0 : 0.0;
-                                root.overviewFadeProgress = shouldShow ? 1.0 : 0.0;
-                                return;
-                            }
 
                             if (!shouldShow) {
                                 root.overviewRevealProgress = 0.0;

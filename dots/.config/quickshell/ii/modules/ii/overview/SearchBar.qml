@@ -17,6 +17,7 @@ RowLayout {
     property bool animateWidth: false
     property bool clipboardMode: false
     property bool activePanelMode: false
+    property var activePanel: null
     property bool activePanelQueryEmpty: false
     property bool supportsPanelSectionToggle: false
     property int clipboardWidth: 860
@@ -178,6 +179,9 @@ RowLayout {
         property bool _initialized: false
 
         readonly property real symmetryAngle: {
+            const panelStep = Number(root.activePanel?.searchRotationStep ?? 0);
+            if (root.activePanelMode && panelStep > 0)
+                return panelStep;
             switch (root.searchPrefixType) {
             case SearchBar.SearchPrefixType.Action:
                 return 180;        // Pill
@@ -212,46 +216,44 @@ RowLayout {
             }
         }
 
-        Behavior on rotation {
-            NumberAnimation {
-                duration: Appearance.animation.elementMove.duration
-                easing.type: Easing.OutBack
-            }
-        }
-
-        function triggerTransition() {
-            if (iconTransitionAnim.running)
-                iconTransitionAnim.stop();
-            iconTransitionAnim.start();
-        }
-
-        SequentialAnimation {
-            id: iconTransitionAnim
-            NumberAnimation {
-                target: searchIcon
-                property: "rotation"
-                from: 0
-                to: 360
-                duration: Appearance.animation.elementMove.duration
-                easing.type: Easing.OutBack
-            }
-        }
+        // No Behavior here on purpose. MaterialShapeWrappedMaterialSymbol already
+        // declares one on `rotation`, and a second declaration on the same
+        // property is ambiguous — which of the two actually intercepted the write
+        // was never decidable from the code. The wrapper's SmoothedAnimation is
+        // the one that belongs to this kind of motion anyway.
 
         Connections {
             target: root
+
+            /**
+             * One writer, always forward.
+             *
+             * Rotation used to have three: a `+=` per keystroke, an imperative
+             * 0→360 animation on every prefix change, and a hard reset to 0 when
+             * the field was cleared. The imperative animation wrote the property
+             * directly and yanked the angle back to 0 mid-typing; the reset
+             * unwound every turn accumulated so far in one long backwards spin.
+             *
+             * Now every event is an addition to the same accumulator, so they
+             * blend instead of fighting, and the shape's rotational symmetry
+             * means each keystroke still settles on a visually upright pose.
+             */
             function onSearchPrefixTypeChanged() {
-                searchIcon.triggerTransition();
+                searchIcon.rotation += 360;
             }
+
             function onSearchingTextChanged() {
                 if (!searchIcon._initialized) {
                     searchIcon._initialized = true;
                     searchIcon._lastText = root.searchingText;
-                    searchIcon.rotation = 0;
                     return;
                 }
 
                 if (root.searchingText === "") {
-                    searchIcon.rotation = 0;
+                    // The new shape has its own symmetry, so the accumulated angle
+                    // is no longer an upright pose for it. Finish the turn instead
+                    // of running the spin backwards to reach the same picture.
+                    searchIcon.rotation = Math.ceil(searchIcon.rotation / 360) * 360;
                 } else if (root.searchingText !== searchIcon._lastText) {
                     searchIcon.rotation += searchIcon.symmetryAngle;
                 }
@@ -259,71 +261,81 @@ RowLayout {
             }
         }
 
-        shape: switch (root.searchPrefixType) {
-        case SearchBar.SearchPrefixType.Action:
-            return MaterialShape.Shape.Pill;
-        case SearchBar.SearchPrefixType.App:
-            return MaterialShape.Shape.Clover4Leaf;
-        case SearchBar.SearchPrefixType.Clipboard:
-            return MaterialShape.Shape.Gem;
-        case SearchBar.SearchPrefixType.Emojis:
-            return MaterialShape.Shape.Sunny;
-        case SearchBar.SearchPrefixType.Math:
-            return MaterialShape.Shape.PuffyDiamond;
-        case SearchBar.SearchPrefixType.ShellCommand:
-            return MaterialShape.Shape.PixelCircle;
-        case SearchBar.SearchPrefixType.WebSearch:
-            return MaterialShape.Shape.SoftBurst;
-        case SearchBar.SearchPrefixType.WindowSearch:
-            return MaterialShape.Shape.Arch;
-        case SearchBar.SearchPrefixType.FileBrowser:
-            return MaterialShape.Shape.Square;
-        case SearchBar.SearchPrefixType.Translator:
-            return MaterialShape.Shape.Cookie6Sided;
-        case SearchBar.SearchPrefixType.MediaDownloader:
-            return MaterialShape.Shape.Cookie9Sided;
-        case SearchBar.SearchPrefixType.MaterialSymbols:
-            return MaterialShape.Shape.SoftBurst;
-        case SearchBar.SearchPrefixType.AiChat:
-            return MaterialShape.Shape.Clover4Leaf;
-        case SearchBar.SearchPrefixType.Suggestions:
-            return MaterialShape.Shape.SoftBurst;
-        default:
-            return MaterialShape.Shape.Cookie7Sided;
+        shape: {
+            const panelShape = String(root.activePanel?.searchShape ?? "");
+            if (root.activePanelMode && panelShape.length > 0)
+                return searchIcon.getShape(panelShape);
+            switch (root.searchPrefixType) {
+            case SearchBar.SearchPrefixType.Action:
+                return MaterialShape.Shape.Pill;
+            case SearchBar.SearchPrefixType.App:
+                return MaterialShape.Shape.Clover4Leaf;
+            case SearchBar.SearchPrefixType.Clipboard:
+                return MaterialShape.Shape.Gem;
+            case SearchBar.SearchPrefixType.Emojis:
+                return MaterialShape.Shape.Sunny;
+            case SearchBar.SearchPrefixType.Math:
+                return MaterialShape.Shape.PuffyDiamond;
+            case SearchBar.SearchPrefixType.ShellCommand:
+                return MaterialShape.Shape.PixelCircle;
+            case SearchBar.SearchPrefixType.WebSearch:
+                return MaterialShape.Shape.SoftBurst;
+            case SearchBar.SearchPrefixType.WindowSearch:
+                return MaterialShape.Shape.Arch;
+            case SearchBar.SearchPrefixType.FileBrowser:
+                return MaterialShape.Shape.Square;
+            case SearchBar.SearchPrefixType.Translator:
+                return MaterialShape.Shape.Cookie6Sided;
+            case SearchBar.SearchPrefixType.MediaDownloader:
+                return MaterialShape.Shape.Cookie9Sided;
+            case SearchBar.SearchPrefixType.MaterialSymbols:
+                return MaterialShape.Shape.SoftBurst;
+            case SearchBar.SearchPrefixType.AiChat:
+                return MaterialShape.Shape.Clover4Leaf;
+            case SearchBar.SearchPrefixType.Suggestions:
+                return MaterialShape.Shape.SoftBurst;
+            default:
+                return MaterialShape.Shape.Cookie7Sided;
+            }
         }
-        text: switch (root.searchPrefixType) {
-        case SearchBar.SearchPrefixType.Action:
-            return "settings_suggest";
-        case SearchBar.SearchPrefixType.App:
-            return "apps";
-        case SearchBar.SearchPrefixType.Clipboard:
-            return "content_paste_search";
-        case SearchBar.SearchPrefixType.Emojis:
-            return "add_reaction";
-        case SearchBar.SearchPrefixType.Math:
-            return "calculate";
-        case SearchBar.SearchPrefixType.ShellCommand:
-            return "terminal";
-        case SearchBar.SearchPrefixType.WebSearch:
-            return "travel_explore";
-        case SearchBar.SearchPrefixType.WindowSearch:
-            return "select_window";
-        case SearchBar.SearchPrefixType.FileBrowser:
-            return "folder_open";
-        case SearchBar.SearchPrefixType.Translator:
-            return "translate";
-        case SearchBar.SearchPrefixType.MediaDownloader:
-            return "download";
-        case SearchBar.SearchPrefixType.MaterialSymbols:
-            return "font_download";
-        case SearchBar.SearchPrefixType.AiChat:
-            return "auto_awesome";
-        case SearchBar.SearchPrefixType.Suggestions:
-            return "explore";
-        case SearchBar.SearchPrefixType.DefaultSearch:
-            return "search";
-        default:
-            return "search";
+        text: {
+            const panelIcon = String(root.activePanel?.searchIcon ?? "");
+            if (root.activePanelMode && panelIcon.length > 0)
+                return panelIcon;
+            switch (root.searchPrefixType) {
+            case SearchBar.SearchPrefixType.Action:
+                return "settings_suggest";
+            case SearchBar.SearchPrefixType.App:
+                return "apps";
+            case SearchBar.SearchPrefixType.Clipboard:
+                return "content_paste_search";
+            case SearchBar.SearchPrefixType.Emojis:
+                return "add_reaction";
+            case SearchBar.SearchPrefixType.Math:
+                return "calculate";
+            case SearchBar.SearchPrefixType.ShellCommand:
+                return "terminal";
+            case SearchBar.SearchPrefixType.WebSearch:
+                return "travel_explore";
+            case SearchBar.SearchPrefixType.WindowSearch:
+                return "select_window";
+            case SearchBar.SearchPrefixType.FileBrowser:
+                return "folder_open";
+            case SearchBar.SearchPrefixType.Translator:
+                return "translate";
+            case SearchBar.SearchPrefixType.MediaDownloader:
+                return "download";
+            case SearchBar.SearchPrefixType.MaterialSymbols:
+                return "font_download";
+            case SearchBar.SearchPrefixType.AiChat:
+                return "auto_awesome";
+            case SearchBar.SearchPrefixType.Suggestions:
+                return "explore";
+            case SearchBar.SearchPrefixType.DefaultSearch:
+                return "search";
+            default:
+                return "search";
+            }
         }
     }
     ToolbarTextField { // Search box

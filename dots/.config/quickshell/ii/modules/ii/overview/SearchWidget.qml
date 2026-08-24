@@ -45,6 +45,10 @@ Item {
     // One page is what the list can plausibly show plus scroll buffer. The
     // ListView only builds delegates for visible rows, so the cost of a page is
     // the ListModel ops, not the delegates.
+    // Inset a result row keeps from the panel's edge. The list's bottom padding
+    // reads as the same edge, so both come from here rather than drifting apart
+    // as two separate literals.
+    readonly property real rowSideMargin: Appearance.sizes.elevationMargin
     readonly property int resultPageSize: 30
     // Tallest the result list is allowed to get before it starts scrolling.
     readonly property real maxResultsHeight: 600
@@ -1114,6 +1118,7 @@ Item {
 
                 clipboardMode: root.isClipboardMode || root.isBluetoothMode || root.isTranslatorMode || root.isMediaDownloaderMode || root.isMaterialSymbolsMode
                 activePanelMode: root.isAnySpecialMode
+                activePanel: root.activePanel
                 activePanelQueryEmpty: root.activePanelQuery.trim().length === 0
                 supportsPanelSectionToggle: root.activePanelItem?.supportsSectionToggle === true
                 clipboardWidth: 830
@@ -1287,7 +1292,12 @@ Item {
                     }
                     clip: true
                     topMargin: 0
-                    bottomMargin: (GlobalStates.searchConnectActive ? 12 : 6)
+                    // Matches the rows' own side inset: the gap under the last row
+                    // and the gap beside every row are the same edge of the panel,
+                    // and they were 6 against 10. Connect mode keeps its own value —
+                    // there the grid adds 24px gutters on top of the row inset, so
+                    // the two gaps are not the same relationship to begin with.
+                    bottomMargin: (GlobalStates.searchConnectActive ? 12 : root.rowSideMargin)
                         + (root.actionFeedbackText.length > 0 ? actionFeedbackBar.height + Appearance.sizes.elevationMargin / 2 : 0)
                     spacing: 2
                     KeyNavigation.up: searchBar
@@ -1778,6 +1788,7 @@ Item {
                                 entry: resultDelegate.modelData.modelRef
                                 isFirst: resultDelegate.modelData.isFirst === true
                                 isLast: resultDelegate.modelData.isLast === true
+                                horizontalMargin: root.rowSideMargin
                                 // The delegate owns the entrance for every row kind,
                                 // captions included; a second fade underneath it only
                                 // muddies the curve.
