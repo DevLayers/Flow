@@ -20,6 +20,10 @@ Rectangle {
 
     /// Every key the section owns. The note reports on whichever of them has something to say.
     property var keys: []
+    /// Extra lines the section wants in the same footer, as `{ icon, text }`. For the things a
+    /// key's own state cannot say - an option that moved to another syntax, a setting that only
+    /// applies on some hardware - so a section still has one place where the caveats live.
+    property var notes: []
 
     readonly property var optionStates: Array.from(root.keys).map(key => HyprlandGui.resolve(key))
     readonly property var managed: root.optionStates.filter(state => state.isManaged)
@@ -55,6 +59,8 @@ Rectangle {
                     : Translation.tr("%1 is set by hand at %2.").arg(root.shortName(state.key)).arg(where)
             });
         }
+        for (const note of Array.from(root.notes))
+            out.push(note);
         return out;
     }
 

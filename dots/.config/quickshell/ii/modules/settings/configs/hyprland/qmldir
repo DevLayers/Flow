@@ -11,6 +11,7 @@ HyprSelect 1.0 HyprSelect.qml
 HyprTextField 1.0 HyprTextField.qml
 HyprXkbOptionSwitch 1.0 HyprXkbOptionSwitch.qml
 HyprDeviceCard 1.0 HyprDeviceCard.qml
+HyprLayoutPreview 1.0 HyprLayoutPreview.qml
 HyprKeyboardLayoutPage 1.0 HyprKeyboardLayoutPage.qml
 InputTab 1.0 InputTab.qml
 LayoutTab 1.0 LayoutTab.qml
