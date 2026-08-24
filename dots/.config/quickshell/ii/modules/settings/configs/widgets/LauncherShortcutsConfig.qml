@@ -30,7 +30,11 @@ Item {
         { actionId: "createFolder", name: Translation.tr("Create folder"), keys: "Ctrl+Shift+N", icon: "create_new_folder" },
         { actionId: "duplicate", name: Translation.tr("Duplicate selected file"), keys: "Ctrl+D", icon: "control_point_duplicate" },
         { actionId: "toggleHidden", name: Translation.tr("Show or hide dotfiles"), keys: "Ctrl+H", icon: "visibility" },
-        { actionId: "refresh", name: Translation.tr("Refresh current panel"), keys: "Ctrl+R", icon: "refresh" }
+        { actionId: "refresh", name: Translation.tr("Refresh current panel"), keys: "Ctrl+R", icon: "refresh" },
+        { actionId: "stageCopy", name: Translation.tr("Copy files for paste"), keys: "Ctrl+Shift+C", icon: "file_copy" },
+        { actionId: "sortFiles", name: Translation.tr("Change file sort order"), keys: "Ctrl+Shift+S", icon: "sort" },
+        { actionId: "goHome", name: Translation.tr("Go to home directory"), keys: "Ctrl+Home", icon: "home" },
+        { actionId: "forward", name: Translation.tr("Go forward in panel history"), keys: "Alt+Right", icon: "arrow_forward" }
     ]
     property string collisionActionId: ""
 

@@ -13,6 +13,14 @@ Item {
     property bool inNotchMode: false
     property var activePanel: SearchPanelRegistry.byId(activePanelId)
     property Item activeItem: null
+    readonly property bool keepAlive: {
+        for (let index = 0; index < panelRepeater.count; index++) {
+            const loader = panelRepeater.itemAt(index);
+            if (loader?.keepAlive === true)
+                return true;
+        }
+        return false;
+    }
 
     // The registry owns hosted-panel geometry. Individual panels may retain
     // legacy implicit widths, but they fill this host and must not shrink it.
@@ -27,6 +35,7 @@ Item {
     }
 
     Repeater {
+        id: panelRepeater
         model: SearchPanelRegistry.enabledPanels
 
         delegate: Loader {
@@ -34,9 +43,13 @@ Item {
             required property var modelData
 
             readonly property bool isActive: root.activePanelId === modelData.id
+            readonly property bool keepAlive: item?.keepAlive === true
 
             anchors.fill: parent
-            active: isActive || opacity > 0.01
+            // A hidden file operation must be allowed to finish after Search
+            // returns to its default level. Destroying the Loader here used to
+            // terminate an in-flight cross-filesystem move halfway through.
+            active: isActive || opacity > 0.01 || keepAlive
             visible: opacity > 0.01
             source: modelData.source
             opacity: isActive ? 1.0 : 0.0

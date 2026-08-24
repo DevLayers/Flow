@@ -66,6 +66,28 @@ Singleton {
         }
     }
 
+    function fileBrowserQueryForPath(path): string {
+        const home = FileUtils.trimFileProtocol(Directories.home).replace(/\/$/, "");
+        const rawTarget = FileUtils.trimFileProtocol(String(path ?? ""));
+        let target = rawTarget === "/" ? "/" : rawTarget.replace(/\/$/, "");
+        if (target === "~")
+            target = home;
+        else if (target.startsWith("~/"))
+            target = home + target.slice(1);
+        else if (target.length === 0)
+            target = home;
+        else if (!target.startsWith("/"))
+            target = home + "/" + target;
+        let encoded = "";
+        if (target === home)
+            encoded = "/";
+        else if (target.startsWith(home + "/"))
+            encoded = target.slice(home.length) + "/";
+        else
+            encoded = "/" + target + "/";
+        return Config.options.search.prefix.fileBrowser + encoded;
+    }
+
     function queryUsesPrefix(value) {
         const prefixes = SearchPanelRegistry.activePrefixes.concat(root.enabledUtilityPrefixes());
         return prefixes.some(prefix => String(value ?? "").startsWith(prefix));
@@ -74,6 +96,76 @@ Singleton {
     // Called from SearchItem to open settings - must be a QML function (not a JS closure)
     // so that GlobalStates is accessible in the correct QML context
     signal requestOpenSettings
+
+    /**
+     * Application matching, as a cascade of increasingly forgiving passes.
+     *
+     * Each tier answers a different way of getting the query wrong, and the
+     * order is the order of confidence — a later tier only ever adds names the
+     * earlier ones did not already find:
+     *
+     *  1. the query as typed;
+     *  2. the query mapped back through each keyboard layout, for when someone
+     *     typed the right keys with the wrong layout active ("ашкуащч" is
+     *     "firefox" on a Ukrainian map);
+     *  3. Cyrillic transliterated to Latin, for a query that is spelled rather
+     *     than mistyped;
+     *  4. typo tolerance (Myers edit distance) — the one pass that will happily
+     *     match something the user did not mean.
+     *
+     * Tiers 2–4 all run only on an empty first tier, which is what keeps them
+     * free. Upstream runs the layout tiers unconditionally; that is five extra
+     * fuzzy passes over the whole application list on every keystroke of every
+     * query that already worked, and a wrong-layout query matches nothing
+     * directly by definition — so there is nothing to gain by running them when
+     * it did. Each tier is also behind its own switch.
+     */
+    function matchApplications(query: string): var {
+        const primary = AppSearch.fuzzyQuery(query);
+        const settings = Config.options.search.typoTolerance;
+        const layoutsEnabled = settings?.keyboardLayouts !== false;
+        const typosEnabled = settings?.enable === true;
+        if (!layoutsEnabled && !typosEnabled)
+            return primary;
+        if (query.length === 0)
+            return primary;
+
+        const seenIds = new Set();
+        for (let i = 0; i < primary.length; i++)
+            seenIds.add(primary[i].id);
+
+        const unseen = entries => {
+            const kept = [];
+            for (let i = 0; i < entries.length; i++) {
+                const id = entries[i].id;
+                if (seenIds.has(id))
+                    continue;
+                seenIds.add(id);
+                kept.push(entries[i]);
+            }
+            return kept;
+        };
+
+        // Nothing below this point can help a query that already found its app.
+        if (primary.length > 0)
+            return primary;
+
+        let extra = [];
+        if (layoutsEnabled) {
+            const variants = KeymapTranslation.translateAll(query);
+            for (let i = 0; i < variants.length; i++)
+                extra = extra.concat(unseen(AppSearch.fuzzyQuery(variants[i])));
+
+            const transliterated = KeymapTranslation.transliterate(query);
+            if (transliterated.length > 0 && transliterated !== query)
+                extra = extra.concat(unseen(AppSearch.fuzzyQuery(transliterated)));
+        }
+
+        if (typosEnabled && extra.length === 0)
+            extra = extra.concat(unseen(AppSearch.typoQuery(query)));
+
+        return primary.concat(extra);
+    }
 
     function isMathQuery(expr) {
         if (!Config.options.search.modules.math)
@@ -1127,7 +1219,35 @@ Singleton {
         return "app:" + (app && app.id ? app.id : "");
     }
 
+    /**
+     * Application rows depend only on their desktop entry, and that list changes
+     * on a rescan — not on a keystroke. Rebuilding sixty QObjects plus their
+     * nested action objects for every letter typed was the largest allocation
+     * left on the input path.
+     *
+     * Sharing the objects also means the result list's diff sees the same
+     * reference for an unchanged row, so it rewrites no roles and rebinds no
+     * delegate.
+     */
+    property var appResultCache: ({})
+
+    Connections {
+        target: AppSearch
+        function onListChanged() {
+            root.appResultCache = ({});
+        }
+    }
+
     function createAppResultObject(entry) {
+        const cached = root.appResultCache[entry.id];
+        if (cached)
+            return cached;
+        const result = root.buildAppResultObject(entry);
+        root.appResultCache[entry.id] = result;
+        return result;
+    }
+
+    function buildAppResultObject(entry) {
         return resultComp.createObject(null, {
             key: root.appResultKey(entry),
             type: Translation.tr("App"),
@@ -1411,9 +1531,8 @@ Singleton {
                         iconName: "folder_data",
                         iconType: LauncherSearchResult.IconType.Material,
                         execute: () => {
-                            const home = FileUtils.trimFileProtocol(Directories.home);
                             const target = isDirectory ? path : parent;
-                            root.query = Config.options.search.prefix.fileBrowser + target.replace(home, "") + "/";
+                            root.query = root.fileBrowserQueryForPath(target);
                         }
                     })]
             });
@@ -1421,7 +1540,8 @@ Singleton {
 
         // MPRIS handled above (empty query case)
 
-        const appResultObjects = AppSearch.fuzzyQuery(StringUtils.cleanPrefix(root.query, Config.options.search.prefix.app)).slice(0, 60).map(entry => root.createAppResultObject(entry));
+        const appQuery = StringUtils.cleanPrefix(root.query, Config.options.search.prefix.app);
+        const appResultObjects = root.matchApplications(appQuery).slice(0, 60).map(entry => root.createAppResultObject(entry));
         const settingsSearchActive = root.isSettingsSearchQuery(root.query)
             && Config.options.search.modules.settingsToggles.enable;
         const settingsMatches = settingsSearchActive && root.settingsIndexReady
@@ -1567,8 +1687,9 @@ Singleton {
                         iconType: LauncherSearchResult.IconType.Material,
                         verb: Translation.tr("Browse"),
                         type: Translation.tr("Folder Alias"),
+                        comment: entry.target,
                         execute: () => {
-                            root.query = Config.options.search.prefix.fileBrowser + entry.target;
+                            root.query = root.fileBrowserQueryForPath(entry.target);
                         }
                     });
                 } else if (entry.type === "command") {

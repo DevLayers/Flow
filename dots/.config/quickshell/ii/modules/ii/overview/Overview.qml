@@ -34,12 +34,13 @@ Scope {
                     readonly property HyprlandMonitor monitor: Hyprland.monitorFor(modelData)
                     property int monitorIndex: overviewVariant.variantModel.indexOf(modelData)
                     property bool monitorIsFocused: (Hyprland.focusedMonitor?.name === monitor?.name) || (Hyprland.focusedMonitor?.id == monitorIndex)
+                    property bool contentKeepAlive: false
                     // Keep the focused window alive while it is visible or
                     // while its closing animation still has pixels on screen.
                     // The Scope and IPC shortcuts remain loaded, but this
                     // expensive per-monitor PanelWindow is destroyed otherwise.
                     property bool visualActive: false
-                    active: monitorIsFocused && (GlobalStates.overviewOpen || visualActive)
+                    active: contentKeepAlive || (monitorIsFocused && (GlobalStates.overviewOpen || visualActive))
 
                     onMonitorIsFocusedChanged: {
                         if (!monitorIsFocused)
@@ -52,6 +53,7 @@ Scope {
                         screen: realOverviewLoader.modelData
                         readonly property bool monitorIsFocused: realOverviewLoader.monitorIsFocused
                         readonly property int monitorIndex: realOverviewLoader.monitorIndex
+                        readonly property bool keepAlive: searchWidget.keepAlive
                         readonly property bool isBottomBar: !Config.options.bar.vertical && Config.options.bar.bottom
 
                         readonly property bool isScrollingLayout: Persistent.states.hyprland.layout === "scrolling"
@@ -152,6 +154,9 @@ Scope {
                             root._overviewRevealInitialized = true;
                             root.consumePendingSearchQuery();
                         }
+
+                        onKeepAliveChanged: realOverviewLoader.contentKeepAlive = keepAlive
+                        Component.onDestruction: realOverviewLoader.contentKeepAlive = false
 
                         visible: GlobalStates.overviewOpen || searchWidgetWrapper.slideOpacity > 0
                         onVisibleChanged: {
@@ -399,8 +404,11 @@ Scope {
                                 }
 
                                 width: implicitWidth
+                                readonly property real centeredPreferredY: parent.height * Config.options.search.centerVerticalRatio - 29
+                                readonly property real centeredSafeInset: root.margin * 2 + Appearance.sizes.elevationMargin
+                                readonly property real centeredMaximumY: parent.height - searchWidget.implicitHeight - centeredSafeInset
                                 y: GlobalStates.searchCenterMode
-                                    ? (parent.height * Config.options.search.centerVerticalRatio - 29)
+                                    ? Math.max(centeredSafeInset, Math.min(centeredPreferredY, centeredMaximumY))
                                     : (root.isBottomBar ? (parent.height - searchWidget.implicitHeight - (root.margin * 2 + Appearance.sizes.elevationMargin)) : (root.margin * 2 + Appearance.sizes.elevationMargin))
                                 anchors.horizontalCenter: parent.horizontalCenter
 

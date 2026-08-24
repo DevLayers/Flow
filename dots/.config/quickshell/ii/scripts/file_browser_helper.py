@@ -37,7 +37,12 @@ def emit(payload: dict[str, Any], exit_code: int = 0) -> None:
 
 
 def normalized_path(value: str) -> str:
-    return os.path.abspath(os.path.expandvars(os.path.expanduser(value)))
+    # Paths selected by the browser are filesystem data, not a shell command.
+    # Expanding environment variables here silently redirected literal names
+    # such as "$HOME" to another file during rename/copy/trash operations.
+    # Keep leading-tilde convenience for explicit navigation, but preserve all
+    # other characters exactly as they appear on disk.
+    return os.path.abspath(os.path.expanduser(value))
 
 
 def owner_name(uid: int) -> str:
@@ -77,6 +82,7 @@ def entry_payload(path: str, name: str | None = None) -> dict[str, Any]:
     is_dir = os.path.isdir(path)
     is_link = stat.S_ISLNK(mode)
     suffix = Path(filename).suffix.lower()
+    has_birth_time = hasattr(info, "st_birthtime")
     return {
         "name": filename,
         "path": path,
@@ -91,6 +97,7 @@ def entry_payload(path: str, name: str | None = None) -> dict[str, Any]:
         "size": int(info.st_size),
         "modifiedMs": int(info.st_mtime * 1000),
         "createdMs": int(getattr(info, "st_birthtime", info.st_ctime) * 1000),
+        "createdIsChangeTime": not has_birth_time,
         "permissions": stat.filemode(mode),
         "mode": format(stat.S_IMODE(mode), "04o"),
         "owner": owner_name(info.st_uid),
@@ -109,7 +116,7 @@ def entry_payload(path: str, name: str | None = None) -> dict[str, Any]:
 def list_directory(args: argparse.Namespace) -> None:
     path = normalized_path(args.path)
     if not os.path.isdir(path):
-        emit({"ok": False, "operation": "list", "path": path, "error": "Not a readable directory"}, 1)
+        emit({"ok": False, "operation": "list", "requestedPath": args.path, "path": path, "error": "Not a readable directory"}, 1)
 
     entries: list[dict[str, Any]] = []
     skipped = 0
@@ -119,14 +126,14 @@ def list_directory(args: argparse.Namespace) -> None:
                 if not args.hidden and item.name.startswith("."):
                     continue
                 if len(entries) >= args.limit:
-                    skipped += 1
-                    continue
+                    skipped = 1
+                    break
                 try:
                     entries.append(entry_payload(item.path, item.name))
                 except OSError:
                     skipped += 1
     except OSError as error:
-        emit({"ok": False, "operation": "list", "path": path, "error": str(error)}, 1)
+        emit({"ok": False, "operation": "list", "requestedPath": args.path, "path": path, "error": str(error)}, 1)
 
     key_functions = {
         "name": lambda item: str(item["name"]).casefold(),
@@ -166,7 +173,7 @@ def inspect_path(args: argparse.Namespace) -> None:
     try:
         payload = entry_payload(path)
     except OSError as error:
-        emit({"ok": False, "operation": "inspect", "path": path, "error": str(error)}, 1)
+        emit({"ok": False, "operation": "inspect", "requestedPath": args.path, "path": path, "error": str(error)}, 1)
 
     if not payload["isDir"]:
         try:
@@ -256,6 +263,17 @@ def copy_one(source: str, destination_directory: str) -> str:
     return target
 
 
+def destination_inside_source(source: str, destination: str) -> bool:
+    if not os.path.isdir(source) or os.path.islink(source):
+        return False
+    source_real = os.path.realpath(source)
+    destination_real = os.path.realpath(destination)
+    try:
+        return os.path.commonpath([source_real, destination_real]) == source_real
+    except ValueError:
+        return False
+
+
 def parsed_paths(raw: str) -> list[str]:
     value = json.loads(raw or "[]")
     if not isinstance(value, list):
@@ -293,9 +311,14 @@ def operate(args: argparse.Namespace) -> None:
             if not os.path.isdir(destination):
                 raise NotADirectoryError(destination)
             for source in parsed_paths(args.paths_json):
+                if destination_inside_source(source, destination):
+                    raise ValueError("A directory cannot be copied or moved inside itself")
                 if operation == "copy":
                     affected.append(copy_one(source, destination))
                 else:
+                    if os.path.dirname(source.rstrip(os.sep)) == destination:
+                        affected.append(source)
+                        continue
                     target = available_destination(destination, os.path.basename(source.rstrip(os.sep)))
                     affected.append(shutil.move(source, target))
         elif operation == "trash":

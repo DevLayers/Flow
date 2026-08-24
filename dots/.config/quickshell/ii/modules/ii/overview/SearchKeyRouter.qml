@@ -33,6 +33,14 @@ QtObject {
             root.resultsList.currentIndex = target;
             return true;
         }
+        case "sectionPrevious":
+        case "sectionNext": {
+            // Grouped lists only. A panel without groups declines and the key
+            // simply does nothing, rather than moving the cursor a row.
+            if (typeof root.resultsList.sectionJump !== "function")
+                return false;
+            return root.resultsList.sectionJump(methodName === "sectionPrevious" ? -1 : 1);
+        }
         case "navigateLeft":
         case "navigateRight":
             return root.searchWidget?.navigateSelectedResult(methodName === "navigateLeft" ? "left" : "right") ?? false;

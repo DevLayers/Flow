@@ -35,6 +35,45 @@ Item {
                     onCheckedChanged: Config.options.search.frecency = checked
                 }
                 ConfigSwitch {
+                    buttonIcon: "keyboard_alt"
+                    text: Translation.tr("Correct wrong keyboard layout")
+                    description: Translation.tr("Maps a query typed with another layout active back through the physical keys, so ‘ашкуащч’ still finds Firefox. Cyrillic is transliterated as well.")
+                    checked: Config.options.search.typoTolerance.keyboardLayouts
+                    onCheckedChanged: Config.options.search.typoTolerance.keyboardLayouts = checked
+                }
+                ConfigSwitch {
+                    buttonIcon: "spellcheck"
+                    text: Translation.tr("Typo-tolerant matching (Myers)")
+                    description: Translation.tr("When nothing matches exactly, a bit-parallel edit-distance pass finds the app you meant — ‘disccord’, ‘telgeram’, ‘vscdoe’. It runs only on an otherwise empty result, so it never crowds a query that already worked.")
+                    checked: Config.options.search.typoTolerance.enable
+                    onCheckedChanged: Config.options.search.typoTolerance.enable = checked
+                }
+                ConfigSlider {
+                    buttonIcon: "tune"
+                    text: Translation.tr("Typo tolerance strictness")
+                    value: Config.options.search.typoTolerance.threshold
+                    from: 0.15
+                    to: 0.6
+                    stepSize: 0.05
+                    enabled: Config.options.search.typoTolerance.enable
+                    onValueChanged: Config.options.search.typoTolerance.threshold = value
+                    StyledToolTip {
+                        text: Translation.tr("How close a name has to be before the typo pass offers it. Lower catches more mangled queries and lets more unrelated names through.")
+                    }
+                }
+                ConfigSlider {
+                    buttonIcon: "filter_alt"
+                    text: Translation.tr("Result relevance floor")
+                    value: Config.options.search.fuzzyThreshold
+                    from: 0.0
+                    to: 0.7
+                    stepSize: 0.05
+                    onValueChanged: Config.options.search.fuzzyThreshold = value
+                    StyledToolTip {
+                        text: Translation.tr("Fuzzy matching accepts any scattered subsequence, so without a floor ‘file’ reaches names that merely contain those letters somewhere. Raise it for a shorter, stricter list.")
+                    }
+                }
+                ConfigSwitch {
                     buttonIcon: "apps"
                     text: Translation.tr("Always list apps on empty query")
                     description: Translation.tr("Shows applications before you type instead of keeping Search as a compact empty field.")

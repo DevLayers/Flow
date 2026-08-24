@@ -2,7 +2,6 @@ pragma ComponentBehavior: Bound
 
 import Qt5Compat.GraphicalEffects
 import QtQuick
-import QtQuick.Effects
 import QtQuick.Layouts
 import Quickshell
 import Quickshell.Io
@@ -18,7 +17,7 @@ import qs.modules.common.functions
 Item {
     id: root
     width: implicitWidth
-    height: searchWidgetContent.height + (GlobalStates.searchConnectActive ? 0 : Appearance.sizes.elevationMargin * 2)
+    height: (root.exiting ? root.exitHeight : searchWidgetContent.height) + (GlobalStates.searchConnectActive ? 0 : Appearance.sizes.elevationMargin * 2)
     focus: true
     signal requestToggleActions
     property bool inNotchMode: false
@@ -26,6 +25,22 @@ Item {
     // the monitor that is actually rendering the Search surface.
     property string surfaceMonitorName: ""
     property string routedSessionRequestId: ""
+    // File operations are process-backed and must outlive the visible Search
+    // surface. The per-monitor Overview host propagates this through its lazy
+    // loader, keeping the invisible object tree alive until work completes.
+    readonly property bool keepAlive: registeredPanelHostLoader.keepAlive
+    readonly property var surfaceScreen: Quickshell.screens.find(screen => screen.name === root.surfaceMonitorName) ?? null
+    // Saved panel preferences are never rewritten when the Search moves to a
+    // smaller monitor. Only the rendered surface is clamped to a safe viewport.
+    readonly property real maximumSurfaceWidth: root.surfaceScreen
+        ? Math.max(320, root.surfaceScreen.width - Appearance.sizes.elevationMargin * 4)
+        : Number.POSITIVE_INFINITY
+    readonly property real maximumSurfaceHeight: root.surfaceScreen
+        ? Math.max(320, root.surfaceScreen.height - Appearance.sizes.elevationMargin * 8)
+        : Number.POSITIVE_INFINITY
+    readonly property real activePanelHeightBudget: Math.max(280,
+        root.maximumSurfaceHeight
+            - (root.isAiMode ? 16 : searchBar.implicitHeight + searchBar.verticalPadding * 2 + 10))
     // Explicit panel requests come from normal search rows and external
     // deep-links. The text remains editable as that panel's local filter.
     property string requestedPanelId: ""
@@ -344,6 +359,34 @@ Item {
         onTriggered: root.suppressItemTransitions = false
     }
 
+    /**
+     * Geometry is held still for the length of the close.
+     *
+     * Closing the overview clears the query and the rows, which collapses this
+     * container from a full result list back to the bare field. That collapse
+     * used to run *while* the window was already sliding out, so closing with
+     * results on screen read as a faster, harsher animation than closing with
+     * an empty field — two motions stacked on one another instead of one. It
+     * also dragged the wrapper's scale origin, which is bound to half the
+     * widget's height, along with it.
+     *
+     * Holding the last size means the widget leaves exactly the way an empty
+     * one does. What it contains is irrelevant by then: the whole thing is
+     * fading out.
+     */
+    property bool exiting: false
+    property real exitWidth: 0
+    property real exitHeight: 0
+
+    Timer {
+        id: exitHoldTimer
+        // Past the overview window's own exit, after which none of this is on
+        // screen and the size stops mattering.
+        interval: 400
+        repeat: false
+        onTriggered: root.exiting = false
+    }
+
     // Suppress item transitions during panel open/close to avoid flicker
     property bool suppressItemTransitions: true
 
@@ -383,6 +426,8 @@ Item {
         target: GlobalStates
         function onOverviewOpenChanged() {
             if (GlobalStates.overviewOpen) {
+                exitHoldTimer.stop();
+                root.exiting = false;
                 // Suppress transitions while panel is animating open
                 root.suppressItemTransitions = true;
                 // Wipe stale results immediately so panel opens empty (no ghost expansion)
@@ -397,6 +442,14 @@ Item {
                 // Re-enable transitions after open animation
                 enableTransitionsTimer.restart();
             } else {
+                // Freeze the size *before* anything below can shrink it: the
+                // query is cleared by another handler on this same signal.
+                if (!GlobalStates.searchConnectActive) {
+                    root.exitWidth = searchWidgetContent.width;
+                    root.exitHeight = searchWidgetContent.height;
+                    root.exiting = true;
+                    exitHoldTimer.restart();
+                }
                 // Suppress transitions then clear immediately.
                 // Since suppressItemTransitions=true, remove transitions run at duration:0
                 // (instantaneous/invisible), so no flicker even though model clears now.
@@ -415,8 +468,8 @@ Item {
             });
         }
     }
-    implicitWidth: searchWidgetContent.implicitWidth + (GlobalStates.searchConnectActive ? 0 : Appearance.sizes.elevationMargin * 2)
-    implicitHeight: searchWidgetContent.implicitHeight + (GlobalStates.searchConnectActive ? 0 : Appearance.sizes.elevationMargin * 2)
+    implicitWidth: (root.exiting ? root.exitWidth : searchWidgetContent.implicitWidth) + (GlobalStates.searchConnectActive ? 0 : Appearance.sizes.elevationMargin * 2)
+    implicitHeight: (root.exiting ? root.exitHeight : searchWidgetContent.implicitHeight) + (GlobalStates.searchConnectActive ? 0 : Appearance.sizes.elevationMargin * 2)
 
     // Track animation state via Connections to the animation IDs
     property bool _heightAnimating: false
@@ -864,6 +917,16 @@ Item {
             }
         }
 
+        // A caption tells one group apart from the next. When there is only one
+        // group it names nothing, and costs 30px plus a line to read at the top
+        // of every short query.
+        let groupCount = 0;
+        for (let s = 0; s < root.sectionOrder.length; s++) {
+            if ((takes[root.sectionOrder[s]] ?? 0) > 0)
+                groupCount++;
+        }
+        const showCaptions = groupCount > 1;
+
         const rows = [];
         for (let s = 0; s < root.sectionOrder.length; s++) {
             const sectionId = root.sectionOrder[s];
@@ -871,14 +934,15 @@ Item {
             if (take <= 0)
                 continue;
             const items = buckets[sectionId];
-            rows.push({
-                key: "section:" + sectionId,
-                sectionId: sectionId,
-                isHeader: true,
-                isFirst: false,
-                isLast: false,
-                ref: null
-            });
+            if (showCaptions)
+                rows.push({
+                    key: "section:" + sectionId,
+                    sectionId: sectionId,
+                    isHeader: true,
+                    isFirst: false,
+                    isLast: false,
+                    ref: null
+                });
             for (let i = 0; i < take; i++) {
                 const item = items[i];
                 rows.push({
@@ -1026,10 +1090,16 @@ Item {
         // Centered vertically like every other mode — the AI panel is just
         // another panel below the search bar, same as clipboard/translator.
         anchors.centerIn: parent
-        width: GlobalStates.searchConnectActive ? parent.width : implicitWidth
-        height: GlobalStates.searchConnectActive ? parent.height : implicitHeight
+        width: GlobalStates.searchConnectActive ? parent.width : (root.exiting ? root.exitWidth : implicitWidth)
+        height: GlobalStates.searchConnectActive ? parent.height : (root.exiting ? root.exitHeight : implicitHeight)
         clip: true
+        // An antialiased rounded clip costs a render target recreated on every
+        // frame of the height animation. Result rows are inset by
+        // `rowSideMargin` and rounded themselves, so they never reach the
+        // container's corners — only the hosted panels, which draw to their own
+        // edges, actually need the mask.
         layer.enabled: !GlobalStates.searchConnectActive
+            && (root.activePanelUsesHost || root.isAiMode || root.showSuggestionsPanel)
         layer.effect: OpacityMask {
             maskSource: Rectangle {
                 width: searchWidgetContent.width
@@ -1053,16 +1123,19 @@ Item {
             // In notch mode, the DI container already provides horizontal spacing.
             // Only add the 48px offset in non-notch connect mode.
             if (GlobalStates.searchConnectActive && !root.inNotchMode)
-                return baseW + 48;
-            return baseW;
+                baseW += 48;
+            return Math.min(baseW, root.maximumSurfaceWidth);
         }
         implicitHeight: {
             let bottomMargin = GlobalStates.searchConnectActive ? 16 : 10;
+            let desiredHeight = 0;
             if (root.showSuggestionsPanel)
-                return (suggestionsPanelLoader.item ? suggestionsPanelLoader.item.implicitHeight : (Config.options.search.baseHeight ?? 500)) + searchBar.height + searchBar.verticalPadding * 2 + bottomMargin;
-            if (root.activePanel)
-                return (root.activePanelItem?.implicitHeight ?? 520) + (root.isAiMode ? 16 : searchBar.height + searchBar.verticalPadding * 2 + bottomMargin);
-            return gridLayout.implicitHeight;
+                desiredHeight = (suggestionsPanelLoader.item ? suggestionsPanelLoader.item.implicitHeight : (Config.options.search.baseHeight ?? 500)) + searchBar.height + searchBar.verticalPadding * 2 + bottomMargin;
+            else if (root.activePanel)
+                desiredHeight = (root.activePanelItem?.implicitHeight ?? 520) + (root.isAiMode ? 16 : searchBar.height + searchBar.verticalPadding * 2 + bottomMargin);
+            else
+                desiredHeight = gridLayout.implicitHeight;
+            return Math.min(desiredHeight, root.maximumSurfaceHeight);
         }
         // The collapsed field needs a pill; expanded content must use the same
         // corner as the other shell windows. Switching on `showResults` flipped
@@ -1226,6 +1299,9 @@ Item {
                         root.sendAiMessage();
                 }
 
+                onNavigateSectionUp: searchKeyRouter.dispatch("sectionPrevious")
+                onNavigateSectionDown: searchKeyRouter.dispatch("sectionNext")
+
                 onNavigateUp: {
                     if (root.showSuggestionsPanel) {
                         if (suggestionsPanelLoader.item)
@@ -1280,7 +1356,7 @@ Item {
                 readonly property bool registeredPanelActive: root.activePanelUsesHost
                 Layout.fillWidth: true
                 implicitHeight: registeredPanelActive
-                    ? (registeredPanelHostLoader.item?.implicitHeight ?? 0)
+                    ? Math.min(registeredPanelHostLoader.item?.implicitHeight ?? 0, root.activePanelHeightBudget)
                     : (root.isAiMode
                         ? (aiPanelLoader.item?.implicitHeight ?? 520) + Appearance.sizes.elevationMargin * 2
                         : (root.showSuggestionsPanel
@@ -1374,6 +1450,41 @@ Item {
                     function selectFirst() {
                         const target = appResults.selectableIndex(0, 1);
                         appResults.currentIndex = target;
+                    }
+
+                    /**
+                     * Move the cursor to the first row of the next or previous
+                     * group. With four groups on screen, reaching the last one
+                     * a row at a time costs ten keystrokes.
+                     */
+                    function sectionJump(step: int): bool {
+                        if (resultModel.count === 0)
+                            return false;
+                        const from = Math.max(0, appResults.currentIndex);
+                        const current = String(resultModel.get(from)?.sectionId ?? "");
+                        for (let i = from + step; i >= 0 && i < resultModel.count; i += step) {
+                            const row = resultModel.get(i);
+                            if (row.isHeader === true || String(row.sectionId) === current)
+                                continue;
+                            // Going up lands on the *first* row of that group,
+                            // not the last one the scan happened to reach.
+                            const target = step < 0 ? appResults.sectionStart(i) : i;
+                            appResults.currentIndex = target;
+                            return true;
+                        }
+                        return false;
+                    }
+
+                    function sectionStart(rowIndex: int): int {
+                        const sectionId = String(resultModel.get(rowIndex)?.sectionId ?? "");
+                        let start = rowIndex;
+                        while (start > 0) {
+                            const previous = resultModel.get(start - 1);
+                            if (previous.isHeader === true || String(previous.sectionId) !== sectionId)
+                                break;
+                            start--;
+                        }
+                        return start;
                     }
 
                     function moveSelection(step: int): bool {
@@ -1505,9 +1616,12 @@ Item {
                     }
 
                     Behavior on contentY {
+                        // No alwaysRunToEnd: contentY is a Flickable's own
+                        // property, and refusing to be interrupted made the
+                        // animation fight both the native flick and the clamp
+                        // that happens every time a diff shrinks contentHeight.
                         NumberAnimation {
                             id: scrollAnim
-                            alwaysRunToEnd: true
                             duration: Appearance.animation.scroll.duration
                             easing.type: Appearance.animation.scroll.type
                             easing.bezierCurve: Appearance.animation.scroll.bezierCurve
@@ -2033,8 +2147,9 @@ Item {
                 Loader {
                     id: registeredPanelHostLoader
 
-                    active: searchResultsSurface.registeredPanelActive
-                    visible: active
+                    readonly property bool keepAlive: item?.keepAlive === true
+                    active: searchResultsSurface.registeredPanelActive || keepAlive
+                    visible: searchResultsSurface.registeredPanelActive
                     anchors.left: parent.left
                     anchors.right: parent.right
                     anchors.leftMargin: root.hostedPanelSideMargin
@@ -2060,14 +2175,11 @@ Item {
                     source: "AiChatPanel.qml"
                     opacity: root.isAiMode ? 1.0 : 0.0
 
+                    // Translate + fade, without the full-surface Gaussian blur that
+                    // used to run on exactly the frames where the container is also
+                    // animating its height. The motion already reads as arrival.
                     transform: Translate {
                         y: (1.0 - aiPanelLoader.opacity) * 16
-                    }
-                    layer.enabled: opacity > 0.001 && opacity < 0.999
-                    layer.effect: MultiEffect {
-                        blurEnabled: (1.0 - aiPanelLoader.opacity) > 0.001
-                        blurMax: 32.0
-                        blur: (1.0 - aiPanelLoader.opacity) * 0.5
                     }
                     Behavior on opacity {
                         enabled: !root.inNotchMode
@@ -2120,12 +2232,6 @@ Item {
 
                     transform: Translate {
                         y: (1.0 - suggestionsPanelLoader.opacity) * -16
-                    }
-                    layer.enabled: opacity > 0.001 && opacity < 0.999
-                    layer.effect: MultiEffect {
-                        blurEnabled: (1.0 - suggestionsPanelLoader.opacity) > 0.001
-                        blurMax: 32.0
-                        blur: (1.0 - suggestionsPanelLoader.opacity) * 0.5
                     }
                     Behavior on opacity {
                         enabled: !root.inNotchMode

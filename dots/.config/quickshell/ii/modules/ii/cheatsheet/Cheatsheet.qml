@@ -216,6 +216,7 @@ Scope {
                 registerGrabTimer.stop();
                 GlobalFocusGrab.removeDismissable(cheatsheetRoot);
                 cheatsheetBackground.animateIn = false;
+                cheatsheetBackground.ctrlPressed = false;
             }
 
             Timer {
@@ -263,7 +264,7 @@ Scope {
                 transformOrigin: Item.Center
                 scale: cheatsheetBackground.animateIn && GlobalStates.cheatsheetOpen ? 1.0 : 0.94
                 opacity: cheatsheetBackground.animateIn && GlobalStates.cheatsheetOpen ? 1.0 : 0.0
-                
+
                 Behavior on scale {
                     NumberAnimation {
                         duration: 250
@@ -304,272 +305,307 @@ Scope {
                     property real maxBgWidth: cheatsheetRoot.screen ? cheatsheetRoot.screen.width * 0.95 : 1900
                     property real maxBgHeight: cheatsheetRoot.screen ? cheatsheetRoot.screen.height * 0.80 : 1000
 
-                implicitWidth: Math.min(maxBgWidth, cheatsheetColumnLayout.implicitWidth + padding * 2)
-                implicitHeight: Math.min(maxBgHeight, cheatsheetColumnLayout.implicitHeight + padding * 2)
+                    implicitWidth: Math.min(maxBgWidth, cheatsheetColumnLayout.implicitWidth + padding * 2)
+                    implicitHeight: Math.min(maxBgHeight, cheatsheetColumnLayout.implicitHeight + padding * 2)
 
-                Keys.onPressed: event => {
-                    if (event.key === Qt.Key_Escape) {
-                        cheatsheetRoot.hide();
-                        event.accepted = true;
-                    } else if (event.key === Qt.Key_Slash) {
-                        if (swipeView.currentItem && swipeView.currentItem.item) {
-                            swipeView.currentItem.item.forceActiveFocus();
+                    focus: true
+                    property bool ctrlPressed: false
+
+                    Keys.priority: Keys.BeforeItem
+                    Keys.onPressed: event => {
+                        if (event.key === Qt.Key_Control || (event.modifiers & Qt.ControlModifier)) {
+                            cheatsheetBackground.ctrlPressed = true;
                         }
-                        event.accepted = true;
-                    } else if (event.key === Qt.Key_Tab) {
-                        tabBar.setCurrentIndex((tabBar.currentIndex + 1) % root.tabButtonList.length);
-                        event.accepted = true;
-                    } else if (event.key === Qt.Key_Backtab) {
-                        tabBar.setCurrentIndex((tabBar.currentIndex - 1 + root.tabButtonList.length) % root.tabButtonList.length);
-                        event.accepted = true;
-                    } else if (event.modifiers === Qt.ControlModifier) {
-                        if (event.key === Qt.Key_PageDown) {
-                            tabBar.incrementCurrentIndex();
+
+                        if (event.modifiers & Qt.ControlModifier) {
+                            if (event.key >= Qt.Key_1 && event.key <= Qt.Key_9) {
+                                const targetIndex = event.key - Qt.Key_1;
+                                if (targetIndex >= 0 && targetIndex < root.tabButtonList.length) {
+                                    tabBar.setCurrentIndex(targetIndex);
+                                    event.accepted = true;
+                                    return;
+                                }
+                            }
+                            if (event.key === Qt.Key_PageDown) {
+                                tabBar.incrementCurrentIndex();
+                                event.accepted = true;
+                                return;
+                            } else if (event.key === Qt.Key_PageUp) {
+                                tabBar.decrementCurrentIndex();
+                                event.accepted = true;
+                                return;
+                            }
+                        }
+
+                        if (event.key === Qt.Key_Escape) {
+                            cheatsheetRoot.hide();
                             event.accepted = true;
-                        } else if (event.key === Qt.Key_PageUp) {
-                            tabBar.decrementCurrentIndex();
+                        } else if (event.key === Qt.Key_Slash) {
+                            if (swipeView.currentItem && swipeView.currentItem.item) {
+                                swipeView.currentItem.item.forceActiveFocus();
+                            }
+                            event.accepted = true;
+                        } else if (event.key === Qt.Key_Tab) {
+                            tabBar.setCurrentIndex((tabBar.currentIndex + 1) % root.tabButtonList.length);
+                            event.accepted = true;
+                        } else if (event.key === Qt.Key_Backtab) {
+                            tabBar.setCurrentIndex((tabBar.currentIndex - 1 + root.tabButtonList.length) % root.tabButtonList.length);
                             event.accepted = true;
                         }
                     }
-                }
 
-                RippleButton {
-                    id: closeButton
-                    implicitWidth: 40
-                    implicitHeight: 40
-                    buttonRadius: Appearance.rounding.full
-                    anchors {
-                        top: parent.top
-                        right: parent.right
-                        topMargin: 20
-                        rightMargin: 20
-                    }
-
-                    scale: cheatsheetBackground.animateIn ? 1.0 : 0.0
-                    Behavior on scale {
-                        NumberAnimation {
-                            duration: 300
-                            easing.type: Easing.OutBack
-                            easing.overshoot: 1.5
+                    Keys.onReleased: event => {
+                        if (event.key === Qt.Key_Control || !(event.modifiers & Qt.ControlModifier)) {
+                            cheatsheetBackground.ctrlPressed = false;
                         }
                     }
 
-                    onClicked: {
-                        cheatsheetRoot.hide();
-                    }
+                    RippleButton {
+                        id: closeButton
+                        implicitWidth: 40
+                        implicitHeight: 40
+                        buttonRadius: Appearance.rounding.full
+                        anchors {
+                            top: parent.top
+                            right: parent.right
+                            topMargin: 20
+                            rightMargin: 20
+                        }
 
-                    contentItem: MaterialSymbol {
-                        anchors.centerIn: parent
-                        horizontalAlignment: Text.AlignHCenter
-                        font.pixelSize: Appearance.font.pixelSize.title
-                        text: "close"
-                        rotation: closeButton.isHovered ? 90 : 0
-                        Behavior on rotation {
+                        scale: cheatsheetBackground.animateIn ? 1.0 : 0.0
+                        Behavior on scale {
                             NumberAnimation {
-                                duration: 200
+                                duration: 300
                                 easing.type: Easing.OutBack
                                 easing.overshoot: 1.5
                             }
                         }
-                    }
-                }
 
-                // Left counterpart of the close button: only the timetable tab
-                // has two shapes to choose between, so it only appears there.
-                TimetableViewSwitch {
-                    id: timetableViewSwitch
-                    visible: root.tabButtonList[swipeView.currentIndex]?.icon === "calendar_month"
-                    animateIn: cheatsheetBackground.animateIn && timetableViewSwitch.visible
-                    compact: cheatsheetBackground.width < 1100
-                    // Anchored to the column (a sibling) rather than the tab
-                    // bar itself: an anchor may only target a parent or a
-                    // sibling, and the tab bar is a grandchild.
-                    anchors {
-                        left: parent.left
-                        leftMargin: 20
-                        top: cheatsheetColumnLayout.top
-                        topMargin: Math.max(0, (topToolbar.height - timetableViewSwitch.height) / 2)
-                    }
-                }
-
-                ColumnLayout {
-                    id: cheatsheetColumnLayout
-                    anchors.centerIn: parent
-                    width: Math.min(implicitWidth, parent.width - parent.padding * 2)
-                    height: Math.min(implicitHeight, parent.height - parent.padding * 2)
-                    spacing: 10
-
-                    Toolbar {
-                        id: topToolbar
-                        Layout.alignment: Qt.AlignHCenter
-                        enableShadow: false
-
-                        transform: Translate {
-                            id: toolbarTrans
-                            y: cheatsheetBackground.animateIn ? 0 : -20
-                        }
-                        opacity: cheatsheetBackground.animateIn ? 1.0 : 0.0
-
-                        Behavior on opacity {
-                            NumberAnimation {
-                                duration: 280
-                                easing.type: Easing.OutCubic
-                            }
-                        }
-                        Behavior on transform {
-                            NumberAnimation {
-                                duration: 320
-                                easing.type: Easing.OutBack
-                                easing.overshoot: 1.3
-                            }
+                        onClicked: {
+                            cheatsheetRoot.hide();
                         }
 
-                        ToolbarTabBar {
-                            id: tabBar
-                            tabButtonList: root.tabButtonList
-
-                            Synchronizer on currentIndex {
-                                property alias source: swipeView.currentIndex
-                            }
-                        }
-                    }
-
-                    SwipeView {
-                        id: swipeView
-                        Layout.topMargin: 5
-                        Layout.fillWidth: true
-                        Layout.fillHeight: true
-                        Component.onCompleted: {
-                            if (contentItem) {
-                                contentItem.highlightMoveDuration = 0;
-                            }
-                        }
-                        
-                        property real calculatedWidth: cheatsheetRoot.screen ? cheatsheetRoot.screen.width * 0.92 : 1700
-                        property real calculatedHeight: cheatsheetRoot.screen ? cheatsheetRoot.screen.height * 0.75 : 650
-                        
-                        Layout.preferredWidth: Math.min(1800, Math.max(900, calculatedWidth))
-                        Layout.preferredHeight: Math.min(850, Math.max(500, calculatedHeight))
-                        spacing: 10
-                        currentIndex: cheatsheetRoot.selectedTab
-                        onCurrentIndexChanged: {
-                            if (cheatsheetRoot.selectedTab !== currentIndex)
-                                cheatsheetRoot.selectedTab = currentIndex;
-                            if (currentItem && currentItem.status === Loader.Ready && currentItem.item) {
-                                currentItem.item.forceActiveFocus();
-                            }
-                            Qt.callLater(() => {
-                                cheatsheetBackground.prevIndex = currentIndex;
-                            });
-                        }
-
-                        implicitWidth: Math.max.apply(null, contentChildren.map(child => child.implicitWidth || 0))
-                        implicitHeight: Math.max.apply(null, contentChildren.map(child => child.implicitHeight || 0))
-
-                        clip: true
-                        // Disable expensive layer compositing while animating to prevent lag
-                        layer.enabled: !swipeView.moving
-                        layer.effect: OpacityMask {
-                            maskSource: Rectangle {
-                                width: swipeView.width
-                                height: swipeView.height
-                                radius: Appearance.rounding.small
-                            }
-                        }
-
-                        Repeater {
-                            model: root.tabButtonList
-                            delegate: Loader {
-                                id: tabDelegate
-                                required property var modelData
-                                required property int index
-
-                                transform: Translate {
-                                    id: trans
-                                    x: 0
-                                }
-
-                                readonly property bool isCurrent: swipeView.currentIndex === index
-                                onIsCurrentChanged: {
-                                    if (isCurrent) {
-                                        const diff = index - cheatsheetBackground.prevIndex;
-                                        if (diff !== 0) {
-                                            bounceAnim.stop();
-                                            opacityAnim.stop();
-                                            trans.x = diff > 0 ? 150 : -150;
-                                            tabDelegate.opacity = 0;
-                                            bounceAnim.start();
-                                            opacityAnim.start();
-                                        }
-                                    } else {
-                                        tabDelegate.opacity = 1;
-                                        trans.x = 0;
-                                    }
-                                }
-
+                        contentItem: MaterialSymbol {
+                            anchors.centerIn: parent
+                            horizontalAlignment: Text.AlignHCenter
+                            font.pixelSize: Appearance.font.pixelSize.title
+                            text: "close"
+                            rotation: closeButton.isHovered ? 90 : 0
+                            Behavior on rotation {
                                 NumberAnimation {
-                                    id: bounceAnim
-                                    target: trans
-                                    property: "x"
-                                    to: 0
-                                    duration: 400
+                                    duration: 200
                                     easing.type: Easing.OutBack
                                     easing.overshoot: 1.5
                                 }
+                            }
+                        }
+                    }
 
+                    // Left counterpart of the close button: only the timetable tab
+                    // has two shapes to choose between, so it only appears there.
+                    TimetableViewSwitch {
+                        id: timetableViewSwitch
+                        visible: Boolean(root.tabButtonList[swipeView.currentIndex] && root.tabButtonList[swipeView.currentIndex].icon === "calendar_month")
+                        animateIn: cheatsheetBackground.animateIn && timetableViewSwitch.visible
+                        compact: cheatsheetBackground.width < 1100
+                        // Anchored to the column (a sibling) rather than the tab
+                        // bar itself: an anchor may only target a parent or a
+                        // sibling, and the tab bar is a grandchild.
+                        anchors {
+                            left: parent.left
+                            leftMargin: 20
+                            top: cheatsheetColumnLayout.top
+                            topMargin: Math.max(0, (topToolbar.height - timetableViewSwitch.height) / 2)
+                        }
+                    }
+
+                    ColumnLayout {
+                        id: cheatsheetColumnLayout
+                        anchors.centerIn: parent
+                        width: Math.min(implicitWidth, parent.width - parent.padding * 2)
+                        height: Math.min(implicitHeight, parent.height - parent.padding * 2)
+                        spacing: 10
+
+                        Toolbar {
+                            id: topToolbar
+                            Layout.alignment: Qt.AlignHCenter
+                            enableShadow: false
+
+                            transform: Translate {
+                                id: toolbarTrans
+                                y: cheatsheetBackground.animateIn ? 0 : -20
+                            }
+                            opacity: cheatsheetBackground.animateIn ? 1.0 : 0.0
+
+                            Behavior on opacity {
                                 NumberAnimation {
-                                    id: opacityAnim
-                                    target: tabDelegate
-                                    property: "opacity"
-                                    from: 0
-                                    to: 1
-                                    duration: 250
+                                    duration: 280
                                     easing.type: Easing.OutCubic
                                 }
-
-                                // Only the visible tab owns a component tree. The
-                                // old _wasSeen/preloadIndex feedback loop kept all
-                                // tabs resident and made Loader.active unstable.
-                                active: swipeView.currentIndex === index
-
-                                // The timetable is substantially heavier than the
-                                // text-first tabs. Incubating it lets the overlay
-                                // paint its first frame before the calendar tree is
-                                // completed; its own repeaters then continue the
-                                // progressive materialization item by item.
-                                asynchronous: modelData.icon === "calendar_month"
-
-                                onStatusChanged: {
-                                    if (status === Loader.Ready && swipeView.currentIndex === index && cheatsheetRoot.visible) {
-                                        item.forceActiveFocus();
-                                    }
+                            }
+                            Behavior on transform {
+                                NumberAnimation {
+                                    duration: 320
+                                    easing.type: Easing.OutBack
+                                    easing.overshoot: 1.3
                                 }
+                            }
 
-                                source: {
-                                    switch (modelData.icon) {
-                                    case "calendar_month":
-                                        return "CheatsheetTimetable.qml";
-                                    case "keyboard":
-                                        return "CheatsheetKeybinds.qml";
-                                    case "experiment":
-                                        return "CheatsheetPeriodicTable.qml";
-                                    case "biotech":
-                                        return "CheatsheetAminoAcids.qml";
-                                    case "terminal":
-                                        return "commands/CheatsheetCommands.qml";
-                                    case "dashboard":
-                                        return "CheatsheetWorkspaces.qml";
-                                    case "mail":
-                                        return "CheatsheetEmail.qml";
-                                    default:
-                                        return "";
+                            ToolbarTabBar {
+                                id: tabBar
+                                tabButtonList: root.tabButtonList
+                                showShortcutHints: cheatsheetBackground.ctrlPressed
+
+                                Synchronizer on currentIndex {
+                                    property alias source: swipeView.currentIndex
+                                }
+                            }
+                        }
+
+                        SwipeView {
+                            id: swipeView
+                            Layout.topMargin: 5
+                            Layout.fillWidth: true
+                            Layout.fillHeight: true
+                            Component.onCompleted: {
+                                if (contentItem) {
+                                    contentItem.highlightMoveDuration = 0;
+                                }
+                            }
+
+                            property real calculatedWidth: cheatsheetRoot.screen ? cheatsheetRoot.screen.width * 0.92 : 1700
+                            property real calculatedHeight: cheatsheetRoot.screen ? cheatsheetRoot.screen.height * 0.75 : 650
+
+                            Layout.preferredWidth: Math.min(1800, Math.max(900, calculatedWidth))
+                            Layout.preferredHeight: Math.min(850, Math.max(500, calculatedHeight))
+                            spacing: 10
+                            currentIndex: cheatsheetRoot.selectedTab
+                            onCurrentIndexChanged: {
+                                if (cheatsheetRoot.selectedTab !== currentIndex)
+                                    cheatsheetRoot.selectedTab = currentIndex;
+                                if (currentItem && currentItem.status === Loader.Ready && currentItem.item) {
+                                    currentItem.item.forceActiveFocus();
+                                }
+                                Qt.callLater(() => {
+                                    cheatsheetBackground.prevIndex = currentIndex;
+                                });
+                            }
+
+                            implicitWidth: Math.max.apply(null, contentChildren.map(child => child.implicitWidth || 0))
+                            implicitHeight: Math.max.apply(null, contentChildren.map(child => child.implicitHeight || 0))
+
+                            clip: true
+                            // Disable expensive layer compositing while animating to prevent lag
+                            layer.enabled: !swipeView.moving
+                            layer.effect: OpacityMask {
+                                maskSource: Rectangle {
+                                    width: swipeView.width
+                                    height: swipeView.height
+                                    radius: Appearance.rounding.small
+                                }
+                            }
+
+                            Repeater {
+                                model: root.tabButtonList
+                                delegate: Loader {
+                                    id: tabDelegate
+                                    required property var modelData
+                                    required property int index
+
+                                    transform: Translate {
+                                        id: trans
+                                        x: 0
+                                    }
+
+                                    Keys.forwardTo: [cheatsheetBackground]
+
+                                    readonly property bool isCurrent: swipeView.currentIndex === index
+                                    onIsCurrentChanged: {
+                                        if (isCurrent) {
+                                            const diff = index - cheatsheetBackground.prevIndex;
+                                            if (diff !== 0) {
+                                                bounceAnim.stop();
+                                                opacityAnim.stop();
+                                                trans.x = diff > 0 ? 150 : -150;
+                                                tabDelegate.opacity = 0;
+                                                bounceAnim.start();
+                                                opacityAnim.start();
+                                            }
+                                        } else {
+                                            tabDelegate.opacity = 1;
+                                            trans.x = 0;
+                                        }
+                                    }
+
+                                    NumberAnimation {
+                                        id: bounceAnim
+                                        target: trans
+                                        property: "x"
+                                        to: 0
+                                        duration: 400
+                                        easing.type: Easing.OutBack
+                                        easing.overshoot: 1.5
+                                    }
+
+                                    NumberAnimation {
+                                        id: opacityAnim
+                                        target: tabDelegate
+                                        property: "opacity"
+                                        from: 0
+                                        to: 1
+                                        duration: 250
+                                        easing.type: Easing.OutCubic
+                                    }
+
+                                    // Only the visible tab owns a component tree. The
+                                    // old _wasSeen/preloadIndex feedback loop kept all
+                                    // tabs resident and made Loader.active unstable.
+                                    active: swipeView.currentIndex === index
+
+                                    // The timetable is substantially heavier than the
+                                    // text-first tabs. Incubating it lets the overlay
+                                    // paint its first frame before the calendar tree is
+                                    // completed; its own repeaters then continue the
+                                    // progressive materialization item by item.
+                                    asynchronous: modelData.icon === "calendar_month"
+
+                                    onStatusChanged: {
+                                        if (status === Loader.Ready) {
+                                            // Inject the key nav target so TextFields in each
+                                            // module can hand focus back to cheatsheetBackground
+                                            // when Ctrl is pressed (Ctrl+N tab switching).
+                                            if (item.hasOwnProperty('keyNavTarget'))
+                                                item.keyNavTarget = cheatsheetBackground;
+                                            if (swipeView.currentIndex === index && cheatsheetRoot.visible)
+                                                item.forceActiveFocus();
+                                        }
+                                    }
+
+                                    source: {
+                                        switch (modelData.icon) {
+                                        case "calendar_month":
+                                            return "CheatsheetTimetable.qml";
+                                        case "keyboard":
+                                            return "CheatsheetKeybinds.qml";
+                                        case "experiment":
+                                            return "CheatsheetPeriodicTable.qml";
+                                        case "biotech":
+                                            return "CheatsheetAminoAcids.qml";
+                                        case "terminal":
+                                            return "commands/CheatsheetCommands.qml";
+                                        case "dashboard":
+                                            return "CheatsheetWorkspaces.qml";
+                                        case "mail":
+                                            return "CheatsheetEmail.qml";
+                                        default:
+                                            return "";
+                                        }
                                     }
                                 }
                             }
                         }
                     }
                 }
-            }
             }
         }
     }

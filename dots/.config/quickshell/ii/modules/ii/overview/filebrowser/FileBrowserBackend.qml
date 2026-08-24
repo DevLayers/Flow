@@ -21,10 +21,18 @@ Item {
     property bool truncated: false
     property string errorText: ""
     property string operationName: ""
+    property bool shuttingDown: false
 
     signal directoryLoaded(string path)
     signal previewLoaded(string path)
     signal operationFinished(bool success, string operation, string message, var affected)
+
+    Component.onDestruction: {
+        root.shuttingDown = true;
+        listProcess.running = false;
+        inspectProcess.running = false;
+        operationProcess.running = false;
+    }
 
     function parseReply(text, expectedOperation): var {
         const raw = String(text ?? "").trim();
@@ -57,8 +65,10 @@ Item {
     function inspect(path): void {
         const target = String(path ?? "");
         if (target.length === 0) {
+            inspectProcess.running = false;
             root.pendingInspectPath = "";
             root.metadata = null;
+            root.inspecting = false;
             return;
         }
         root.pendingInspectPath = target;
@@ -83,6 +93,7 @@ Item {
             command.push("--paths-json", JSON.stringify(Array.from(data.paths ?? [])));
         root.operationName = String(action ?? "");
         root.operating = true;
+        operationProcess.running = false;
         operationProcess.command = command;
         operationProcess.running = true;
         return true;
@@ -94,11 +105,16 @@ Item {
         stdout: StdioCollector {
             id: listCollector
             onStreamFinished: {
+                if (root.shuttingDown)
+                    return;
                 const reply = root.parseReply(listCollector.text, "list");
-                if (String(reply.path ?? "") !== root.pendingListPath)
+                const replyPath = String(reply.requestedPath ?? reply.path ?? "");
+                if (replyPath.length > 0 && replyPath !== root.pendingListPath)
                     return;
                 root.loading = false;
                 if (!reply.ok) {
+                    root.entries = [];
+                    root.truncated = false;
                     root.errorText = String(reply.error ?? qsTr("Could not read this directory"));
                     return;
                 }
@@ -117,8 +133,11 @@ Item {
         stdout: StdioCollector {
             id: inspectCollector
             onStreamFinished: {
+                if (root.shuttingDown)
+                    return;
                 const reply = root.parseReply(inspectCollector.text, "inspect");
-                if (String(reply.path ?? "") !== root.pendingInspectPath)
+                const replyPath = String(reply.requestedPath ?? reply.path ?? "");
+                if (replyPath.length > 0 && replyPath !== root.pendingInspectPath)
                     return;
                 root.inspecting = false;
                 if (!reply.ok) {
@@ -137,6 +156,8 @@ Item {
         stdout: StdioCollector {
             id: operationCollector
             onStreamFinished: {
+                if (root.shuttingDown)
+                    return;
                 const reply = root.parseReply(operationCollector.text, root.operationName);
                 root.operating = false;
                 const message = reply.ok

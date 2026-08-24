@@ -255,6 +255,10 @@ Item {
         if (focus) filterField.forceActiveFocus();
     }
 
+    // Injected by Cheatsheet.qml so the search field can hand focus to
+    // cheatsheetBackground when Ctrl is held (enabling Ctrl+N tab switching).
+    property Item keyNavTarget: null
+
     property real cardSpacing: 12
     property real cardPadding: 12
     property real cardInnerSpacing: 6
@@ -821,6 +825,7 @@ Item {
             clip: true
             font.pixelSize: Appearance.font.pixelSize.small
             onTextChanged: root.filter = text;
+            keyNavTarget: root.keyNavTarget
         }
 
         IconToolbarButton {

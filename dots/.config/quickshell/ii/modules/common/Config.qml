@@ -863,7 +863,11 @@ Singleton {
                     { actionId: "createFolder", shortcut: "Ctrl+Shift+N" },
                     { actionId: "duplicate", shortcut: "Ctrl+D" },
                     { actionId: "toggleHidden", shortcut: "Ctrl+H" },
-                    { actionId: "refresh", shortcut: "Ctrl+R" }
+                    { actionId: "refresh", shortcut: "Ctrl+R" },
+                    { actionId: "stageCopy", shortcut: "Ctrl+Shift+C" },
+                    { actionId: "sortFiles", shortcut: "Ctrl+Shift+S" },
+                    { actionId: "goHome", shortcut: "Ctrl+Home" },
+                    { actionId: "forward", shortcut: "Alt+Right" }
                 ];
             console.log("[Config] Added Search v2 content defaults");
         }
@@ -3669,6 +3673,32 @@ Singleton {
                 property bool sloppy: false
                 property bool levenshtein: false
                 property bool frecency: true
+                // fuzzysort matches any subsequence, so with no floor "file"
+                // reaches "OpenJDK 25 for x86_64 Monitoring & Management
+                // Console". Measured on this machine, the genuine hits for
+                // "file" score 0.82–0.94 and the noise 0.25–0.30, so 0.35 cuts
+                // the tail without emptying short queries.
+                property real fuzzyThreshold: 0.35
+                // And anything below this fraction of the best hit is noise
+                // *next to that hit*, whatever its absolute score.
+                property real fuzzyRelativeCutoff: 0.35
+                property JsonObject typoTolerance: JsonObject {
+                    // Myers bit-parallel edit distance as a last tier: it runs
+                    // only when the exact and layout-corrected passes found
+                    // nothing, so a typo returns the app instead of an empty
+                    // list. Off by default — it changes what a miss looks like.
+                    property bool enable: false
+                    // 0.30 lands every case from the upstream PR's table on its
+                    // target while still rejecting a query that is simply not a
+                    // typo of anything. Lower widens the net.
+                    property real threshold: 0.30
+                    property int maxResults: 8
+                    // Query typed with the wrong keyboard layout active, mapped
+                    // back through the physical layout — and Cyrillic queries
+                    // transliterated to Latin. Unlike the typo tier these run
+                    // on every query, so they also fix a *partly* wrong query.
+                    property bool keyboardLayouts: true
+                }
                 property list<var> aliases: []
                 // Priority of the result groups, top to bottom. Removing an
                 // entry hides that group's results, so this list is both the
@@ -3724,6 +3754,13 @@ Singleton {
                     // state folder a home directory accumulates.
                     property bool includeHidden: false
                     property list<string> excludedDirectories: ["node_modules", ".git", ".cache", ".venv", "__pycache__", ".cargo", ".rustup", ".npm", ".local/share/Trash"]
+                }
+                property JsonObject fileBrowser: JsonObject {
+                    // The explorer needs more room than the result-oriented
+                    // panels: its file list, preview and metadata are visible
+                    // at the same time. These values remain user-adjustable.
+                    property int panelWidth: 1120
+                    property int panelBodyHeight: 620
                 }
                 property JsonObject prefix: JsonObject {
                     property bool showDefaultActionsWithoutPrefix: true
@@ -3884,7 +3921,11 @@ Singleton {
                     { actionId: "createFolder", shortcut: "Ctrl+Shift+N" },
                     { actionId: "duplicate", shortcut: "Ctrl+D" },
                     { actionId: "toggleHidden", shortcut: "Ctrl+H" },
-                    { actionId: "refresh", shortcut: "Ctrl+R" }
+                    { actionId: "refresh", shortcut: "Ctrl+R" },
+                    { actionId: "stageCopy", shortcut: "Ctrl+Shift+C" },
+                    { actionId: "sortFiles", shortcut: "Ctrl+Shift+S" },
+                    { actionId: "goHome", shortcut: "Ctrl+Home" },
+                    { actionId: "forward", shortcut: "Alt+Right" }
                 ]
                 property JsonObject appearance: JsonObject {
                     property bool accentPanels: true

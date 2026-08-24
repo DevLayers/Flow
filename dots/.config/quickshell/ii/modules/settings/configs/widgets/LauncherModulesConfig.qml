@@ -69,7 +69,45 @@ Item {
                 Layout.fillWidth: true
                 spacing: Appearance.sizes.elevationMargin / 2
                 ConfigSwitch { buttonIcon: "select_window"; text: Translation.tr("Window search"); description: Translation.tr("Type prefix ‘%1’ followed by a window title or app class.").arg(String(Config.options.search.prefix.windowSearch)); checked: Config.options.search.modules.windowSearch; onCheckedChanged: Config.options.search.modules.windowSearch = checked }
-                ConfigSwitch { buttonIcon: "folder_open"; text: Translation.tr("File browser"); description: Translation.tr("Type prefix ‘%1’ followed by a path to browse folders.").arg(String(Config.options.search.prefix.fileBrowser)); checked: Config.options.search.modules.fileBrowser; onCheckedChanged: Config.options.search.modules.fileBrowser = checked }
+                ConfigSwitch {
+                    buttonIcon: "folder_data"
+                    text: Translation.tr("File browser")
+                    description: Translation.tr("Type ‘%1’ to open the full explorer. Navigate with arrows and Enter; press Ctrl+K for file operations and shortcuts.").arg(String(Config.options.search.prefix.fileBrowser))
+                    checked: Config.options.search.modules.fileBrowser
+                    onCheckedChanged: Config.options.search.modules.fileBrowser = checked
+                }
+                ContentSubsection {
+                    visible: Config.options.search.modules.fileBrowser
+                    enabled: visible
+                    Layout.fillWidth: true
+                    title: Translation.tr("File browser size")
+                    icon: "aspect_ratio"
+                    tooltip: Translation.tr("Changes only the full file browser panel; the size of other Search panels is unaffected.")
+
+                    ConfigSlider {
+                        buttonIcon: "width"
+                        text: Translation.tr("Panel width (px)")
+                        value: Config.options.search.fileBrowser.panelWidth
+                        from: 860
+                        to: 1600
+                        stepSize: 20
+                        usePercentTooltip: false
+                        onValueChanged: Config.options.search.fileBrowser.panelWidth = value
+                        StyledToolTip { text: Translation.tr("Controls the room shared by the file list and preview.") }
+                    }
+
+                    ConfigSlider {
+                        buttonIcon: "height"
+                        text: Translation.tr("Panel content height (px)")
+                        value: Config.options.search.fileBrowser.panelBodyHeight
+                        from: 420
+                        to: 900
+                        stepSize: 20
+                        usePercentTooltip: false
+                        onValueChanged: Config.options.search.fileBrowser.panelBodyHeight = value
+                        StyledToolTip { text: Translation.tr("Controls how many files and metadata rows fit without scrolling.") }
+                    }
+                }
                 ConfigSwitch { buttonIcon: "find_in_page"; text: Translation.tr("File search"); description: Translation.tr("Type prefix ‘%1’ followed by at least two characters to find files.").arg(String(Config.options.search.prefix.fileSearch)); checked: Config.options.search.modules.fileSearch; onCheckedChanged: Config.options.search.modules.fileSearch = checked }
 
                 ContentSubsection {

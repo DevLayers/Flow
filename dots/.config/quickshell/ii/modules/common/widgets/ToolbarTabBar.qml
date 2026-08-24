@@ -35,6 +35,7 @@ Item {
     Layout.alignment: Qt.AlignHCenter | Qt.AlignVCenter
     implicitWidth: contentItem.implicitWidth
     implicitHeight: 40
+    property bool showShortcutHints: false
     property int _delegateRevision: 0
 
     property Component delegate: ToolbarTabButton {
@@ -43,6 +44,8 @@ Item {
         current: index == root.currentIndex
         text: modelData.name
         materialSymbol: modelData.icon
+        shortcutIndex: index + 1
+        showShortcut: root.showShortcutHints
         onClicked: {
             root.setCurrentIndex(index);
         }

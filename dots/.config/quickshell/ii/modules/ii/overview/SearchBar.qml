@@ -56,6 +56,8 @@ RowLayout {
 
     signal navigateUp
     signal navigateDown
+    signal navigateSectionUp
+    signal navigateSectionDown
     signal navigateLeft
     signal navigateRight
     signal activate
@@ -120,6 +122,8 @@ RowLayout {
             key = "space";
         else if (event.key === Qt.Key_Backspace)
             key = "backspace";
+        else if (event.key === Qt.Key_Home)
+            key = "home";
         else if (event.key >= Qt.Key_A && event.key <= Qt.Key_Z)
             key = String.fromCharCode(event.key).toLocaleLowerCase();
         return parts.concat(key ? [key] : []).join("+");
@@ -127,6 +131,22 @@ RowLayout {
 
     function matchesShortcut(event, actionId, fallback) {
         return root.eventShortcut(event) === root.configuredShortcut(actionId, fallback);
+    }
+
+    function fileBrowserTextForPath(path): string {
+        const home = FileUtils.trimFileProtocol(Directories.home).replace(/\/$/, "");
+        const rawTarget = FileUtils.trimFileProtocol(String(path ?? ""));
+        let target = rawTarget === "/" ? "/" : rawTarget.replace(/\/$/, "");
+        if (target.startsWith("~/"))
+            target = home + target.slice(1);
+        else if (target.length === 0)
+            target = home;
+        else if (!target.startsWith("/"))
+            target = home + "/" + target;
+        const encoded = target === home
+            ? "/"
+            : (target.startsWith(home + "/") ? target.slice(home.length) + "/" : "/" + target + "/");
+        return Config.options.search.prefix.fileBrowser + encoded;
     }
 
     function forceFocus() {
@@ -515,8 +535,41 @@ RowLayout {
                 event.accepted = true;
                 return;
             }
+            if (root.activePanelMode && root.matchesShortcut(event, "stageCopy", "Ctrl+Shift+C")) {
+                root.panelShortcut("stageCopy");
+                event.accepted = true;
+                return;
+            }
+            if (root.activePanelMode && root.matchesShortcut(event, "sortFiles", "Ctrl+Shift+S")) {
+                root.panelShortcut("cycleSort");
+                event.accepted = true;
+                return;
+            }
+            if (root.activePanelMode && root.matchesShortcut(event, "goHome", "Ctrl+Home")) {
+                root.panelShortcut("goHome");
+                event.accepted = true;
+                return;
+            }
+            if (root.activePanelMode && root.matchesShortcut(event, "forward", "Alt+Right")) {
+                root.panelShortcut("navigateForward");
+                event.accepted = true;
+                return;
+            }
             if (root.matchesShortcut(event, "section", "Tab") && root.activePanelMode && root.supportsPanelSectionToggle) {
                 root.togglePanelSection();
+                event.accepted = true;
+                return;
+            }
+            // Before the plain Up/Down handlers: those compare against "up"
+            // and "down", so a modified press would otherwise fall through to
+            // them as an ordinary row move.
+            if (root.matchesShortcut(event, "sectionPrevious", "Ctrl+Up")) {
+                root.navigateSectionUp();
+                event.accepted = true;
+                return;
+            }
+            if (root.matchesShortcut(event, "sectionNext", "Ctrl+Down")) {
+                root.navigateSectionDown();
                 event.accepted = true;
                 return;
             }
@@ -612,7 +665,7 @@ RowLayout {
                 let newText = "";
                 if (activeResult.key && activeResult.key.startsWith("alias:") && (activeResult.type === Translation.tr("Folder Alias") || activeResult.verb === Translation.tr("Browse"))) {
                     const target = activeResult.comment || "";
-                    newText = prefix + target + (target.endsWith("/") ? "" : "/");
+                    newText = root.fileBrowserTextForPath(target);
                 } else if (searchInput.text.startsWith(prefix)) {
                     const currentPath = searchInput.text.slice(prefix.length);
                     const lastName = currentPath.lastIndexOf("/");

@@ -27,14 +27,38 @@ Item {
     property bool actionMenuOpen: false
     property bool confirmTrash: false
     property string editorMode: ""
+    property string editorPresentedMode: ""
     property string editorValue: ""
     property string noticeText: ""
     property bool detailsFirst: false
     property bool consumingPathQuery: false
+    property real directoryRevealProgress: 1
+    property real actionMenuVisualOpacity: 0
+    property real actionMenuVisualScale: 0.82
+    property real actionMenuVisualOffset: Appearance.sizes.elevationMargin * 5
+    property int pendingSelectionIndex: -1
+    property string editorTargetPath: ""
+    property var pendingTrashPaths: []
+    property int trashPresentedCount: 0
     readonly property bool supportsSectionToggle: true
+    readonly property bool keepAlive: backend.loading || backend.inspecting || backend.operating
+    readonly property bool contentReady: !backend.loading && backend.currentPath.length > 0
 
     signal requestSetSearchQuery(string query)
     signal requestFocusSearchInput()
+
+    onActionMenuOpenChanged: {
+        actionMenuEnterAnimation.stop();
+        actionMenuExitAnimation.stop();
+        if (root.actionMenuOpen) {
+            root.actionMenuVisualOpacity = 0;
+            root.actionMenuVisualScale = 0.82;
+            root.actionMenuVisualOffset = Appearance.sizes.elevationMargin * 5;
+            actionMenuEnterAnimation.start();
+        } else {
+            actionMenuExitAnimation.start();
+        }
+    }
 
     readonly property string homePath: FileUtils.trimFileProtocol(Directories.home).replace(/\/$/, "")
     readonly property var filteredEntries: root.filterEntries()
@@ -46,7 +70,9 @@ Item {
     readonly property var actionRows: root.buildActions()
     readonly property string statusText: root.noticeText.length > 0
         ? root.noticeText
-        : backend.loading
+        : backend.operating
+            ? Translation.tr("Working on files…")
+            : backend.loading
             ? Translation.tr("Reading %1…").arg(root.displayPath(backend.pendingListPath))
             : backend.errorText.length > 0
                 ? backend.errorText
@@ -61,13 +87,16 @@ Item {
             { label: Translation.tr("Type"), value: root.typeLabel(entry), icon: "draft" },
             { label: Translation.tr("Size"), value: entry.isDir && children >= 0 ? Translation.tr("%1 items").arg(String(children)) : root.formatBytes(entry.size), icon: "data_usage" },
             { label: Translation.tr("Modified"), value: root.formatDate(entry.modifiedMs), icon: "edit_calendar" },
-            { label: Translation.tr("Created"), value: root.formatDate(entry.createdMs), icon: "calendar_add_on" },
+            { label: entry.createdIsChangeTime ? Translation.tr("Changed") : Translation.tr("Created"), value: root.formatDate(entry.createdMs), icon: "calendar_add_on" },
             { label: Translation.tr("Permissions"), value: String(entry.permissions ?? "—") + "  " + String(entry.mode ?? ""), icon: "encrypted" },
             { label: Translation.tr("Owner"), value: String(entry.owner ?? "—") + " · " + String(entry.group ?? "—"), icon: "person" }
         ];
     }
 
-    implicitWidth: Config.options.search.clipboard.panelWidth
+    readonly property real panelGutter: Appearance.sizes.elevationMargin
+    readonly property real rowHoverGutter: Appearance.sizes.elevationMargin * 0.75
+
+    implicitWidth: Config.options.search.fileBrowser.panelWidth
     implicitHeight: scaffold.implicitHeight
 
     function displayPath(path): string {
@@ -114,6 +143,8 @@ Item {
     function typeLabel(entry): string {
         if (!entry)
             return Translation.tr("Unknown");
+        if (entry.isDir && entry.isSymlink)
+            return Translation.tr("Directory link");
         if (entry.isDir)
             return Translation.tr("Directory");
         if (entry.isSymlink)
@@ -166,21 +197,26 @@ Item {
 
     function buildActions(): var {
         const hasEntry = root.selectedEntry !== null;
+        const canUseEntry = hasEntry && root.contentReady;
+        const canMutateEntry = canUseEntry && !backend.operating;
         return [
-            { id: "open", label: root.selectedEntry?.isDir ? Translation.tr("Open directory") : Translation.tr("Open file"), icon: "open_in_new", keys: ["↵"], enabled: hasEntry },
-            { id: "external", label: Translation.tr("Open externally"), icon: "launch", actionId: "secondary", keys: ["Ctrl", "↵"], enabled: hasEntry },
-            { id: "mark", label: root.isMarked(root.selectedEntry?.path) ? Translation.tr("Unmark item") : Translation.tr("Mark item"), icon: "select_check_box", actionId: "select", keys: ["Ctrl", "Space"], enabled: hasEntry },
-            { id: "copy-path", label: Translation.tr("Copy path"), icon: "content_copy", actionId: "copy", keys: ["Ctrl", "C"], enabled: hasEntry },
-            { id: "stage-copy", label: Translation.tr("Copy for paste"), icon: "file_copy", keys: [], enabled: hasEntry },
-            { id: "cut", label: Translation.tr("Cut for paste"), icon: "content_cut", actionId: "cut", keys: ["Ctrl", "X"], enabled: hasEntry },
-            { id: "paste", label: Translation.tr("Paste here"), icon: "content_paste", actionId: "paste", keys: ["Ctrl", "V"], enabled: root.stagedPaths.length > 0 },
-            { id: "rename", label: Translation.tr("Rename"), icon: "drive_file_rename_outline", actionId: "edit", keys: ["Ctrl", "E"], enabled: hasEntry },
-            { id: "duplicate", label: Translation.tr("Duplicate"), icon: "control_point_duplicate", actionId: "duplicate", keys: ["Ctrl", "D"], enabled: hasEntry },
-            { id: "new-file", label: Translation.tr("New file"), icon: "note_add", actionId: "create", keys: ["Ctrl", "N"], enabled: backend.currentPath.length > 0 },
-            { id: "new-folder", label: Translation.tr("New folder"), icon: "create_new_folder", actionId: "createFolder", keys: ["Ctrl", "Shift", "N"], enabled: backend.currentPath.length > 0 },
+            { id: "open", label: root.selectedEntry?.isDir ? Translation.tr("Open directory") : Translation.tr("Open file"), icon: "open_in_new", keys: ["↵"], enabled: canUseEntry },
+            { id: "external", label: Translation.tr("Open externally"), icon: "launch", actionId: "secondary", keys: ["Ctrl", "↵"], enabled: canUseEntry },
+            { id: "mark", label: root.isMarked(root.selectedEntry?.path) ? Translation.tr("Unmark item") : Translation.tr("Mark item"), icon: "select_check_box", actionId: "select", keys: ["Ctrl", "Space"], enabled: canUseEntry },
+            { id: "copy-path", label: Translation.tr("Copy path"), icon: "content_copy", actionId: "copy", keys: ["Ctrl", "C"], enabled: canUseEntry },
+            { id: "stage-copy", label: Translation.tr("Copy for paste"), icon: "file_copy", actionId: "stageCopy", keys: ["Ctrl", "Shift", "C"], enabled: canUseEntry },
+            { id: "cut", label: Translation.tr("Cut for paste"), icon: "content_cut", actionId: "cut", keys: ["Ctrl", "X"], enabled: canUseEntry },
+            { id: "paste", label: Translation.tr("Paste here"), icon: "content_paste", actionId: "paste", keys: ["Ctrl", "V"], enabled: root.contentReady && !backend.operating && root.stagedPaths.length > 0 },
+            { id: "rename", label: Translation.tr("Rename"), icon: "drive_file_rename_outline", actionId: "edit", keys: ["Ctrl", "E"], enabled: canMutateEntry },
+            { id: "duplicate", label: Translation.tr("Duplicate"), icon: "control_point_duplicate", actionId: "duplicate", keys: ["Ctrl", "D"], enabled: canMutateEntry },
+            { id: "new-file", label: Translation.tr("New file"), icon: "note_add", actionId: "create", keys: ["Ctrl", "N"], enabled: root.contentReady && !backend.operating },
+            { id: "new-folder", label: Translation.tr("New folder"), icon: "create_new_folder", actionId: "createFolder", keys: ["Ctrl", "Shift", "N"], enabled: root.contentReady && !backend.operating },
             { id: "hidden", label: root.showHidden ? Translation.tr("Hide dotfiles") : Translation.tr("Show dotfiles"), icon: root.showHidden ? "visibility_off" : "visibility", actionId: "toggleHidden", keys: ["Ctrl", "H"], enabled: true },
+            { id: "sort", label: Translation.tr("Change sort order"), icon: "sort", actionId: "sortFiles", keys: ["Ctrl", "Shift", "S"], enabled: true },
+            { id: "home", label: Translation.tr("Go home"), icon: "home", actionId: "goHome", keys: ["Ctrl", "Home"], enabled: backend.currentPath !== root.homePath },
+            { id: "forward", label: Translation.tr("Go forward"), icon: "arrow_forward", actionId: "forward", keys: ["Alt", "→"], enabled: root.forwardHistory.length > 0 },
             { id: "refresh", label: Translation.tr("Refresh directory"), icon: "refresh", actionId: "refresh", keys: ["Ctrl", "R"], enabled: true },
-            { id: "trash", label: Translation.tr("Move to Trash"), icon: "delete", actionId: "delete", keys: ["Shift", "Del"], enabled: hasEntry }
+            { id: "trash", label: Translation.tr("Move to Trash"), icon: "delete", actionId: "delete", keys: ["Shift", "Del"], enabled: canMutateEntry }
         ];
     }
 
@@ -199,10 +235,11 @@ Item {
         if (root.consumingPathQuery)
             return false;
         const query = root.searchQuery.trim();
-        if (query.length <= 1 || !query.startsWith("/") || !query.endsWith("/"))
+        if (query.length === 0 || !query.startsWith("/") || !query.endsWith("/"))
             return false;
         root.consumingPathQuery = true;
-        root.enterDirectory(root.homePath + query, true);
+        const target = query.startsWith("//") ? query.slice(1) : root.homePath + query;
+        root.enterDirectory(target, true);
         root.requestSetSearchQuery("");
         root.consumingPathQuery = false;
         return true;
@@ -231,6 +268,7 @@ Item {
             root.backHistory = root.backHistory.slice(0, -1);
             if (backend.currentPath.length > 0)
                 root.forwardHistory = root.forwardHistory.concat([{ path: backend.currentPath, index: root.selectedIndex }]);
+            root.pendingSelectionIndex = Number(item.index ?? 0);
             backend.listDirectory(item.path, root.showHidden, root.sortMode, root.sortDescending);
             return true;
         }
@@ -246,16 +284,17 @@ Item {
         root.forwardHistory = root.forwardHistory.slice(0, -1);
         if (backend.currentPath.length > 0)
             root.backHistory = root.backHistory.concat([{ path: backend.currentPath, index: root.selectedIndex }]);
+        root.pendingSelectionIndex = Number(item.index ?? 0);
         backend.listDirectory(item.path, root.showHidden, root.sortMode, root.sortDescending);
         return true;
     }
 
     function navigateUp(): bool {
         if (root.actionMenuOpen) {
-            root.actionIndex = Math.max(0, root.actionIndex - 1);
-            actionList.positionViewAtIndex(root.actionIndex, ListView.Contain);
-            return true;
+            return root.moveActionSelection(-1);
         }
+        if (!root.contentReady)
+            return false;
         if (root.selectedIndex <= 0)
             return false;
         root.selectedIndex--;
@@ -265,10 +304,10 @@ Item {
 
     function navigateDown(): bool {
         if (root.actionMenuOpen) {
-            root.actionIndex = Math.min(root.actionRows.length - 1, root.actionIndex + 1);
-            actionList.positionViewAtIndex(root.actionIndex, ListView.Contain);
-            return true;
+            return root.moveActionSelection(1);
         }
+        if (!root.contentReady)
+            return false;
         if (root.selectedIndex < 0 || root.selectedIndex >= root.filteredEntries.length - 1)
             return false;
         root.selectedIndex++;
@@ -283,6 +322,8 @@ Item {
     function navigateRight(): bool {
         if (root.actionMenuOpen)
             return false;
+        if (!root.contentReady)
+            return false;
         if (root.selectedEntry?.isDir)
             return root.enterDirectory(root.selectedEntry.path, true);
         return root.navigateForward();
@@ -293,6 +334,8 @@ Item {
             return root.runAction(root.actionRows[root.actionIndex]?.id);
         if (root.confirmTrash)
             return root.confirmTrashNow();
+        if (!root.contentReady)
+            return false;
         const entry = root.selectedEntry;
         if (!entry)
             return false;
@@ -304,6 +347,8 @@ Item {
     }
 
     function secondaryActivateSelected(): bool {
+        if (!root.contentReady)
+            return false;
         const entry = root.selectedEntry;
         if (!entry)
             return false;
@@ -326,16 +371,57 @@ Item {
             return true;
         }
         if (root.confirmTrash) {
-            root.confirmTrash = false;
+            root.cancelTrashConfirmation();
             return true;
         }
         return false;
     }
 
+    function closeTransientOverlays(except = ""): void {
+        if (except !== "actions")
+            root.actionMenuOpen = false;
+        if (except !== "editor") {
+            root.editorMode = "";
+            root.editorValue = "";
+            root.editorTargetPath = "";
+        }
+        if (except !== "trash") {
+            root.confirmTrash = false;
+            root.pendingTrashPaths = [];
+        }
+    }
+
     function toggleActions(): bool {
-        root.actionMenuOpen = !root.actionMenuOpen;
-        root.actionIndex = 0;
+        const opening = !root.actionMenuOpen;
+        root.closeTransientOverlays(opening ? "actions" : "");
+        root.actionMenuOpen = opening;
+        root.actionIndex = root.firstEnabledActionIndex();
         return true;
+    }
+
+    function firstEnabledActionIndex(): int {
+        for (let index = 0; index < root.actionRows.length; index++) {
+            if (root.actionRows[index]?.enabled)
+                return index;
+        }
+        return -1;
+    }
+
+    function moveActionSelection(step): bool {
+        if (root.actionRows.length === 0)
+            return false;
+        let index = root.actionIndex;
+        for (let visited = 0; visited < root.actionRows.length; visited++) {
+            index = Math.max(0, Math.min(root.actionRows.length - 1, index + step));
+            if (root.actionRows[index]?.enabled) {
+                root.actionIndex = index;
+                actionList.positionViewAtIndex(index, ListView.Contain);
+                return true;
+            }
+            if (index === 0 || index === root.actionRows.length - 1)
+                break;
+        }
+        return false;
     }
 
     function isMarked(path): bool {
@@ -357,6 +443,8 @@ Item {
     }
 
     function operationTargets(): var {
+        if (!root.contentReady)
+            return [];
         const marked = Object.keys(root.markedPaths);
         if (marked.length > 0)
             return marked;
@@ -406,7 +494,7 @@ Item {
         const entry = root.selectedEntry;
         if (!entry)
             return false;
-        return root.openEditor("rename", entry.name);
+        return root.openEditor("rename", entry.name, entry.path);
     }
 
     function createFromQuery(): bool {
@@ -424,17 +512,26 @@ Item {
     }
 
     function deleteSelected(): bool {
-        if (root.operationTargets().length === 0)
+        const targets = root.operationTargets();
+        if (root.editorMode.length > 0 || targets.length === 0 || backend.operating)
             return false;
-        root.actionMenuOpen = false;
+        root.closeTransientOverlays("trash");
+        root.pendingTrashPaths = targets;
+        root.trashPresentedCount = targets.length;
         root.confirmTrash = true;
         root.showNotice(Translation.tr("Press Enter to move the selection to Trash"));
         return true;
     }
 
-    function confirmTrashNow(): bool {
-        const targets = root.operationTargets();
+    function cancelTrashConfirmation(): void {
         root.confirmTrash = false;
+        root.pendingTrashPaths = [];
+    }
+
+    function confirmTrashNow(): bool {
+        const targets = Array.from(root.pendingTrashPaths ?? []);
+        root.confirmTrash = false;
+        root.pendingTrashPaths = [];
         return targets.length > 0 && backend.operate("trash", { paths: targets });
     }
 
@@ -450,6 +547,10 @@ Item {
         return true;
     }
 
+    function goHome(): bool {
+        return backend.currentPath === root.homePath ? false : root.enterDirectory(root.homePath, true);
+    }
+
     function cycleSort(): bool {
         const modes = ["name", "modified", "size", "type"];
         const index = modes.indexOf(root.sortMode);
@@ -463,22 +564,20 @@ Item {
         return true;
     }
 
-    function openEditor(mode, value): bool {
-        root.actionMenuOpen = false;
-        root.confirmTrash = false;
-        root.editorMode = String(mode ?? "");
+    function openEditor(mode, value, targetPath = ""): bool {
+        root.closeTransientOverlays("editor");
+        root.editorPresentedMode = String(mode ?? "");
+        root.editorMode = root.editorPresentedMode;
         root.editorValue = String(value ?? "");
-        Qt.callLater(() => {
-            editorField.text = root.editorValue;
-            editorField.selectAll();
-            editorField.forceActiveFocus();
-        });
+        root.editorTargetPath = String(targetPath ?? "");
+        editorFocusTimer.restart();
         return true;
     }
 
     function closeEditor(): void {
         root.editorMode = "";
         root.editorValue = "";
+        root.editorTargetPath = "";
         root.requestFocusSearchInput();
     }
 
@@ -487,8 +586,8 @@ Item {
         if (value.length === 0)
             return false;
         let started = false;
-        if (root.editorMode === "rename" && root.selectedEntry)
-            started = backend.operate("rename", { path: root.selectedEntry.path, name: value });
+        if (root.editorMode === "rename" && root.editorTargetPath.length > 0)
+            started = backend.operate("rename", { path: root.editorTargetPath, name: value });
         else if (root.editorMode === "create-file" || root.editorMode === "create-directory")
             started = backend.operate(root.editorMode, { destination: backend.currentPath, name: value });
         if (started)
@@ -511,6 +610,9 @@ Item {
         case "new-file": return root.createFromQuery();
         case "new-folder": return root.createFolder();
         case "hidden": return root.toggleHidden();
+        case "sort": return root.cycleSort();
+        case "home": return root.goHome();
+        case "forward": return root.navigateForward();
         case "refresh": return root.refreshDirectory();
         case "trash": return root.deleteSelected();
         default: return false;
@@ -524,6 +626,7 @@ Item {
 
     onFilteredEntriesChanged: root.clampSelection()
     onSelectedIndexChanged: previewDebounce.restart()
+    onSelectedEntryChanged: previewSelectionAnimation.restart()
     onSearchQueryChanged: {
         if (!root.tryConsumePathQuery()) {
             root.selectedIndex = root.filteredEntries.length > 0 ? 0 : -1;
@@ -531,7 +634,9 @@ Item {
         }
     }
 
-    Component.onCompleted: backend.listDirectory(root.homePath, root.showHidden, root.sortMode, root.sortDescending)
+    Component.onCompleted: {
+        backend.listDirectory(root.homePath, root.showHidden, root.sortMode, root.sortDescending);
+    }
 
     Timer {
         id: previewDebounce
@@ -545,6 +650,101 @@ Item {
         onTriggered: root.noticeText = ""
     }
 
+    Timer {
+        id: editorFocusTimer
+        interval: 0
+        onTriggered: {
+            if (root.editorMode.length === 0)
+                return;
+            editorField.text = root.editorValue;
+            editorField.selectAll();
+            editorField.forceActiveFocus();
+        }
+    }
+
+    NumberAnimation {
+        id: previewSelectionAnimation
+        target: previewContent
+        property: "opacity"
+        from: 0.35
+        to: 1.0
+        duration: Appearance.animation.elementMoveFast.duration
+        easing.type: Appearance.animation.elementMoveFast.type
+        easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+    }
+
+    NumberAnimation {
+        id: directoryRevealAnimation
+        target: root
+        property: "directoryRevealProgress"
+        from: 0
+        to: 1
+        duration: Appearance.animation.elementMoveSmall.duration
+        easing.type: Appearance.animation.elementMoveSmall.type
+        easing.bezierCurve: Appearance.animation.elementMoveSmall.bezierCurve
+    }
+
+    ParallelAnimation {
+        id: actionMenuEnterAnimation
+
+        NumberAnimation {
+            target: root
+            property: "actionMenuVisualOpacity"
+            from: 0
+            to: 1
+            duration: Appearance.animation.elementMoveFast.duration
+            easing.type: Appearance.animation.elementMoveFast.type
+            easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+        }
+        NumberAnimation {
+            target: root
+            property: "actionMenuVisualScale"
+            from: 0.82
+            to: 1
+            duration: Appearance.animation.elementMoveFast.duration
+            easing.type: Easing.OutBack
+            easing.overshoot: 2.2
+        }
+        NumberAnimation {
+            target: root
+            property: "actionMenuVisualOffset"
+            from: Appearance.sizes.elevationMargin * 5
+            to: 0
+            duration: Appearance.animation.elementMoveFast.duration
+            easing.type: Easing.OutBack
+            easing.overshoot: 2.5
+        }
+    }
+
+    ParallelAnimation {
+        id: actionMenuExitAnimation
+
+        NumberAnimation {
+            target: root
+            property: "actionMenuVisualOpacity"
+            to: 0
+            duration: Appearance.animation.elementMoveExit.duration
+            easing.type: Appearance.animation.elementMoveExit.type
+            easing.bezierCurve: Appearance.animation.elementMoveExit.bezierCurve
+        }
+        NumberAnimation {
+            target: root
+            property: "actionMenuVisualScale"
+            to: 0.94
+            duration: Appearance.animation.elementMoveExit.duration
+            easing.type: Appearance.animation.elementMoveExit.type
+            easing.bezierCurve: Appearance.animation.elementMoveExit.bezierCurve
+        }
+        NumberAnimation {
+            target: root
+            property: "actionMenuVisualOffset"
+            to: Appearance.sizes.elevationMargin * 2
+            duration: Appearance.animation.elementMoveExit.duration
+            easing.type: Appearance.animation.elementMoveExit.type
+            easing.bezierCurve: Appearance.animation.elementMoveExit.bezierCurve
+        }
+    }
+
     FileBrowserBackend {
         id: backend
     }
@@ -553,11 +753,16 @@ Item {
         target: backend
 
         function onDirectoryLoaded(path) {
-            root.selectedIndex = backend.entries.length > 0 ? 0 : -1;
+            root.selectedIndex = backend.entries.length > 0
+                ? Math.max(0, Math.min(root.pendingSelectionIndex < 0 ? 0 : root.pendingSelectionIndex, backend.entries.length - 1))
+                : -1;
+            root.pendingSelectionIndex = -1;
             root.clampSelection();
+            directoryRevealAnimation.restart();
         }
 
         function onOperationFinished(success, operation, message, affected) {
+            const changedAnything = Array.from(affected ?? []).length > 0;
             if (success) {
                 root.markedPaths = ({});
                 if (operation === "move") {
@@ -568,6 +773,8 @@ Item {
                 root.refreshDirectory();
             } else {
                 root.showNotice(message);
+                if (changedAnything)
+                    root.refreshDirectory();
             }
         }
     }
@@ -592,6 +799,7 @@ Item {
         title: Translation.tr("File Browser")
         icon: "folder_data"
         accent: true
+        minimumContentHeight: Config.options.search.fileBrowser.panelBodyHeight
         showStatus: true
         statusText: root.statusText
         primaryHint: ({ label: root.selectedEntry?.isDir ? Translation.tr("Browse") : Translation.tr("Open"), actionId: "activate", keys: ["↵"] })
@@ -612,6 +820,7 @@ Item {
 
                 RippleButton {
                     enabled: root.backHistory.length > 0 || (backend.currentPath !== root.homePath && backend.currentPath !== "/")
+                    Accessible.name: Translation.tr("Back to the previous folder")
                     implicitWidth: Appearance.sizes.elevationMargin * 4
                     implicitHeight: implicitWidth
                     buttonRadius: Appearance.rounding.full
@@ -620,17 +829,20 @@ Item {
                     colRipple: Appearance.colors.colSecondaryContainerActive
                     onClicked: root.navigateBack()
                     MaterialSymbol { anchors.centerIn: parent; text: "arrow_back"; iconSize: Appearance.font.pixelSize.large; color: Appearance.colors.colOnSecondaryContainer }
+                    StyledToolTip { text: Translation.tr("Back to the previous folder · Backspace") }
                 }
 
                 RippleButton {
+                    Accessible.name: Translation.tr("Go to Home")
                     implicitWidth: Appearance.sizes.elevationMargin * 4
                     implicitHeight: implicitWidth
                     buttonRadius: Appearance.rounding.full
                     colBackground: Appearance.colors.colSurfaceContainerHigh
                     colBackgroundHover: Appearance.colors.colSurfaceContainerHighestHover
                     colRipple: Appearance.colors.colSurfaceContainerHighestActive
-                    onClicked: root.enterDirectory(root.homePath, true)
+                    onClicked: root.goHome()
                     MaterialSymbol { anchors.centerIn: parent; text: "home"; iconSize: Appearance.font.pixelSize.large; color: Appearance.colors.colOnSurface }
+                    StyledToolTip { text: Translation.tr("Go to Home · Ctrl+Home") }
                 }
 
                 Rectangle {
@@ -659,10 +871,19 @@ Item {
                             font.pixelSize: Appearance.font.pixelSize.smallest
                             color: Appearance.colors.colPrimary
                         }
+                        StyledText {
+                            visible: root.stagedPaths.length > 0
+                            text: root.stagedCut
+                                ? Translation.tr("Move %1").arg(String(root.stagedPaths.length))
+                                : Translation.tr("Copy %1").arg(String(root.stagedPaths.length))
+                            font.pixelSize: Appearance.font.pixelSize.smallest
+                            color: Appearance.colors.colTertiary
+                        }
                     }
                 }
 
                 RippleButton {
+                    Accessible.name: Translation.tr("Change file sorting")
                     implicitWidth: sortContent.implicitWidth + Appearance.sizes.elevationMargin * 2
                     implicitHeight: Appearance.sizes.elevationMargin * 4
                     buttonRadius: Appearance.rounding.full
@@ -677,9 +898,15 @@ Item {
                         MaterialSymbol { text: "sort"; iconSize: Appearance.font.pixelSize.normal; color: Appearance.colors.colOnSurface }
                         StyledText { text: Translation.tr(root.sortMode); font.pixelSize: Appearance.font.pixelSize.small; color: Appearance.colors.colOnSurface }
                     }
+                    StyledToolTip {
+                        text: root.sortDescending
+                            ? Translation.tr("Sorted by %1, descending · Ctrl+Shift+S").arg(Translation.tr(root.sortMode))
+                            : Translation.tr("Sorted by %1, ascending · Ctrl+Shift+S").arg(Translation.tr(root.sortMode))
+                    }
                 }
 
                 RippleButton {
+                    Accessible.name: root.showHidden ? Translation.tr("Hide hidden files") : Translation.tr("Show hidden files")
                     implicitWidth: Appearance.sizes.elevationMargin * 4
                     implicitHeight: implicitWidth
                     buttonRadius: Appearance.rounding.full
@@ -692,6 +919,11 @@ Item {
                     colRippleToggled: Appearance.colors.colPrimaryContainerActive
                     onClicked: root.toggleHidden()
                     MaterialSymbol { anchors.centerIn: parent; text: root.showHidden ? "visibility" : "visibility_off"; iconSize: Appearance.font.pixelSize.normal; color: root.showHidden ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnSurface }
+                    StyledToolTip {
+                        text: root.showHidden
+                            ? Translation.tr("Hide dotfiles · Ctrl+H")
+                            : Translation.tr("Show dotfiles · Ctrl+H")
+                    }
                 }
             }
 
@@ -703,23 +935,32 @@ Item {
                 RowLayout {
                     anchors.fill: parent
                     spacing: Appearance.sizes.elevationMargin
+                    layoutDirection: root.detailsFirst ? Qt.RightToLeft : Qt.LeftToRight
 
                     Rectangle {
                         Layout.preferredWidth: browserBody.width * 0.42
                         Layout.fillHeight: true
                         radius: Appearance.rounding.large
                         color: Appearance.colors.colSurfaceContainerHigh
-                        clip: true
 
                         ColumnLayout {
+                            id: fileColumn
                             anchors.fill: parent
-                            anchors.margins: Appearance.sizes.elevationMargin / 2
-                            spacing: Appearance.sizes.elevationMargin / 2
+                            anchors.margins: root.panelGutter
+                            spacing: 0
+                            opacity: 0.3 + root.directoryRevealProgress * 0.7
+                            transform: Translate {
+                                // Stay inside the card's safety inset even at
+                                // frame zero; the external card deliberately
+                                // does not clip hover-scaled delegates.
+                                y: (1 - root.directoryRevealProgress) * root.rowHoverGutter
+                            }
 
                             RowLayout {
                                 Layout.fillWidth: true
-                                Layout.leftMargin: Appearance.sizes.elevationMargin / 2
-                                Layout.rightMargin: Appearance.sizes.elevationMargin / 2
+                                Layout.leftMargin: root.rowHoverGutter
+                                Layout.rightMargin: root.rowHoverGutter
+                                Layout.bottomMargin: Appearance.sizes.elevationMargin / 4
                                 StyledText { Layout.fillWidth: true; text: Translation.tr("Files"); font.weight: Font.DemiBold; color: Appearance.colors.colOnSurface }
                                 StyledText { text: String(root.filteredEntries.length); font.pixelSize: Appearance.font.pixelSize.small; color: Appearance.colors.colSubtext }
                             }
@@ -729,12 +970,15 @@ Item {
                                 Layout.fillWidth: true
                                 Layout.fillHeight: true
                                 model: root.filteredEntries
+                                visible: !backend.loading && root.filteredEntries.length > 0
                                 clip: true
                                 spacing: Appearance.sizes.elevationMargin / 3
                                 boundsBehavior: Flickable.StopAtBounds
                                 reuseItems: true
                                 cacheBuffer: height
                                 currentIndex: root.selectedIndex
+                                topMargin: root.rowHoverGutter
+                                bottomMargin: root.rowHoverGutter
 
                                 delegate: RippleButton {
                                     id: fileRow
@@ -742,9 +986,10 @@ Item {
                                     required property var modelData
                                     readonly property bool selected: root.selectedIndex === index
                                     readonly property bool marked: root.isMarked(modelData.path)
-                                    width: ListView.view.width
+                                    x: root.rowHoverGutter
+                                    width: Math.max(0, ListView.view.width - root.rowHoverGutter * 2)
                                     implicitHeight: Appearance.sizes.elevationMargin * 5
-                                    buttonRadius: selected ? Appearance.rounding.large : Appearance.rounding.normal
+                                    buttonRadius: selected ? Appearance.rounding.full : Appearance.rounding.normal
                                     colBackground: selected ? Appearance.colors.colPrimaryContainer : Appearance.colors.colSurfaceContainerHigh
                                     colBackgroundHover: selected ? Appearance.colors.colPrimaryContainerHover : Appearance.colors.colSurfaceContainerHighestHover
                                     colRipple: selected ? Appearance.colors.colPrimaryContainerActive : Appearance.colors.colSurfaceContainerHighestActive
@@ -760,7 +1005,7 @@ Item {
 
                                         MaterialShape {
                                             implicitSize: Appearance.sizes.elevationMargin * 3.5
-                                            shapeString: root.fileShape(fileRow.modelData)
+                                            shapeString: fileRow.selected ? "Circle" : "Clover8Leaf"
                                             color: fileRow.selected ? Appearance.colors.colPrimary : Appearance.colors.colSecondaryContainer
 
                                             MaterialSymbol {
@@ -816,38 +1061,47 @@ Item {
                                     }
                                 }
 
-                                ScrollEdgeFade {}
+                                ScrollEdgeFade {
+                                    target: fileList
+                                    color: Appearance.colors.colSurfaceContainerHigh
+                                }
                             }
 
-                            ColumnLayout {
+                            Item {
                                 Layout.fillWidth: true
                                 Layout.fillHeight: true
                                 visible: !backend.loading && root.filteredEntries.length === 0
-                                spacing: Appearance.sizes.elevationMargin
-                                MaterialShape {
-                                    Layout.alignment: Qt.AlignHCenter
-                                    implicitSize: Appearance.sizes.elevationMargin * 7
-                                    shapeString: "Puffy"
-                                    color: Appearance.colors.colSecondaryContainer
-                                    MaterialSymbol { anchors.centerIn: parent; text: root.searchQuery.trim().length > 0 ? "search_off" : "folder_off"; iconSize: Appearance.font.pixelSize.huge; color: Appearance.colors.colOnSecondaryContainer }
+                                ColumnLayout {
+                                    anchors.centerIn: parent
+                                    spacing: Appearance.sizes.elevationMargin
+                                    MaterialShape {
+                                        Layout.alignment: Qt.AlignHCenter
+                                        implicitSize: Appearance.sizes.elevationMargin * 10
+                                        shapeString: "Puffy"
+                                        color: Appearance.colors.colSecondaryContainer
+                                        MaterialSymbol { anchors.centerIn: parent; text: root.searchQuery.trim().length > 0 ? "search" : "folder"; iconSize: Appearance.font.pixelSize.huge * 1.6; color: Appearance.colors.colOnSecondaryContainer }
+                                    }
+                                    StyledText { Layout.alignment: Qt.AlignHCenter; text: root.searchQuery.trim().length > 0 ? Translation.tr("No file matches this search") : Translation.tr("This folder is empty"); font.weight: Font.DemiBold; color: Appearance.colors.colOnSurface }
+                                    StyledText { Layout.alignment: Qt.AlignHCenter; text: root.searchQuery.trim().length > 0 ? Translation.tr("Try fewer words or clear the search field") : Translation.tr("Create a file or folder with the shortcuts below"); font.pixelSize: Appearance.font.pixelSize.small; color: Appearance.colors.colSubtext }
                                 }
-                                StyledText { Layout.alignment: Qt.AlignHCenter; text: root.searchQuery.trim().length > 0 ? Translation.tr("No file matches this search") : Translation.tr("This folder is empty"); font.weight: Font.DemiBold; color: Appearance.colors.colOnSurface }
-                                StyledText { Layout.alignment: Qt.AlignHCenter; text: root.searchQuery.trim().length > 0 ? Translation.tr("Try fewer words or clear the search field") : Translation.tr("Create a file or folder with the shortcuts below"); font.pixelSize: Appearance.font.pixelSize.small; color: Appearance.colors.colSubtext }
                             }
 
-                            ColumnLayout {
+                            Item {
                                 Layout.fillWidth: true
                                 Layout.fillHeight: true
                                 visible: backend.loading
-                                spacing: Appearance.sizes.elevationMargin
-                                MaterialShape {
-                                    Layout.alignment: Qt.AlignHCenter
-                                    implicitSize: Appearance.sizes.elevationMargin * 7
-                                    shapeString: "ClamShell"
-                                    color: Appearance.colors.colPrimaryContainer
-                                    MaterialSymbol { anchors.centerIn: parent; text: "folder_sync"; iconSize: Appearance.font.pixelSize.huge; color: Appearance.colors.colOnPrimaryContainer }
+                                ColumnLayout {
+                                    anchors.centerIn: parent
+                                    spacing: Appearance.sizes.elevationMargin
+                                    MaterialShape {
+                                        Layout.alignment: Qt.AlignHCenter
+                                        implicitSize: Appearance.sizes.elevationMargin * 10
+                                        shapeString: "ClamShell"
+                                        color: Appearance.colors.colPrimaryContainer
+                                        MaterialSymbol { anchors.centerIn: parent; text: "folder_open"; iconSize: Appearance.font.pixelSize.huge * 1.6; color: Appearance.colors.colOnPrimaryContainer }
+                                    }
+                                    StyledText { Layout.alignment: Qt.AlignHCenter; text: Translation.tr("Reading directory…"); color: Appearance.colors.colSubtext }
                                 }
-                                StyledText { Layout.alignment: Qt.AlignHCenter; text: Translation.tr("Reading directory…"); color: Appearance.colors.colSubtext }
                             }
                         }
                     }
@@ -865,10 +1119,6 @@ Item {
                             anchors.margins: Appearance.sizes.elevationMargin
                             spacing: Appearance.sizes.elevationMargin
                             opacity: 1
-
-                            Behavior on opacity {
-                                NumberAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve }
-                            }
 
                             RowLayout {
                                 Layout.fillWidth: true
@@ -890,10 +1140,19 @@ Item {
                                 color: Appearance.colors.colSurfaceContainerHighest
                                 clip: true
 
+                                StyledImage {
+                                    anchors.fill: parent
+                                    anchors.margins: Appearance.sizes.elevationMargin
+                                    visible: root.selectedMetadata?.previewKind === "image"
+                                    source: visible ? Qt.resolvedUrl(String(root.selectedMetadata?.path ?? "")) : ""
+                                    fillMode: Image.PreserveAspectFit
+                                    asynchronous: true
+                                }
+
                                 ThumbnailImage {
                                     anchors.fill: parent
                                     anchors.margins: Appearance.sizes.elevationMargin
-                                    visible: ["image", "video", "pdf"].includes(String(root.selectedMetadata?.previewKind ?? ""))
+                                    visible: ["video", "pdf"].includes(String(root.selectedMetadata?.previewKind ?? ""))
                                     sourcePath: String(root.selectedMetadata?.path ?? "")
                                     fillMode: Image.PreserveAspectFit
                                     generateThumbnail: visible
@@ -982,21 +1241,67 @@ Item {
                 }
 
                 Rectangle {
+                    id: modalScrim
+                    z: 4
+                    readonly property bool overlayOpen: root.actionMenuOpen
+                        || root.editorMode.length > 0
+                        || root.confirmTrash
+                    anchors.fill: parent
+                    radius: Appearance.rounding.large
+                    color: Appearance.colors.colScrim
+                    visible: overlayOpen || opacity > 0.01
+                    enabled: overlayOpen
+                    opacity: overlayOpen ? 1 : 0
+
+                    TapHandler {
+                        onTapped: {
+                            if (root.actionMenuOpen)
+                                root.actionMenuOpen = false;
+                            else if (root.editorMode.length > 0)
+                                root.closeEditor();
+                            else if (root.confirmTrash)
+                                root.cancelTrashConfirmation();
+                        }
+                    }
+
+                    Behavior on opacity {
+                        NumberAnimation {
+                            duration: Appearance.animation.elementMoveFast.duration
+                            easing.type: Appearance.animation.elementMoveFast.type
+                            easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+                        }
+                    }
+                }
+
+                Rectangle {
                     id: actionMenu
                     z: 5
                     visible: root.actionMenuOpen
-                    anchors.top: parent.top
+                        || actionMenuEnterAnimation.running
+                        || actionMenuExitAnimation.running
+                        || opacity > 0.01
+                    enabled: root.actionMenuOpen
+                    anchors.bottom: parent.bottom
                     anchors.right: parent.right
                     anchors.margins: Appearance.sizes.elevationMargin
                     width: parent.width * 0.46
-                    height: Math.min(parent.height - Appearance.sizes.elevationMargin * 2, actionColumn.implicitHeight + Appearance.sizes.elevationMargin * 2)
-                    radius: Appearance.rounding.verylarge
+                    height: Math.min(parent.height - Appearance.sizes.elevationMargin * 2, actionColumn.implicitHeight + Appearance.sizes.elevationMargin)
+                    radius: Appearance.rounding.normal
                     color: Appearance.colors.colSurfaceContainerHighest
+                    opacity: root.actionMenuVisualOpacity
+                    scale: root.actionMenuVisualScale
+                    transformOrigin: Item.BottomRight
+                    transform: Translate {
+                        y: root.actionMenuVisualOffset
+                    }
 
                     ColumnLayout {
                         id: actionColumn
                         anchors.fill: parent
-                        anchors.margins: Appearance.sizes.elevationMargin
+                        anchors.leftMargin: Appearance.sizes.elevationMargin
+                        anchors.rightMargin: Appearance.sizes.elevationMargin
+                        anchors.topMargin: Appearance.sizes.elevationMargin
+                        anchors.bottomMargin: 0
                         spacing: Appearance.sizes.elevationMargin / 2
                         RowLayout {
                             Layout.fillWidth: true
@@ -1006,17 +1311,24 @@ Item {
                         ListView {
                             id: actionList
                             Layout.fillWidth: true
+                            Layout.leftMargin: root.rowHoverGutter
+                            Layout.rightMargin: root.rowHoverGutter
                             Layout.preferredHeight: Math.min(contentHeight, browserBody.height - Appearance.sizes.elevationMargin * 9)
                             model: root.actionRows
                             spacing: Appearance.sizes.elevationMargin / 3
                             clip: true
                             currentIndex: root.actionIndex
+                            topMargin: root.rowHoverGutter
                             delegate: RippleButton {
                                 id: actionRow
                                 required property int index
                                 required property var modelData
                                 width: ListView.view.width
                                 implicitHeight: Appearance.sizes.elevationMargin * 4.5
+                                // The popup intentionally has no trailing list
+                                // gutter. Keep pointer hover at 1:1 so its last
+                                // action never needs clipping compensation.
+                                scale: down ? 0.98 : 1
                                 enabled: modelData.enabled
                                 buttonRadius: root.actionIndex === index ? Appearance.rounding.large : Appearance.rounding.normal
                                 colBackground: root.actionIndex === index ? Appearance.colors.colTertiaryContainer : Appearance.colors.colSurfaceContainerHigh
@@ -1029,9 +1341,26 @@ Item {
                                     anchors.leftMargin: Appearance.sizes.elevationMargin
                                     anchors.rightMargin: Appearance.sizes.elevationMargin
                                     spacing: Appearance.sizes.elevationMargin
-                                    MaterialSymbol { text: actionRow.modelData.icon; iconSize: Appearance.font.pixelSize.normal; color: root.actionIndex === actionRow.index ? Appearance.colors.colOnTertiaryContainer : Appearance.colors.colPrimary }
-                                    StyledText { Layout.fillWidth: true; text: actionRow.modelData.label; color: root.actionIndex === actionRow.index ? Appearance.colors.colOnTertiaryContainer : Appearance.colors.colOnSurface }
-                                    ConfiguredKeyHint { visible: (actionRow.modelData.keys ?? []).length > 0 && Config.options.search.appearance.showKeyHints; actionId: actionRow.modelData.actionId ?? ""; fallbackKeys: actionRow.modelData.keys ?? []; surface: root.actionIndex === actionRow.index ? Appearance.colors.colTertiaryContainer : Appearance.colors.colSurfaceContainerHigh; onSurface: root.actionIndex === actionRow.index ? Appearance.colors.colOnTertiaryContainer : Appearance.colors.colOnSurface }
+                                    MaterialSymbol {
+                                        Layout.alignment: Qt.AlignVCenter
+                                        text: actionRow.modelData.icon
+                                        iconSize: Appearance.font.pixelSize.normal
+                                        color: root.actionIndex === actionRow.index ? Appearance.colors.colOnTertiaryContainer : Appearance.colors.colPrimary
+                                    }
+                                    StyledText {
+                                        Layout.fillWidth: true
+                                        Layout.alignment: Qt.AlignVCenter
+                                        text: actionRow.modelData.label
+                                        color: root.actionIndex === actionRow.index ? Appearance.colors.colOnTertiaryContainer : Appearance.colors.colOnSurface
+                                    }
+                                    ConfiguredKeyHint {
+                                        Layout.alignment: Qt.AlignVCenter
+                                        visible: (actionRow.modelData.keys ?? []).length > 0 && Config.options.search.appearance.showKeyHints
+                                        actionId: actionRow.modelData.actionId ?? ""
+                                        fallbackKeys: actionRow.modelData.keys ?? []
+                                        surface: root.actionIndex === actionRow.index ? Appearance.colors.colTertiaryContainer : Appearance.colors.colSurfaceContainerHigh
+                                        onSurface: root.actionIndex === actionRow.index ? Appearance.colors.colOnTertiaryContainer : Appearance.colors.colOnSurface
+                                    }
                                 }
                             }
                         }
@@ -1039,13 +1368,46 @@ Item {
                 }
 
                 Rectangle {
+                    id: editorPopup
                     z: 6
-                    visible: root.editorMode.length > 0
+                    visible: root.editorMode.length > 0 || opacity > 0.01
+                    enabled: root.editorMode.length > 0
                     anchors.centerIn: parent
                     width: parent.width * 0.58
                     height: editorColumn.implicitHeight + Appearance.sizes.elevationMargin * 3
                     radius: Appearance.rounding.verylarge
                     color: Appearance.colors.colSurfaceContainerHighest
+                    opacity: root.editorMode.length > 0 ? 1 : 0
+                    scale: root.editorMode.length > 0 ? 1 : 0.94
+                    transformOrigin: Item.Center
+
+                    Behavior on opacity {
+                        NumberAnimation {
+                            duration: root.editorMode.length > 0
+                                ? Appearance.animation.elementMoveEnter.duration
+                                : Appearance.animation.elementMoveExit.duration
+                            easing.type: root.editorMode.length > 0
+                                ? Appearance.animation.elementMoveEnter.type
+                                : Appearance.animation.elementMoveExit.type
+                            easing.bezierCurve: root.editorMode.length > 0
+                                ? Appearance.animation.elementMoveEnter.bezierCurve
+                                : Appearance.animation.elementMoveExit.bezierCurve
+                        }
+                    }
+
+                    Behavior on scale {
+                        NumberAnimation {
+                            duration: root.editorMode.length > 0
+                                ? Appearance.animation.elementResize.duration
+                                : Appearance.animation.elementMoveExit.duration
+                            easing.type: root.editorMode.length > 0
+                                ? Appearance.animation.elementResize.type
+                                : Appearance.animation.elementMoveExit.type
+                            easing.bezierCurve: root.editorMode.length > 0
+                                ? Appearance.animation.elementResize.bezierCurve
+                                : Appearance.animation.elementMoveExit.bezierCurve
+                        }
+                    }
 
                     ColumnLayout {
                         id: editorColumn
@@ -1054,8 +1416,8 @@ Item {
                         spacing: Appearance.sizes.elevationMargin
                         RowLayout {
                             Layout.fillWidth: true
-                            MaterialShape { implicitSize: Appearance.sizes.elevationMargin * 5; shapeString: root.editorMode === "create-directory" ? "Arch" : "Cookie4Sided"; color: Appearance.colors.colPrimaryContainer; MaterialSymbol { anchors.centerIn: parent; text: root.editorMode === "rename" ? "drive_file_rename_outline" : (root.editorMode === "create-directory" ? "create_new_folder" : "note_add"); iconSize: Appearance.font.pixelSize.large; color: Appearance.colors.colOnPrimaryContainer } }
-                            ColumnLayout { Layout.fillWidth: true; spacing: 0; StyledText { text: root.editorMode === "rename" ? Translation.tr("Rename item") : (root.editorMode === "create-directory" ? Translation.tr("Create folder") : Translation.tr("Create file")); font.pixelSize: Appearance.font.pixelSize.large; font.weight: Font.DemiBold; color: Appearance.colors.colOnSurface } StyledText { Layout.fillWidth: true; text: root.displayPath(backend.currentPath); elide: Text.ElideMiddle; font.pixelSize: Appearance.font.pixelSize.smallest; color: Appearance.colors.colSubtext } }
+                            MaterialShape { implicitSize: Appearance.sizes.elevationMargin * 5; shapeString: root.editorPresentedMode === "create-directory" ? "Arch" : "Cookie4Sided"; color: Appearance.colors.colPrimaryContainer; MaterialSymbol { anchors.centerIn: parent; text: root.editorPresentedMode === "rename" ? "drive_file_rename_outline" : (root.editorPresentedMode === "create-directory" ? "create_new_folder" : "note_add"); iconSize: Appearance.font.pixelSize.large; color: Appearance.colors.colOnPrimaryContainer } }
+                            ColumnLayout { Layout.fillWidth: true; spacing: 0; StyledText { text: root.editorPresentedMode === "rename" ? Translation.tr("Rename item") : (root.editorPresentedMode === "create-directory" ? Translation.tr("Create folder") : Translation.tr("Create file")); font.pixelSize: Appearance.font.pixelSize.large; font.weight: Font.DemiBold; color: Appearance.colors.colOnSurface } StyledText { Layout.fillWidth: true; text: root.displayPath(backend.currentPath); elide: Text.ElideMiddle; font.pixelSize: Appearance.font.pixelSize.smallest; color: Appearance.colors.colSubtext } }
                         }
                         ToolbarTextField {
                             id: editorField
@@ -1075,8 +1437,10 @@ Item {
                 }
 
                 Rectangle {
+                    id: trashPopup
                     z: 6
-                    visible: root.confirmTrash
+                    visible: root.confirmTrash || opacity > 0.01
+                    enabled: root.confirmTrash
                     anchors.horizontalCenter: parent.horizontalCenter
                     anchors.bottom: parent.bottom
                     anchors.bottomMargin: Appearance.sizes.elevationMargin
@@ -1084,6 +1448,37 @@ Item {
                     height: trashContent.implicitHeight + Appearance.sizes.elevationMargin * 2
                     radius: Appearance.rounding.verylarge
                     color: Appearance.colors.colErrorContainer
+                    opacity: root.confirmTrash ? 1 : 0
+                    transform: Translate {
+                        y: root.confirmTrash ? 0 : Appearance.sizes.elevationMargin * 2
+                        Behavior on y {
+                            NumberAnimation {
+                                duration: root.confirmTrash
+                                    ? Appearance.animation.elementMoveEnter.duration
+                                    : Appearance.animation.elementMoveExit.duration
+                                easing.type: root.confirmTrash
+                                    ? Appearance.animation.elementMoveEnter.type
+                                    : Appearance.animation.elementMoveExit.type
+                                easing.bezierCurve: root.confirmTrash
+                                    ? Appearance.animation.elementMoveEnter.bezierCurve
+                                    : Appearance.animation.elementMoveExit.bezierCurve
+                            }
+                        }
+                    }
+
+                    Behavior on opacity {
+                        NumberAnimation {
+                            duration: root.confirmTrash
+                                ? Appearance.animation.elementMoveEnter.duration
+                                : Appearance.animation.elementMoveExit.duration
+                            easing.type: root.confirmTrash
+                                ? Appearance.animation.elementMoveEnter.type
+                                : Appearance.animation.elementMoveExit.type
+                            easing.bezierCurve: root.confirmTrash
+                                ? Appearance.animation.elementMoveEnter.bezierCurve
+                                : Appearance.animation.elementMoveExit.bezierCurve
+                        }
+                    }
 
                     RowLayout {
                         id: trashContent
@@ -1091,8 +1486,8 @@ Item {
                         anchors.margins: Appearance.sizes.elevationMargin
                         spacing: Appearance.sizes.elevationMargin
                         MaterialShape { implicitSize: Appearance.sizes.elevationMargin * 5; shapeString: "Boom"; color: Appearance.colors.colError; MaterialSymbol { anchors.centerIn: parent; text: "delete"; iconSize: Appearance.font.pixelSize.large; color: Appearance.colors.colOnError } }
-                        ColumnLayout { Layout.fillWidth: true; spacing: 0; StyledText { text: Translation.tr("Move %1 item(s) to Trash?").arg(String(root.operationTargets().length)); font.weight: Font.DemiBold; color: Appearance.colors.colOnErrorContainer } StyledText { text: Translation.tr("This is recoverable from your desktop Trash"); font.pixelSize: Appearance.font.pixelSize.small; color: Appearance.colors.colOnErrorContainer } }
-                        RippleButton { implicitWidth: trashCancel.implicitWidth + Appearance.sizes.elevationMargin * 2; implicitHeight: Appearance.sizes.elevationMargin * 4; buttonRadius: Appearance.rounding.full; colBackground: Appearance.colors.colSurfaceContainerHigh; colBackgroundHover: Appearance.colors.colSurfaceContainerHighestHover; colRipple: Appearance.colors.colSurfaceContainerHighestActive; onClicked: root.confirmTrash = false; StyledText { id: trashCancel; anchors.centerIn: parent; text: Translation.tr("Cancel"); color: Appearance.colors.colOnSurface } }
+                        ColumnLayout { Layout.fillWidth: true; spacing: 0; StyledText { text: Translation.tr("Move %1 item(s) to Trash?").arg(String(root.trashPresentedCount)); font.weight: Font.DemiBold; color: Appearance.colors.colOnErrorContainer } StyledText { text: Translation.tr("This is recoverable from your desktop Trash"); font.pixelSize: Appearance.font.pixelSize.small; color: Appearance.colors.colOnErrorContainer } }
+                        RippleButton { implicitWidth: trashCancel.implicitWidth + Appearance.sizes.elevationMargin * 2; implicitHeight: Appearance.sizes.elevationMargin * 4; buttonRadius: Appearance.rounding.full; colBackground: Appearance.colors.colSurfaceContainerHigh; colBackgroundHover: Appearance.colors.colSurfaceContainerHighestHover; colRipple: Appearance.colors.colSurfaceContainerHighestActive; onClicked: root.cancelTrashConfirmation(); StyledText { id: trashCancel; anchors.centerIn: parent; text: Translation.tr("Cancel"); color: Appearance.colors.colOnSurface } }
                         RippleButton { implicitWidth: trashConfirm.implicitWidth + Appearance.sizes.elevationMargin * 2; implicitHeight: Appearance.sizes.elevationMargin * 4; buttonRadius: Appearance.rounding.full; colBackground: Appearance.colors.colError; colBackgroundHover: Appearance.colors.colErrorHover; colRipple: Appearance.colors.colErrorActive; onClicked: root.confirmTrashNow(); RowLayout { id: trashConfirm; anchors.centerIn: parent; StyledText { text: Translation.tr("Move to Trash"); font.weight: Font.DemiBold; color: Appearance.colors.colOnError } ConfiguredKeyHint { fallbackKeys: ["↵"]; surface: Appearance.colors.colError; onSurface: Appearance.colors.colOnError } } }
                     }
                 }

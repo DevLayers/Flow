@@ -100,6 +100,18 @@ RippleButton {
     property int horizontalMargin: Appearance.sizes.elevationMargin
     property int buttonHorizontalPadding: 10
     property int buttonVerticalPadding: 8
+    /**
+     * AGENTS requires durations to come from `Appearance.animation.*` so the
+     * user's animation multiplier applies to them. These row micro-transitions
+     * have no matching token — they are deliberately shorter than
+     * elementMoveFast, which is what makes a row feel responsive rather than
+     * animated — so they take the multiplier directly instead of ignoring it,
+     * which is the part that actually mattered.
+     */
+    function scaledDuration(milliseconds: int): int {
+        return Math.max(0, Math.round(milliseconds * (Appearance.animMultiplier ?? 1.0)));
+    }
+
     property bool keyboardDown: false
     // Hosts that already animate their rows (the launcher list animates the
     // delegate) turn this off rather than stacking a second fade underneath.
@@ -255,7 +267,7 @@ RippleButton {
 
     Behavior on implicitHeight {
         NumberAnimation {
-            duration: 250
+            duration: root.scaledDuration(250)
             easing.type: Easing.BezierSpline
             easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
         }
@@ -270,27 +282,49 @@ RippleButton {
 
     readonly property string highlightPrefix: `<u><font color="${Appearance.colors.colPrimary}">`
     readonly property string highlightSuffix: `</font></u>`
+    /**
+     * Underline the query inside a result name.
+     *
+     * Contiguous matched characters are wrapped once instead of one tag per
+     * character: a name with scattered matches used to come back as confetti —
+     * four tag pairs for "file" — and every one of them is a separate rich-text
+     * run for the layout engine to place.
+     */
     function highlightContent(content, query) {
-        if (!query || query.length === 0 || content == query || fontType === "monospace")
+        if (!query || query.length === 0 || content === query || root.fontType === "monospace")
             return StringUtils.escapeHtml(content);
-        let contentLower = content.toLowerCase();
-        let queryLower = query.toLowerCase();
-        let result = "";
-        let lastIndex = 0;
-        let qIndex = 0;
-        for (let i = 0; i < content.length && qIndex < query.length; i++) {
-            if (contentLower[i] === queryLower[qIndex]) {
-                if (i > lastIndex)
-                    result += StringUtils.escapeHtml(content.slice(lastIndex, i));
-                result += root.highlightPrefix + StringUtils.escapeHtml(content[i]) + root.highlightSuffix;
-                lastIndex = i + 1;
-                qIndex++;
+
+        const contentLower = content.toLowerCase();
+        const queryLower = query.toLowerCase();
+        const pieces = [];
+        let plainStart = 0;
+        let runStart = -1;
+        let queryIndex = 0;
+
+        for (let i = 0; i < content.length; i++) {
+            const matches = queryIndex < query.length && contentLower[i] === queryLower[queryIndex];
+            if (matches) {
+                if (runStart === -1) {
+                    if (i > plainStart)
+                        pieces.push(StringUtils.escapeHtml(content.slice(plainStart, i)));
+                    runStart = i;
+                }
+                queryIndex++;
+            } else if (runStart !== -1) {
+                pieces.push(root.highlightPrefix, StringUtils.escapeHtml(content.slice(runStart, i)), root.highlightSuffix);
+                plainStart = i;
+                runStart = -1;
             }
         }
-        if (lastIndex < content.length)
-            result += StringUtils.escapeHtml(content.slice(lastIndex));
-        return result;
+        if (runStart !== -1) {
+            pieces.push(root.highlightPrefix, StringUtils.escapeHtml(content.slice(runStart)), root.highlightSuffix);
+            plainStart = content.length;
+        }
+        if (plainStart < content.length)
+            pieces.push(StringUtils.escapeHtml(content.slice(plainStart)));
+        return pieces.join("");
     }
+
     property string displayContent: {
         // Skip highlight computation when selected — text shows itemName directly
         if (root.isSelected)
@@ -326,13 +360,13 @@ RippleButton {
 
         Behavior on topLeftRadius {
             NumberAnimation {
-                duration: 100
+                duration: root.scaledDuration(100)
                 easing.type: Easing.OutQuad
             }
         }
         Behavior on bottomLeftRadius {
             NumberAnimation {
-                duration: 100
+                duration: root.scaledDuration(100)
                 easing.type: Easing.OutQuad
             }
         }
@@ -367,7 +401,7 @@ RippleButton {
             Behavior on x {
                 enabled: root._animateWidthChange
                 NumberAnimation {
-                    duration: 250
+                    duration: root.scaledDuration(250)
                     easing.type: Easing.BezierSpline
                     easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
                 }
@@ -389,7 +423,7 @@ RippleButton {
                 Behavior on width {
                     enabled: root._animateWidthChange
                     NumberAnimation {
-                        duration: 250
+                        duration: root.scaledDuration(250)
                         easing.type: Easing.BezierSpline
                         easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
                     }
@@ -399,25 +433,25 @@ RippleButton {
                 // animating all 4 independently costs 4x animation overhead per item
                 Behavior on topLeftRadius {
                     NumberAnimation {
-                        duration: 100
+                        duration: root.scaledDuration(100)
                         easing.type: Easing.OutQuad
                     }
                 }
                 Behavior on topRightRadius {
                     NumberAnimation {
-                        duration: 100
+                        duration: root.scaledDuration(100)
                         easing.type: Easing.OutQuad
                     }
                 }
                 Behavior on bottomLeftRadius {
                     NumberAnimation {
-                        duration: 100
+                        duration: root.scaledDuration(100)
                         easing.type: Easing.OutQuad
                     }
                 }
                 Behavior on bottomRightRadius {
                     NumberAnimation {
-                        duration: 100
+                        duration: root.scaledDuration(100)
                         easing.type: Easing.OutQuad
                     }
                 }
@@ -460,7 +494,7 @@ RippleButton {
                                 color: (root.isSelected || root.actionPanelOpen) ? Appearance.colors.colPrimaryContainer : Appearance.colors.colSurfaceContainerHighest
                                 Behavior on color {
                                     ColorAnimation {
-                                        duration: 80
+                                        duration: root.scaledDuration(80)
                                     }
                                 }
 
@@ -473,7 +507,7 @@ RippleButton {
                                 smooth: true
                                 Behavior on implicitSize {
                                     NumberAnimation {
-                                        duration: 150
+                                        duration: root.scaledDuration(150)
                                     }
                                 }
                             }
@@ -491,7 +525,7 @@ RippleButton {
                             color: root.colForeground
                             Behavior on iconSize {
                                 NumberAnimation {
-                                    duration: 150
+                                    duration: root.scaledDuration(150)
                                 }
                             }
                         }
@@ -533,7 +567,7 @@ RippleButton {
                                 color: root.isSelected ? Appearance.colors.colPrimaryContainer : Appearance.colors.colSurfaceContainerHighest
                                 Behavior on color {
                                     ColorAnimation {
-                                        duration: 80
+                                        duration: root.scaledDuration(80)
                                     }
                                 }
                             }
@@ -751,7 +785,7 @@ RippleButton {
                         Behavior on opacity {
                             NumberAnimation {
                                 id: indicatorAnim
-                                duration: 100
+                                duration: root.scaledDuration(100)
                                 easing.type: Easing.OutQuad
                             }
                         }
@@ -902,37 +936,37 @@ RippleButton {
                     opacity: root.actionPanelOpen ? 1.0 : 0.0
                     Behavior on opacity {
                         NumberAnimation {
-                            duration: 250
+                            duration: root.scaledDuration(250)
                             easing.type: Easing.OutCubic
                         }
                     }
 
                     Behavior on color {
                         ColorAnimation {
-                            duration: 80
+                            duration: root.scaledDuration(80)
                         }
                     }
                     Behavior on topLeftRadius {
                         NumberAnimation {
-                            duration: 140
+                            duration: root.scaledDuration(140)
                             easing.type: Easing.OutQuad
                         }
                     }
                     Behavior on topRightRadius {
                         NumberAnimation {
-                            duration: 140
+                            duration: root.scaledDuration(140)
                             easing.type: Easing.OutQuad
                         }
                     }
                     Behavior on bottomLeftRadius {
                         NumberAnimation {
-                            duration: 140
+                            duration: root.scaledDuration(140)
                             easing.type: Easing.OutQuad
                         }
                     }
                     Behavior on bottomRightRadius {
                         NumberAnimation {
-                            duration: 140
+                            duration: root.scaledDuration(140)
                             easing.type: Easing.OutQuad
                         }
                     }
@@ -963,7 +997,7 @@ RippleButton {
                                 color: actionBtn.isBtnActive ? Appearance.colors.colPrimary : Appearance.colors.colSurfaceContainerHighest
                                 Behavior on color {
                                     ColorAnimation {
-                                        duration: 80
+                                        duration: root.scaledDuration(80)
                                     }
                                 }
                             }
@@ -985,7 +1019,7 @@ RippleButton {
                                 color: actionBtn.isBtnActive ? Appearance.m3colors.m3onPrimary : Appearance.colors.colOnSurfaceVariant
                                 Behavior on color {
                                     ColorAnimation {
-                                        duration: 80
+                                        duration: root.scaledDuration(80)
                                     }
                                 }
                             }
@@ -1001,7 +1035,7 @@ RippleButton {
                             Layout.maximumWidth: 120
                             Behavior on color {
                                 ColorAnimation {
-                                    duration: 80
+                                    duration: root.scaledDuration(80)
                                 }
                             }
                         }

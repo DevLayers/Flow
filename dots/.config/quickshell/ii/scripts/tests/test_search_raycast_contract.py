@@ -334,6 +334,77 @@ class SearchRaycastContractTests(unittest.TestCase):
         self.assertIn("sourceSize.width: 64", item)
         self.assertIn("ClippingRectangle", item)
 
+    def test_typo_tolerant_matching_is_a_gated_last_tier(self):
+        myers = source("modules/common/functions/myers.js")
+        bitwise = source("modules/common/functions/BitwiseFuzzy.qml")
+        keymap = source("modules/common/functions/KeymapTranslation.qml")
+        appsearch = source("services/AppSearch.qml")
+        launcher = source("services/LauncherSearch.qml")
+        config = source("modules/common/Config.qml")
+
+        # Bit-parallel Myers, with the 30-bit word the signed-int JS engine needs.
+        self.assertIn("const WORD_SIZE = 30", myers)
+        self.assertIn("function _distSingle(peq, m, text, n)", myers)
+        self.assertIn("function _distMulti(Peq, m, words, text, n)", myers)
+        # Whole-string edit distance buries the one word a query aims at.
+        self.assertIn("function scoreBestNormalized(prepared, normText)", myers)
+        self.assertIn("function search(prepared, candidates, opts)", bitwise)
+        self.assertIn("function translateAll(text: string): var", keymap)
+        self.assertIn("function transliterate(text: string): string", keymap)
+
+        # Off by default, and the tier that can match something unintended runs
+        # only when the precise passes between them found nothing.
+        self.assertIn("property bool enable: false", config)
+        self.assertIn("property bool keyboardLayouts: true", config)
+        self.assertIn("function matchApplications(query: string): var", launcher)
+        self.assertIn("if (primary.length > 0)\n            return primary;", launcher)
+        self.assertIn("if (typosEnabled && extra.length === 0)", launcher)
+        self.assertIn("function typoQuery(search: string): var", appsearch)
+
+    def test_review_part_three_fixes_are_in_place(self):
+        widget = source("modules/ii/overview/SearchWidget.qml")
+        item = source("modules/ii/overview/SearchItem.qml")
+        router = source("modules/ii/overview/SearchKeyRouter.qml")
+        appsearch = source("services/AppSearch.qml")
+        launcher = source("services/LauncherSearch.qml")
+
+        # 3.1 — fuzzysort accepts any subsequence without a floor.
+        self.assertIn("function trimFuzzyResults(results: var): var", appsearch)
+        self.assertIn("threshold: root.fuzzyThreshold", appsearch)
+        # 3.2 — a lone group's caption names nothing.
+        self.assertIn("const showCaptions = groupCount > 1", widget)
+        # 3.4 — reaching the last group a row at a time costs ten keystrokes.
+        self.assertIn("function sectionJump(step: int): bool", widget)
+        self.assertIn('case "sectionNext":', router)
+        # 3.5 — one tag pair per contiguous run, not per character.
+        self.assertIn("pieces.push(root.highlightPrefix", item)
+        # 3.6 — app rows depend on the entry, not on the keystroke.
+        self.assertIn("property var appResultCache", launcher)
+        # 3.7 — row durations have to follow the animation multiplier.
+        self.assertIn("function scaledDuration(milliseconds: int): int", item)
+        self.assertNotIn("duration: 250", item)
+        # 3.8 — alwaysRunToEnd on a Flickable's own contentY.
+        self.assertNotIn("alwaysRunToEnd: true\n                            duration: Appearance.animation.scroll", widget)
+        # 3.9 / 3.10 — shaders that ran on the frames that could least afford them.
+        self.assertNotIn("MultiEffect", widget)
+        self.assertIn("root.activePanelUsesHost || root.isAiMode || root.showSuggestionsPanel", widget)
+
+    def test_close_animation_does_not_collapse_the_widget_mid_exit(self):
+        widget = source("modules/ii/overview/SearchWidget.qml")
+
+        # Closing clears the query and the rows, which collapses the container
+        # back to the bare field. Left alone that ran while the window was
+        # already sliding out — two motions stacked, so a close with results on
+        # screen looked faster and harsher than a close with an empty field.
+        self.assertIn("property bool exiting: false", widget)
+        self.assertIn("root.exitHeight = searchWidgetContent.height", widget)
+        # The freeze has to be taken before the handlers that clear the query,
+        # which sit on the same signal.
+        self.assertIn("root.exiting ? root.exitHeight : searchWidgetContent.height", widget)
+        self.assertIn("root.exiting ? root.exitHeight : implicitHeight", widget)
+        # And released on the way back in, so a fast reopen is not stuck frozen.
+        self.assertIn("exitHoldTimer.stop();\n                root.exiting = false;", widget)
+
     def test_collapsed_search_does_not_reserve_hidden_result_margins(self):
         widget = source("modules/ii/overview/SearchWidget.qml")
         self.assertIn("implicitHeight: !resultsActive", widget)

@@ -29,6 +29,8 @@ KeyHint {
             return "Space";
         case "backspace":
             return "Backspace";
+        case "home":
+            return "Home";
         default:
             return String(key);
         }

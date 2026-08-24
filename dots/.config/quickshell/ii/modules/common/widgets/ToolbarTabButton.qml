@@ -10,6 +10,8 @@ RippleButton {
     id: root
     required property string materialSymbol
     required property bool current
+    property int shortcutIndex: 0
+    property bool showShortcut: false
     horizontalPadding: 14
 
     implicitHeight: 40
@@ -25,13 +27,74 @@ RippleButton {
         anchors.centerIn: parent
         spacing: 6
 
-        MaterialSymbol {
-            id: icon
+        Item {
+            id: iconContainer
             anchors.verticalCenter: parent.verticalCenter
-            iconSize: 22
-            text: root.materialSymbol
-            fill: root.current ? 1.0 : (root.hovered ? 1.0 : 0.0)
+            width: 22
+            height: 22
+
+            MaterialSymbol {
+                id: icon
+                anchors.centerIn: parent
+                iconSize: 22
+                text: root.materialSymbol
+                fill: root.current ? 1.0 : (root.hovered ? 1.0 : 0.0)
+                opacity: root.showShortcut ? 0.0 : 1.0
+                scale: root.showShortcut ? 0.5 : 1.0
+
+                Behavior on opacity {
+                    NumberAnimation {
+                        duration: Appearance.animation.elementMoveFast.duration
+                        easing.type: Appearance.animation.elementMoveFast.type
+                        easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+                    }
+                }
+                Behavior on scale {
+                    NumberAnimation {
+                        duration: Appearance.animation.elementMoveFast.duration
+                        easing.type: Appearance.animation.elementMoveFast.type
+                        easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+                    }
+                }
+            }
+
+            Rectangle {
+                id: shortcutBadge
+                anchors.centerIn: parent
+                width: 20
+                height: 20
+                radius: Appearance.rounding.full
+                color: root.current ? Appearance.colors.colPrimary : Appearance.colors.colLayer2
+                opacity: root.showShortcut ? 1.0 : 0.0
+                scale: root.showShortcut ? 1.0 : 0.5
+                visible: opacity > 0
+
+                Behavior on opacity {
+                    NumberAnimation {
+                        duration: Appearance.animation.elementMoveFast.duration
+                        easing.type: Appearance.animation.elementMoveFast.type
+                        easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+                    }
+                }
+                Behavior on scale {
+                    NumberAnimation {
+                        duration: Appearance.animation.elementMoveFast.duration
+                        easing.type: Appearance.animation.elementMoveFast.type
+                        easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+                    }
+                }
+
+                StyledText {
+                    anchors.centerIn: parent
+                    text: String(root.shortcutIndex)
+                    font.family: Appearance.font.family.numbers
+                    font.pixelSize: Appearance.font.pixelSize.smallest
+                    font.weight: Font.Bold
+                    color: root.current ? Appearance.colors.colOnPrimary : Appearance.colors.colOnLayer2
+                }
+            }
         }
+
         StyledText {
             id: label
             anchors.verticalCenter: parent.verticalCenter
