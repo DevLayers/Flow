@@ -183,7 +183,10 @@ Item {
 
     // ─── Month navigation ───
     property int entranceKey: 0
-    property real gridOpacity: 1
+    // Starts hidden: Component.onCompleted plays the entrance, and a default
+    // of 1 meant the grid painted a frame at its final state before that reset
+    // it to 0 — the cells appeared, vanished, then faded in again.
+    property real gridOpacity: 0
     property real gridShiftX: 0
 
     function goToMonth(year, month, direction) {

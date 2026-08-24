@@ -44,14 +44,21 @@ Singleton {
 
     Component.onCompleted: Qt.callLater(_scheduleResultsUpdate)
 
+    function enabledUtilityPrefixes(): var {
+        const prefixes = Config.options.search.prefix;
+        const values = [prefixes.action, prefixes.app];
+        const modules = Config.options.search.modules;
+        if (modules.fileBrowser) values.push(prefixes.fileBrowser);
+        if (modules.fileSearch) values.push(prefixes.fileSearch);
+        if (modules.math) values.push(prefixes.math);
+        if (modules.shellCommand) values.push(prefixes.shellCommand);
+        if (modules.webSearch) values.push(prefixes.webSearch);
+        if (modules.windowSearch) values.push(prefixes.windowSearch);
+        return values.filter(value => String(value ?? "").length > 0);
+    }
+
     function ensurePrefix(prefix) {
-        const knownPrefixes = SearchPanelRegistry.activePrefixes.concat([
-            Config.options.search.prefix.action, Config.options.search.prefix.app,
-            Config.options.search.prefix.math,
-            Config.options.search.prefix.shellCommand, Config.options.search.prefix.webSearch,
-            Config.options.search.prefix.windowSearch, Config.options.search.prefix.fileBrowser,
-            Config.options.search.prefix.fileSearch
-        ]).filter(value => String(value ?? "").length > 0);
+        const knownPrefixes = SearchPanelRegistry.activePrefixes.concat(root.enabledUtilityPrefixes());
         if (knownPrefixes.some(existing => root.query.startsWith(existing))) {
             root.query = prefix + root.query.slice(1);
         } else {
@@ -60,12 +67,7 @@ Singleton {
     }
 
     function queryUsesPrefix(value) {
-        const prefixes = SearchPanelRegistry.activePrefixes.concat([
-            Config.options.search.prefix.action, Config.options.search.prefix.app,
-            Config.options.search.prefix.fileBrowser, Config.options.search.prefix.fileSearch,
-            Config.options.search.prefix.math, Config.options.search.prefix.shellCommand,
-            Config.options.search.prefix.webSearch, Config.options.search.prefix.windowSearch
-        ]).filter(prefix => String(prefix ?? "").length > 0);
+        const prefixes = SearchPanelRegistry.activePrefixes.concat(root.enabledUtilityPrefixes());
         return prefixes.some(prefix => String(value ?? "").startsWith(prefix));
     }
 
@@ -74,6 +76,8 @@ Singleton {
     signal requestOpenSettings
 
     function isMathQuery(expr) {
+        if (!Config.options.search.modules.math)
+            return false;
         expr = expr.trim();
         if (expr.length === 0)
             return false;
@@ -88,12 +92,7 @@ Singleton {
         const query = String(queryText ?? "").trim();
         if (query.length < 2)
             return false;
-        const prefixes = Config.options.search.prefix;
-        const reserved = SearchPanelRegistry.activePrefixes.concat([
-            prefixes.action, prefixes.app, prefixes.fileBrowser,
-            prefixes.fileSearch, prefixes.math, prefixes.shellCommand, prefixes.webSearch,
-            prefixes.windowSearch
-        ]).filter(prefix => String(prefix ?? "").length > 0);
+        const reserved = SearchPanelRegistry.activePrefixes.concat(root.enabledUtilityPrefixes());
         return !reserved.some(prefix => query.startsWith(prefix));
     }
 
@@ -490,11 +489,14 @@ Singleton {
         const query = String(queryText ?? "").trim().toLocaleLowerCase();
         if (query.length < 2)
             return [];
+        const genericTerms = ["generator", "generators", "generate", "gerador", "geradores", "gerar"];
+        const isGeneric = genericTerms.some(term => term === query);
+        const subject = genericTerms.reduce((value, term) => value.replace(new RegExp("^" + term + "\\s+"), ""), query).trim();
         return [
             { id: "uuid", name: Translation.tr("Generate UUID"), keywords: ["uuid", "guid"], icon: "fingerprint" },
             { id: "password", name: Translation.tr("Generate password"), keywords: ["password", "senha", "pass"], icon: "password" },
             { id: "lorem", name: Translation.tr("Generate Lorem Ipsum"), keywords: ["lorem", "ipsum", "text"], icon: "notes" }
-        ].filter(entry => entry.keywords.some(keyword => keyword.includes(query)));
+        ].filter(entry => isGeneric || entry.keywords.some(keyword => keyword.includes(subject) || subject.includes(keyword)));
     }
 
     function generatorValue(id) {
@@ -520,7 +522,7 @@ Singleton {
             verb: Translation.tr("Copy"),
             iconName: entry.icon,
             iconType: LauncherSearchResult.IconType.Material,
-            comment: Translation.tr("Generated locally"),
+            comment: Translation.tr("Press Enter to generate and copy locally"),
             execute: () => Quickshell.clipboardText = root.generatorValue(entry.id)
         });
     }
@@ -570,7 +572,7 @@ Singleton {
         const output = [];
         if (actions.includes("ai") && Ai.enabled)
             output.push(root.createResult({ key: "fallback:ai", name: Translation.tr("Ask AI"), type: Translation.tr("Fallback"), verb: Translation.tr("Open"), iconName: "auto_awesome", iconType: LauncherSearchResult.IconType.Material, keepOverviewOpen: true, execute: () => root.query = Config.options.search.prefix.ai + root.query }));
-        if (actions.includes("web"))
+        if (actions.includes("web") && Config.options.search.modules.webSearch)
             output.push(root.createResult({ key: "fallback:web", name: Translation.tr("Search the web"), type: Translation.tr("Fallback"), verb: Translation.tr("Search"), iconName: "travel_explore", iconType: LauncherSearchResult.IconType.Material, execute: () => Qt.openUrlExternally(Config.options.search.engineBaseUrl + encodeURIComponent(root.query)) }));
         if (actions.includes("tasks") && SearchPanelRegistry.byId("tasks")?.enabled())
             output.push(root.createSearchPanelResult(SearchPanelRegistry.byId("tasks")));
@@ -802,14 +804,14 @@ Singleton {
         fileBrowserProc.running = false;
         mathProc.running = false; // Stop active math calculation instantly to resolve race conditions and QML coalescing
 
-        if (root.query.startsWith(Config.options.search.prefix.fileSearch)) {
+        if (Config.options.search.modules.fileSearch && root.query.startsWith(Config.options.search.prefix.fileSearch)) {
             const fileSearchExpr = root.query.slice(Config.options.search.prefix.fileSearch.length);
             fileProc.searchFiles(fileSearchExpr);
         } else {
             root.fileResults = [];
         }
 
-        if (root.query.startsWith(Config.options.search.prefix.fileBrowser)) {
+        if (Config.options.search.modules.fileBrowser && root.query.startsWith(Config.options.search.prefix.fileBrowser)) {
             const rawPath = root.query.slice(Config.options.search.prefix.fileBrowser.length);
             const homePath = FileUtils.trimFileProtocol(Directories.home);
             const expandedPath = rawPath.startsWith("/") ? rawPath : (homePath + "/" + rawPath);
@@ -1042,7 +1044,7 @@ Singleton {
         }
 
         ///////////// Special cases ///////////////
-        if (root.query.startsWith(Config.options.search.prefix.clipboard)) {
+        if (Config.options.search.modules.clipboard && root.query.startsWith(Config.options.search.prefix.clipboard)) {
             // Clipboard
             const searchString = StringUtils.cleanPrefix(root.query, Config.options.search.prefix.clipboard);
 
@@ -1103,12 +1105,12 @@ Singleton {
                     blurImage: shouldBlurImage
                 });
             }).filter(Boolean);
-        } else if (root.query.startsWith(Config.options.search.prefix.emojis)) {
+        } else if (Config.options.search.modules.emojis.enable && root.query.startsWith(Config.options.search.prefix.emojis)) {
             // `:` resolves to the registered grid panel. Keeping this branch
             // empty prevents a second, hidden list of emoji rows from being
             // built on every query.
             return [];
-        } else if (root.query.startsWith(Config.options.search.prefix.windowSearch)) {
+        } else if (Config.options.search.modules.windowSearch && root.query.startsWith(Config.options.search.prefix.windowSearch)) {
             const searchString = root.query.slice(Config.options.search.prefix.windowSearch.length);
             const windows = getWindowResults(searchString);
             return windows.map(w => {
@@ -1152,7 +1154,7 @@ Singleton {
                         })]
                 });
             }).filter(Boolean);
-        } else if (root.query.startsWith(Config.options.search.prefix.fileBrowser)) {
+        } else if (Config.options.search.modules.fileBrowser && root.query.startsWith(Config.options.search.prefix.fileBrowser)) {
             // File browser / directory navigation
             // Process call is debounced via onQueryChanged, results are in fileBrowserResults
             const rawPath = root.query.slice(Config.options.search.prefix.fileBrowser.length);
@@ -1496,8 +1498,10 @@ Singleton {
         result = result.concat(aliasObjects);
 
         const isMath = root.isMathQuery(root.query);
-        const startsWithShellCommandPrefix = root.query.startsWith(Config.options.search.prefix.shellCommand);
-        const startsWithWebSearchPrefix = root.query.startsWith(Config.options.search.prefix.webSearch);
+        const startsWithShellCommandPrefix = Config.options.search.modules.shellCommand
+            && root.query.startsWith(Config.options.search.prefix.shellCommand);
+        const startsWithWebSearchPrefix = Config.options.search.modules.webSearch
+            && root.query.startsWith(Config.options.search.prefix.webSearch);
 
         // System Controls matches
         const systemControlResults = [];
@@ -1507,7 +1511,7 @@ Singleton {
             queryClean = queryClean.slice(1);
         }
 
-        if (Config.options.search.enableSystemControls && (hasColonPrefix || queryClean.length >= 2)) {
+        if (Config.options.search.modules.systemControls && (hasColonPrefix || queryClean.length >= 2)) {
             const sysCommands = [
                 {
                     cmd: "lock",
@@ -1581,7 +1585,8 @@ Singleton {
         }
 
         //////////////// Files /////////////////
-        result = result.concat(fileResultsObject);
+        if (Config.options.search.modules.fileSearch)
+            result = result.concat(fileResultsObject);
 
         //////////////// Apps //////////////////
         result = result.concat(appResultObjects);
@@ -1732,68 +1737,95 @@ Singleton {
                 prefix: Config.options.search.prefix.clipboard,
                 label: Translation.tr("Clipboard"),
                 icon: "content_paste",
-                isBuiltin: true
+                isBuiltin: true,
+                enabled: () => Config.options.search.modules.clipboard
             },
             {
                 names: ["emoji", "emojis", "emoticon"],
                 prefix: Config.options.search.prefix.emojis,
                 label: Translation.tr("Emojis"),
                 icon: "mood",
-                isBuiltin: true
+                isBuiltin: true,
+                enabled: () => Config.options.search.modules.emojis.enable
             },
             {
                 names: ["window", "windows", "janela"],
                 prefix: Config.options.search.prefix.windowSearch,
                 label: Translation.tr("Window Search"),
                 icon: "select_window",
-                isBuiltin: true
+                isBuiltin: true,
+                enabled: () => Config.options.search.modules.windowSearch
             },
             {
                 names: ["file", "files", "arquivo", "browse"],
                 prefix: Config.options.search.prefix.fileBrowser,
                 label: Translation.tr("File Browser"),
                 icon: "folder_open",
-                isBuiltin: true
+                isBuiltin: true,
+                enabled: () => Config.options.search.modules.fileBrowser
             },
             {
                 names: ["math", "calc", "calculator", "calcular"],
                 prefix: Config.options.search.prefix.math,
                 label: Translation.tr("Calculator"),
                 icon: "calculate",
-                isBuiltin: true
+                isBuiltin: true,
+                enabled: () => Config.options.search.modules.math
             },
             {
                 names: ["command", "commands", "terminal", "shell"],
                 prefix: Config.options.search.prefix.shellCommand,
                 label: Translation.tr("Shell Command"),
                 icon: "terminal",
-                isBuiltin: true
+                isBuiltin: true,
+                enabled: () => Config.options.search.modules.shellCommand
             },
             {
                 names: ["bluetooth"],
                 prefix: Config.options.search.prefix.bluetooth,
                 label: Translation.tr("Bluetooth Manager"),
                 icon: "bluetooth",
-                isBuiltin: true
+                isBuiltin: true,
+                enabled: () => Config.options.search.modules.bluetooth
             },
             {
                 names: ["translator", "translate", "tradutor", "traduzir"],
                 prefix: Config.options.search.prefix.translator,
                 label: Translation.tr("Translator"),
                 icon: "translate",
-                isBuiltin: true
+                isBuiltin: true,
+                enabled: () => Config.options.search.modules.translator
             },
             {
                 names: ["material symbols", "icons", "material", "symbols"],
                 prefix: Config.options.search.prefix.materialSymbols,
                 label: Translation.tr("Material Symbols"),
                 icon: "font_download",
-                isBuiltin: true
+                isBuiltin: true,
+                enabled: () => Config.options.search.modules.materialSymbols
             },
+            {
+                names: ["download", "media downloader", "video download"],
+                prefix: Config.options.search.prefix.mediaDownloader,
+                label: Translation.tr("Media Downloader"),
+                icon: "download",
+                isBuiltin: true,
+                enabled: () => Config.options.search.modules.mediaDownloader && Config.options.mediaDownloader.enabled
+            },
+            {
+                names: ["web", "web search", "internet search"],
+                prefix: Config.options.search.prefix.webSearch,
+                label: Translation.tr("Web Search"),
+                icon: "travel_explore",
+                isBuiltin: true,
+                enabled: () => Config.options.search.modules.webSearch
+            }
         ];
 
         const queryLower = root.query.toLowerCase();
         for (const mod of moduleShortcuts) {
+            if (!mod.enabled())
+                continue;
             if (mod.names.some(n => n.startsWith(queryLower) && queryLower.length >= 2)) {
                 const execFn = () => {
                     root.query = mod.prefix;
@@ -1819,7 +1851,7 @@ Singleton {
 
         /// Math result, command, web search ///
         if (Config.options.search.prefix.showDefaultActionsWithoutPrefix) {
-            if (!startsWithShellCommandPrefix)
+            if (Config.options.search.modules.shellCommand && !startsWithShellCommandPrefix)
                 result.push(commandResultObject);
             if (!isMath && mathResultObject)
                 result.push(mathResultObject);
@@ -1827,7 +1859,7 @@ Singleton {
                 && Ai.enabled
                 && !root.query.startsWith(Config.options.search.prefix.ai))
                 result.push(aiAskResultObject);
-            if (!startsWithWebSearchPrefix)
+            if (Config.options.search.modules.webSearch && !startsWithWebSearchPrefix)
                 result.push(webSearchResultObject);
         }
 

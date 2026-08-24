@@ -9,6 +9,7 @@ RowLayout {
     id: root
 
     property var hints: []
+    property bool showKeys: true
     property color surface: Appearance.colors.colSurfaceContainerHigh
     property color onSurface: Appearance.colors.colOnSurface
 
@@ -29,7 +30,7 @@ RowLayout {
             }
 
             KeyHint {
-                visible: (modelData.keys ?? []).length > 0
+                visible: root.showKeys && (modelData.keys ?? []).length > 0
                 keys: modelData.keys ?? []
                 surface: root.surface
                 onSurface: root.onSurface

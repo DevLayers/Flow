@@ -141,6 +141,7 @@ Item {
         icon: "calendar_month"
         accent: true
         statusText: root.statusText
+        showStatus: true
         primaryHint: ({ label: Translation.tr("Open"), keys: ["↵"] })
         hints: [
             { label: Translation.tr("Day"), keys: ["←", "→"] },
@@ -149,6 +150,7 @@ Item {
 
         ColumnLayout {
             width: parent.width
+            height: parent.height
             spacing: Appearance.sizes.elevationMargin
 
             RowLayout {
@@ -202,7 +204,7 @@ Item {
             CalendarAgendaList {
                 id: agenda
                 Layout.fillWidth: true
-                Layout.preferredHeight: implicitHeight
+                Layout.fillHeight: true
                 rows: root.rows
                 selectedIndex: root.selectedIndex
                 onSelected: index => root.selectedIndex = index

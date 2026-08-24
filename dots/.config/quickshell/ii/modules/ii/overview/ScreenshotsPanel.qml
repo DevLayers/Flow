@@ -156,13 +156,13 @@ Item {
 
         RowLayout {
             width: parent.width
+            height: parent.height
             spacing: Appearance.sizes.elevationMargin
 
             ListView {
                 id: screenshotList
                 Layout.preferredWidth: parent.width * Config.options.search.clipboard.listColumnRatio
                 Layout.fillHeight: true
-                Layout.preferredHeight: Appearance.sizes.elevationMargin * 34
                 clip: true
                 spacing: root.listSpacing
                 model: root.entries
@@ -238,16 +238,27 @@ Item {
             Item {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                Layout.preferredHeight: Appearance.sizes.elevationMargin * 34
 
-                CliphistImage {
-                    anchors.centerIn: parent
-                    visible: root.selectedEntry.length > 0
-                    entry: root.selectedEntry
-                    maxWidth: parent.width - Appearance.sizes.elevationMargin * 2
-                    maxHeight: parent.height - Appearance.sizes.elevationMargin * 2
-                    blur: root.shouldBlurPreview
-                    blurText: Translation.tr("Screenshot hidden")
+                Loader {
+                    anchors.fill: parent
+                    active: root.selectedEntry.length > 0
+                    visible: active
+
+                    sourceComponent: Rectangle {
+                        anchors.fill: parent
+                        radius: Appearance.rounding.normal
+                        color: Appearance.colors.colSurfaceContainerHigh
+                        clip: true
+
+                        CliphistImage {
+                            anchors.centerIn: parent
+                            entry: root.selectedEntry
+                            maxWidth: parent.width - Appearance.sizes.elevationMargin * 2
+                            maxHeight: parent.height - Appearance.sizes.elevationMargin * 2
+                            blur: root.shouldBlurPreview
+                            blurText: Translation.tr("Screenshot hidden")
+                        }
+                    }
                 }
 
                 StyledText {

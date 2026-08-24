@@ -43,6 +43,25 @@ class SearchRaycastContractTests(unittest.TestCase):
                 source("modules/ii/overview/" + panel),
             )
 
+    def test_hosted_panel_geometry_and_overview_visibility_are_shared(self):
+        config = source("modules/common/Config.qml")
+        registry = source("modules/common/SearchPanelRegistry.qml")
+        scaffold = source("modules/ii/overview/SearchPanelScaffold.qml")
+        overview = source("modules/ii/overview/Overview.qml")
+        self.assertIn("property int panelWidth: 860", config)
+        self.assertIn("property int panelBodyHeight: 420", config)
+        self.assertGreaterEqual(registry.count("Config.options.search.appearance.panelWidth"), 11)
+        self.assertIn("minimumContentHeight", scaffold)
+        self.assertIn("searchWidget?.isAnySpecialMode", overview)
+
+    def test_hosted_panel_back_navigation_precedes_overview_close(self):
+        search_bar = source("modules/ii/overview/SearchBar.qml")
+        widget = source("modules/ii/overview/SearchWidget.qml")
+        self.assertIn("activePanelQueryEmpty", search_bar)
+        self.assertIn("function exitActivePanel(): bool", widget)
+        self.assertIn("return root.exitActivePanel()", widget)
+        self.assertIn("activePanelMode: root.isAnySpecialMode", widget)
+
     def test_window_and_screenshot_panels_keep_real_context(self):
         states = source("GlobalStates.qml")
         screenshots = source("modules/ii/overview/ScreenshotsPanel.qml")
@@ -57,6 +76,14 @@ class SearchRaycastContractTests(unittest.TestCase):
         self.assertIn("if (root.loaded || root.loading)", emojis)
         self.assertIn("entriesPrepared", emojis)
         self.assertIn("preparationTimer", emojis)
+        self.assertIn("function ensurePrepared(): void", emojis)
+        list_change = emojis.split("onListChanged:", 1)[1].split("function ensurePrepared", 1)[0]
+        self.assertNotIn("preparationTimer.restart()", list_change)
+
+        emoji_panel = source("modules/ii/overview/EmojiPanel.qml")
+        self.assertIn("StyledComboBox", emoji_panel)
+        self.assertIn("GridView", emoji_panel)
+        self.assertIn("showStatus: true", emoji_panel)
 
         launcher_files = (
             "modules/settings/configs/LauncherConfig.qml",
@@ -78,6 +105,37 @@ class SearchRaycastContractTests(unittest.TestCase):
         self.assertIn("processConfirmKey", launcher)
         self.assertIn("_scheduleResultsUpdate", launcher)
         self.assertNotIn("XmlHttpRequest", launcher)
+        self.assertIn('const genericTerms = ["generator"', launcher)
+        self.assertIn("Config.options.search.modules.systemControls", launcher)
+
+    def test_daily_sports_and_timer_panels_have_stable_empty_surfaces(self):
+        sports_service = source("services/SportsService.qml")
+        sports_panel = source("modules/ii/overview/SportsPanel.qml")
+        timers = source("modules/ii/overview/TimersPanel.qml")
+        self.assertIn("function fetchSearchGamesForToday()", sports_service)
+        self.assertIn("function searchLeagueEntries()", sports_service)
+        self.assertIn("scoreboard?dates=${date}", sports_service)
+        self.assertIn("property var searchGames", sports_service)
+        self.assertIn("property bool enabled: barEnabled || dockEnabled || lockEnabled", sports_service)
+        self.assertIn('Translation.tr("No games today")', sports_panel)
+        self.assertIn("height: parent.height", sports_panel)
+        self.assertIn("function navigateUp(): bool", timers)
+        self.assertIn("function navigateDown(): bool", timers)
+        self.assertIn("function secondaryActivateSelected(): bool", timers)
+        self.assertIn("property int displayClockTick", timers)
+
+    def test_screenshot_preview_uses_the_working_clipboard_wrapper(self):
+        screenshots = source("modules/ii/overview/ScreenshotsPanel.qml")
+        self.assertIn("sourceComponent: Rectangle", screenshots)
+        self.assertIn("CliphistImage", screenshots)
+        self.assertIn("height: parent.height", screenshots)
+
+    def test_launcher_module_settings_explain_exact_search_terms(self):
+        switch = source("modules/common/widgets/ConfigSwitch.qml")
+        modules = source("modules/settings/configs/widgets/LauncherModulesConfig.qml")
+        self.assertIn('property string description: ""', switch)
+        for term in ("calendar", "window", "screenshot", "generator", "uuid", "password", "lorem"):
+            self.assertIn(term, modules.lower())
 
     def test_persistence_uses_explicit_list_types(self):
         config = source("modules/common/Config.qml")

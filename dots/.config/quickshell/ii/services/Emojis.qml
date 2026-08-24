@@ -28,18 +28,30 @@ Singleton {
     property var preparationBuffer: []
     
     onListChanged: {
+        preparationTimer.stop();
         root.entriesPrepared = false;
-        root.entriesPreparing = list.length > 0;
+        // Building the fuzzy index is much more expensive than displaying a
+        // virtualized grid. Keep opening the panel cheap and start indexing
+        // only after the user actually types a query.
+        root.entriesPreparing = false;
         root.preparationIndex = 0;
         root.preparationBuffer = [];
-        if (root.entriesPreparing)
-            preparationTimer.restart();
+    }
+
+    function ensurePrepared(): void {
+        if (root.entriesPrepared || root.entriesPreparing || root.list.length === 0)
+            return;
+        root.entriesPreparing = true;
+        root.preparationIndex = 0;
+        root.preparationBuffer = [];
+        preparationTimer.restart();
     }
     
     function fuzzyQuery(search: string): var {
         if (!search || search.trim() === "") {
             return root.list;
         }
+        root.ensurePrepared();
         if (root.levenshteinSearch) {
             const threshold = Config.options?.search.scoreThreshold ?? 0.2;
             const results = root.list.slice(0, 100).map(str => ({
@@ -120,13 +132,13 @@ Singleton {
 
     Timer {
         id: preparationTimer
-        interval: 1
+        interval: 16
         repeat: false
         onTriggered: {
             if (!root.entriesPreparing)
                 return;
 
-            const batchSize = 96;
+            const batchSize = 48;
             const end = Math.min(root.list.length, root.preparationIndex + batchSize);
             for (let index = root.preparationIndex; index < end; index++) {
                 const entry = root.list[index];

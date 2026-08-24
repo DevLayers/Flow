@@ -132,6 +132,7 @@ Item {
         icon: "settings"
         accent: true
         statusText: root.statusText
+        showStatus: true
         primaryHint: ({ label: Translation.tr("Open"), keys: ["↵"] })
         hints: [
             { label: Translation.tr("Adjust"), keys: ["←", "→"] },
@@ -140,6 +141,7 @@ Item {
 
         ColumnLayout {
             width: parent.width
+            height: parent.height
             spacing: Appearance.sizes.elevationMargin
 
             RowLayout {
@@ -190,7 +192,7 @@ Item {
             ListView {
                 id: panelList
                 Layout.fillWidth: true
-                Layout.preferredHeight: Math.min(contentHeight, 460)
+                Layout.fillHeight: true
                 Layout.minimumHeight: emptyState.implicitHeight
                 clip: true
                 spacing: Appearance.sizes.elevationMargin / 2

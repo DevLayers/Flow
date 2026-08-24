@@ -71,7 +71,17 @@ Singleton {
     property string searchTargetWindowAddress: ""
 
     function captureSearchTargetWindow(): void {
-        const rawAddress = String(ToplevelManager.activeToplevel?.HyprlandToplevel?.address ?? "").trim();
+        let rawAddress = String(ToplevelManager.activeToplevel?.HyprlandToplevel?.address ?? "").trim();
+        // Foreign-toplevel focus can be momentarily empty during a global
+        // shortcut. Fall back to Hyprland's most recently focused client on
+        // the current workspace instead of making every action unavailable.
+        if (rawAddress.length === 0) {
+            const workspaceId = Number(HyprlandData.activeWorkspace?.id ?? -1);
+            const candidates = Array.from(HyprlandData.windowList ?? [])
+                .filter(window => Number(window?.workspace?.id ?? -2) === workspaceId)
+                .sort((left, right) => Number(left?.focusHistoryID ?? 9999) - Number(right?.focusHistoryID ?? 9999));
+            rawAddress = String(candidates[0]?.address ?? "").trim();
+        }
         root.searchTargetWindowAddress = rawAddress.length === 0
             ? ""
             : (rawAddress.startsWith("0x") ? rawAddress : `0x${rawAddress}`);
@@ -910,6 +920,10 @@ Singleton {
 
     onOverviewOpenChanged: {
         if (root.overviewOpen) {
+            // Some shortcuts and IPC entry points assign overviewOpen
+            // directly. Capture here as the common synchronous boundary,
+            // before the layer-shell surface can become the active toplevel.
+            root.captureSearchTargetWindow();
             resetSearchOnlyModeTimer.stop();
             if (root.activeSearchMonitor === "") {
                 root.activeSearchMonitor = Hyprland.focusedMonitor?.name ?? "";

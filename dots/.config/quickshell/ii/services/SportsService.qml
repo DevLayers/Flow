@@ -12,15 +12,17 @@ Item {
     readonly property bool barEnabled: Config.options?.bar?.sports?.enable ?? false
     readonly property bool dockEnabled: Config.options?.dock?.enableSportsWidget ?? true
     readonly property bool lockEnabled: Config.options?.lock?.sports ?? true
-    property bool enabled: barEnabled || dockEnabled || lockEnabled || searchSubscribers > 0
+    property bool enabled: barEnabled || dockEnabled || lockEnabled
     // AI consumers are counted separately from the visual widgets. They may
     // query a league that is not monitored by the bar, but must never cause a
     // visual selection or a Config write as a side effect.
     property int aiSubscribers: 0
-    // Search is a visible consumer with a short lifetime. It gets an explicit
-    // counter rather than piggybacking on AI requests, which are one-shot and
-    // must not start the visual scoreboard polling loop.
+    // Search is a visible consumer with a short lifetime. Its dedicated daily
+    // request must not start the compact bar/dock polling loop.
     property int searchSubscribers: 0
+    property var searchGames: []
+    property bool searchLoading: false
+    property string searchError: ""
     // The timetable is loaded only while its cheatsheet tab exists. Its
     // subscriber keeps a weekly scoreboard warm without making the sports bar
     // a prerequisite for calendar-only users.
@@ -68,7 +70,11 @@ Item {
     property int timetableProjectionEventIndex: 0
     property var timetableProjectionSeen: ({})
     property bool timetableProjecting: false
-    readonly property int timetableProjectionBudgetMs: 4
+    // Paired with the projection timer's interval below: eight milliseconds of
+    // work per four idle keeps a real yield between batches while spending most
+    // of the wall clock on the projection. The previous four-per-sixteen split
+    // meant three quarters of the delay before games appeared was waiting.
+    readonly property int timetableProjectionBudgetMs: 8
 
     // Persistent ESPN cache. Scoreboards retain the raw response events so a
     // team-filter change can be projected again without a network request.
@@ -98,7 +104,10 @@ Item {
     }
 
     function acquireSearchSubscriber() {
+        const wasInactive = searchSubscribers === 0;
         searchSubscribers += 1;
+        if (wasInactive)
+            root.fetchSearchGamesForToday();
     }
 
     function releaseSearchSubscriber() {
@@ -185,6 +194,29 @@ Item {
         return result;
     }
 
+    function searchLeagueEntries() {
+        const selected = Array.from(Config.options.search.modules.sports.leagues ?? [])
+            .map(value => String(value ?? "").trim())
+            .filter(Boolean);
+        if (selected.length === 0)
+            return root.monitoredLeagueEntries();
+
+        // Search league ids are a subset of the user's tracker catalog. Keep
+        // their sport/name metadata even when a league is disabled for the
+        // compact bar, because the Search selection is an independent filter.
+        const tracked = Array.from(Config.options.bar.sports.monitoredLeagues ?? []);
+        return selected.map(leagueId => {
+            const match = tracked.find(item => String(item?.league ?? "") === leagueId);
+            if (!match)
+                return null;
+            return {
+                sport: String(match.sport ?? ""),
+                league: leagueId,
+                name: String(match.name || root.leagueNames[leagueId] || leagueId)
+            };
+        }).filter(item => item && item.sport.length > 0);
+    }
+
     function compactMatchStatus(status, state) {
         const text = String(status ?? "");
         if (state !== "in")
@@ -263,6 +295,62 @@ Item {
                         loading = false;
                         processGames(collectedEvents);
                     }
+                }
+            };
+            xhr.send();
+        }
+    }
+
+    function fetchSearchGamesForToday() {
+        const leaguesToFetch = root.searchLeagueEntries();
+        root.searchLoading = true;
+        root.searchError = "";
+        if (leaguesToFetch.length === 0) {
+            root.searchGames = [];
+            root.searchLoading = false;
+            return;
+        }
+
+        const date = root.espnDate(root.dayKey(DateTime.clock.date));
+        let pendingRequests = leaguesToFetch.length;
+        let failedRequests = 0;
+        let collectedEvents = [];
+
+        for (let i = 0; i < leaguesToFetch.length; i++) {
+            const entry = leaguesToFetch[i];
+            const url = `https://${root.apiHosts[0]}/apis/site/v2/sports/${encodeURIComponent(entry.sport)}/${encodeURIComponent(entry.league)}/scoreboard?dates=${date}`;
+            const xhr = new XMLHttpRequest();
+            xhr.open("GET", url);
+            xhr.onreadystatechange = function() {
+                if (xhr.readyState !== XMLHttpRequest.DONE)
+                    return;
+                pendingRequests--;
+                if (xhr.status === 200) {
+                    try {
+                        const response = JSON.parse(xhr.responseText);
+                        let leagueLogo = "";
+                        if (response.leagues?.[0]?.logos?.[0])
+                            leagueLogo = String(response.leagues[0].logos[0].href ?? "");
+                        const events = (response.events ?? []).map(event => Object.assign({}, event, {
+                            leagueName: entry.name,
+                            leagueId: entry.league,
+                            sportCategory: entry.sport,
+                            leagueLogo: leagueLogo
+                        }));
+                        collectedEvents = collectedEvents.concat(events);
+                    } catch (error) {
+                        failedRequests++;
+                    }
+                } else {
+                    failedRequests++;
+                }
+
+                if (pendingRequests === 0) {
+                    root.searchLoading = false;
+                    root.searchError = failedRequests === leaguesToFetch.length
+                        ? qsTr("Could not load today's games")
+                        : "";
+                    root.processGames(collectedEvents, true);
                 }
             };
             xhr.send();
@@ -668,24 +756,46 @@ Item {
             return;
         }
 
+        // The cursors stay in locals for the length of a batch. Writing them
+        // back per event meant a metaobject property write, and its change
+        // notification, for every cached ESPN entry — which is most of the work
+        // once a month spans several leagues. The clock is sampled every
+        // sixteen entries for the same reason; the overshoot is microseconds.
+        const sources = root.timetableProjectionSource;
+        const seen = root.timetableProjectionSeen;
+        const compact = root.timetableProjectionCompactEvents;
+        const collected = root.timetableProjectionGames;
+        const rangeStart = root.timetableRangeStart;
+        const rangeEnd = root.timetableRangeEnd;
+        const budget = root.timetableProjectionBudgetMs;
+        let sourceIndex = root.timetableProjectionIndex;
+        let eventIndex = root.timetableProjectionEventIndex;
+        let sinceClockCheck = 0;
+
         const startedAt = Date.now();
-        while (root.timetableProjectionIndex < root.timetableProjectionSource.length
-                && Date.now() - startedAt < root.timetableProjectionBudgetMs) {
-            const source = root.timetableProjectionSource[root.timetableProjectionIndex];
+        while (sourceIndex < sources.length) {
+            if (sinceClockCheck >= 16) {
+                sinceClockCheck = 0;
+                if (Date.now() - startedAt >= budget)
+                    break;
+            }
+            sinceClockCheck += 1;
+
+            const source = sources[sourceIndex];
             const values = source.events;
-            if (root.timetableProjectionEventIndex >= values.length) {
-                root.timetableProjectionIndex += 1;
-                root.timetableProjectionEventIndex = 0;
+            if (eventIndex >= values.length) {
+                sourceIndex += 1;
+                eventIndex = 0;
                 continue;
             }
 
-            const sourceEventIndex = root.timetableProjectionEventIndex;
+            const sourceEventIndex = eventIndex;
             const sourceEvent = values[sourceEventIndex] ?? ({});
-            root.timetableProjectionEventIndex += 1;
+            eventIndex += 1;
             const id = String(sourceEvent.id ?? `${source.key}-${String(sourceEventIndex)}`);
-            if (root.timetableProjectionSeen[id])
+            if (seen[id])
                 continue;
-            root.timetableProjectionSeen[id] = true;
+            seen[id] = true;
 
             const raw = Object.assign({}, sourceEvent, {
                 leagueName: String(source.cached?.name || source.entry.name),
@@ -695,17 +805,20 @@ Item {
                 fetchedAt: source.cached?.fetchedAt ? new Date(Number(source.cached.fetchedAt)).toISOString() : ""
             });
             if (root.eventFitsCompactWindow(raw))
-                root.timetableProjectionCompactEvents.push(raw);
+                compact.push(raw);
             const game = root.normalizeTimetableGame(raw);
             if (!game)
                 continue;
             const key = root.dayKey(game.startDate);
-            if (key < root.timetableRangeStart || key > root.timetableRangeEnd)
+            if (key < rangeStart || key > rangeEnd)
                 continue;
-            root.timetableProjectionGames.push(game);
+            collected.push(game);
         }
 
-        if (root.timetableProjectionIndex >= root.timetableProjectionSource.length) {
+        root.timetableProjectionIndex = sourceIndex;
+        root.timetableProjectionEventIndex = eventIndex;
+
+        if (sourceIndex >= sources.length) {
             timetableProjectionTimer.stop();
             root.finishTimetableProjection();
         }
@@ -734,11 +847,31 @@ Item {
         }
     }
 
+    // Indexed once per publication. The month grid asks forty-two cells for
+    // "the games on this day", and the old filter walked the whole list per
+    // cell with a Qt.formatDate call per game — so the cost was cells × games
+    // on every republication, which is why a busy month felt slow to fill in.
+    // The arrays are shared and read-only, same contract as
+    // CalendarService.eventsByDay.
+    readonly property var timetableGamesByDay: {
+        const map = {};
+        const games = root.timetableGames ?? [];
+        for (let i = 0; i < games.length; i++) {
+            const key = root.dayKey(games[i]?.startDate);
+            if (key.length === 0)
+                continue;
+            if (!map[key])
+                map[key] = [];
+            map[key].push(games[i]);
+        }
+        return map;
+    }
+
     function gamesForDate(date) {
         const key = root.dayKey(date);
         if (key.length === 0)
             return [];
-        return (root.timetableGames ?? []).filter(game => root.dayKey(game?.startDate) === key);
+        return root.timetableGamesByDay[key] ?? [];
     }
 
     function gameById(gameId) {
@@ -936,10 +1069,10 @@ Item {
         }
     }
 
-    function processGames(events) {
+    function processGames(events, forSearch = false) {
         let validGames = [];
 
-        const filterStr = teamFilter.trim().toLowerCase();
+        const filterStr = forSearch ? "" : teamFilter.trim().toLowerCase();
         let teamsToMatch = [];
         if (filterStr !== "") {
             teamsToMatch = filterStr.split(',').map(t => t.trim()).filter(t => t.length > 0);
@@ -955,11 +1088,11 @@ Item {
             const state = event.status.type.state;
 
             const hoursUntilStart = (eventDate - now) / (1000 * 60 * 60);
-            if (state === "pre" && hoursUntilStart > Config.options.bar.sports.showBeforeHours)
+            if (!forSearch && state === "pre" && hoursUntilStart > Config.options.bar.sports.showBeforeHours)
                 continue;
 
             const minsSinceStart = (now - eventDate) / (1000 * 60);
-            if (state === "post" && minsSinceStart > Config.options.bar.sports.showAfterMinutes)
+            if (!forSearch && state === "post" && minsSinceStart > Config.options.bar.sports.showAfterMinutes)
                 continue;
 
             let comp = event.competitions[0];
@@ -1094,6 +1227,8 @@ Item {
                     name: event.name,
                     date: event.date,
                     league: event.leagueName,
+                    leagueId: event.leagueId ?? "",
+                    sport: event.sportCategory ?? "",
                     status: (comp.status && comp.status.type && comp.status.type.state === "pre")
                         ? formatMatchTime(event.date)
                         : ((comp.status && comp.status.type && comp.status.type.state === "in")
@@ -1105,6 +1240,12 @@ Item {
                     away: away
                 });
             }
+        }
+
+        if (forSearch) {
+            validGames.sort((left, right) => new Date(left.date).getTime() - new Date(right.date).getTime());
+            root.searchGames = validGames;
+            return;
         }
 
         if (customOrder && customOrder.length > 0) {
@@ -1153,7 +1294,7 @@ Item {
 
     Timer {
         id: timetableProjectionTimer
-        interval: 16
+        interval: 4
         repeat: true
         onTriggered: root.projectNextTimetableBatch()
     }
@@ -1262,6 +1403,16 @@ Item {
                 root.requestTimetableRange(root.timetableRangeStart, root.timetableRangeEnd, false);
             if (root.enabled && !root.timetableActive)
                 root.fetchGames();
+            if (root.searchSubscribers > 0)
+                root.fetchSearchGamesForToday();
+        }
+    }
+
+    Connections {
+        target: Config.options.search.modules.sports
+        function onLeaguesChanged() {
+            if (root.searchSubscribers > 0)
+                root.fetchSearchGamesForToday();
         }
     }
 

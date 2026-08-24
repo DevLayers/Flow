@@ -17,6 +17,7 @@ RowLayout {
     property bool animateWidth: false
     property bool clipboardMode: false
     property bool activePanelMode: false
+    property bool activePanelQueryEmpty: false
     property bool supportsPanelSectionToggle: false
     property int clipboardWidth: 860
     property alias searchInput: searchInput
@@ -411,10 +412,15 @@ RowLayout {
         }
 
         Keys.onPressed: event => {
+            if (event.key === Qt.Key_Backspace && root.activePanelMode && root.activePanelQueryEmpty) {
+                root.escapeToSearch();
+                event.accepted = true;
+                return;
+            }
             if (event.key === Qt.Key_Escape) {
-                // In AI mode the first Esc leaves the chat and returns to the
-                // plain search; a second Esc closes the overview.
-                if (root.aiModeActive)
+                // A hosted panel is a child navigation level. Its first Esc
+                // returns to plain Search; only plain Search closes Overview.
+                if (root.aiModeActive || root.activePanelMode)
                     root.escapeToSearch();
                 else
                     GlobalStates.overviewOpen = false;

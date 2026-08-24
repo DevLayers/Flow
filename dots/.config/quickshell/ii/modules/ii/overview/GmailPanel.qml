@@ -120,6 +120,7 @@ Item {
         icon: "mail"
         accent: true
         statusText: root.statusText
+        showStatus: true
         primaryHint: ({ label: Translation.tr("Open"), keys: ["↵"] })
         hints: [
             { label: Translation.tr("Reply"), keys: ["Ctrl", "↵"] },
@@ -128,6 +129,7 @@ Item {
 
         ColumnLayout {
             width: parent.width
+            height: parent.height
             spacing: Appearance.sizes.elevationMargin
 
             RowLayout {
@@ -161,7 +163,7 @@ Item {
 
             RowLayout {
                 Layout.fillWidth: true
-                Layout.preferredHeight: Appearance.sizes.elevationMargin * 30
+                Layout.fillHeight: true
                 visible: EmailService.authenticated
                 spacing: Appearance.sizes.elevationMargin
 

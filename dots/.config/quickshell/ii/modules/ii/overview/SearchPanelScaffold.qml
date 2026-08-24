@@ -20,6 +20,7 @@ Item {
     // Keep these opt-in for the rare panel that truly needs in-panel context.
     property bool showHeader: false
     property bool showStatus: false
+    property real minimumContentHeight: Config.options.search.appearance.panelBodyHeight
     readonly property real contentMargin: Appearance.sizes.elevationMargin
     default property alias content: contentSlot.data
 
@@ -69,13 +70,17 @@ Item {
             id: contentSlot
             Layout.fillWidth: true
             Layout.fillHeight: true
-            implicitHeight: childrenRect.height
+            // Hosted panels deliberately have a stable viewport. Deriving
+            // this from childrenRect would loop as panel content fills the
+            // slot's height, and was the source of sporadic panel shrinkage.
+            implicitHeight: root.minimumContentHeight
         }
 
         RowLayout {
             Layout.fillWidth: true
             visible: (root.showStatus && root.statusText.length > 0)
-                || root.hints.length > 0 || Object.keys(root.primaryHint).length > 0
+                || (Config.options.search.appearance.showKeyHintBar
+                    && (root.hints.length > 0 || Object.keys(root.primaryHint).length > 0))
 
             StyledText {
                 Layout.fillWidth: true
@@ -92,7 +97,9 @@ Item {
             }
 
             KeyHintBar {
+                visible: Config.options.search.appearance.showKeyHintBar
                 hints: root.primaryHint.label ? [root.primaryHint].concat(root.hints) : root.hints
+                showKeys: Config.options.search.appearance.showKeyHints
                 surface: root.accent ? Appearance.colors.colPrimaryContainer : Appearance.colors.colSurfaceContainerHigh
                 onSurface: root.accent ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnSurface
             }

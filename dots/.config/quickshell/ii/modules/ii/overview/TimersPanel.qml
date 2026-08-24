@@ -2,7 +2,6 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import QtQuick.Layouts
-import qs
 import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
@@ -12,57 +11,187 @@ Item {
 
     property string searchQuery: ""
     property int selectedIndex: 0
+    property int displayClockTick: 0
 
     readonly property var countdowns: Array.from(TimerService.countdowns ?? [])
-    readonly property var selectedCountdown: root.selectedIndex >= 0 && root.selectedIndex < root.countdowns.length
-        ? root.countdowns[root.selectedIndex]
+    readonly property var rows: root.filteredRows()
+    readonly property var selectedRow: root.selectedIndex >= 0 && root.selectedIndex < root.rows.length
+        ? root.rows[root.selectedIndex]
         : null
-    readonly property string statusText: root.selectedCountdown
-        ? `${root.selectedCountdown.label} · ${root.formatSeconds(TimerService.countdownSecondsLeft(root.selectedCountdown))}`
-        : TimerService.pomodoroRunning
-            ? Translation.tr("Pomodoro running")
-            : Translation.tr("Ready")
+    readonly property string statusText: root.selectedRow
+        ? String(root.selectedRow.title) + " · " + root.valueFor(root.selectedRow)
+        : Translation.tr("No timer actions match")
 
-    implicitWidth: 720
+    implicitWidth: Config.options.search.appearance.panelWidth
     implicitHeight: scaffold.implicitHeight
 
     function formatSeconds(seconds) {
         const safe = Math.max(0, Number(seconds) || 0);
-        return String(Math.floor(safe / 60)).padStart(2, "0") + ":" + String(safe % 60).padStart(2, "0");
+        return String(Math.floor(safe / 60)).padStart(2, "0") + ":" + String(Math.floor(safe % 60)).padStart(2, "0");
+    }
+
+    function allRows() {
+        const output = [];
+        if (Config.options.search.modules.timers.showPomodoro) {
+            output.push({
+                id: "pomodoro",
+                kind: "pomodoro",
+                icon: TimerService.pomodoroRunning ? "pause_circle" : "timelapse",
+                title: TimerService.pomodoroLongBreak
+                    ? Translation.tr("Long break")
+                    : (TimerService.pomodoroBreak ? Translation.tr("Pomodoro break") : Translation.tr("Pomodoro focus")),
+                subtitle: Translation.tr("Cycle %1 of %2").arg(String(TimerService.pomodoroCycle + 1)).arg(String(TimerService.cyclesBeforeLongBreak)),
+                value: "",
+                action: TimerService.pomodoroRunning ? Translation.tr("Pause") : Translation.tr("Start"),
+                searchable: "pomodoro focus break cycle"
+            });
+        }
+
+        const presets = Array.from(Config.options.search.modules.timers.quickPresets ?? []);
+        for (let index = 0; index < presets.length; index++) {
+            const minutes = Number(presets[index]);
+            output.push({
+                id: "preset-" + String(minutes),
+                kind: "preset",
+                minutes: minutes,
+                icon: "timer",
+                title: Translation.tr("%1 minute timer").arg(String(minutes)),
+                subtitle: Translation.tr("Quick timer preset"),
+                value: Translation.tr("%1m").arg(String(minutes)),
+                action: Translation.tr("Create"),
+                searchable: String(minutes) + " quick preset timer"
+            });
+        }
+
+        if (Config.options.search.modules.timers.showStopwatch) {
+            output.push({
+                id: "stopwatch",
+                kind: "stopwatch",
+                icon: TimerService.stopwatchRunning ? "pause_circle" : "timer",
+                title: Translation.tr("Stopwatch"),
+                subtitle: TimerService.stopwatchRunning ? Translation.tr("Running") : Translation.tr("Paused"),
+                value: "",
+                action: TimerService.stopwatchRunning ? Translation.tr("Pause") : Translation.tr("Start"),
+                searchable: "stopwatch chronometer cronometro"
+            });
+        }
+
+        for (let index = 0; index < root.countdowns.length; index++) {
+            const countdown = root.countdowns[index];
+            output.push({
+                id: String(countdown.id),
+                kind: "countdown",
+                countdown: countdown,
+                icon: countdown.notified ? "notifications_off" : "hourglass_top",
+                title: String(countdown.label ?? Translation.tr("Timer")),
+                subtitle: countdown.notified ? Translation.tr("Finished") : Translation.tr("Countdown"),
+                value: "",
+                action: countdown.notified ? Translation.tr("Dismiss") : Translation.tr("Cancel"),
+                searchable: String(countdown.label ?? "") + " countdown timer"
+            });
+        }
+
+        if (Config.options.search.modules.timers.showAlarms) {
+            const alarms = Array.from(AlarmService.alarms ?? []);
+            for (let index = 0; index < alarms.length; index++) {
+                const alarm = alarms[index];
+                output.push({
+                    id: "alarm-" + String(index),
+                    kind: "alarm",
+                    alarmIndex: index,
+                    icon: alarm.enabled ? "alarm" : "alarm_off",
+                    title: String(alarm.label ?? Translation.tr("Alarm")),
+                    subtitle: alarm.enabled ? Translation.tr("Alarm enabled") : Translation.tr("Alarm disabled"),
+                    value: String(alarm.time ?? ""),
+                    action: alarm.enabled ? Translation.tr("Disable") : Translation.tr("Enable"),
+                    searchable: String(alarm.label ?? "") + " " + String(alarm.time ?? "") + " alarm"
+                });
+            }
+        }
+        return output;
+    }
+
+    function valueFor(row) {
+        if (!row)
+            return "";
+        const tick = root.displayClockTick;
+        if (row.kind === "pomodoro")
+            return root.formatSeconds(TimerService.pomodoroSecondsLeft);
+        if (row.kind === "stopwatch")
+            return root.formatSeconds(Math.floor((TimerService.stopwatchRunning
+                ? TimerService.getCurrentTimeIn10ms() - TimerService.stopwatchStart
+                : TimerService.stopwatchTime) / 100));
+        if (row.kind === "countdown") {
+            return root.formatSeconds(TimerService.countdownSecondsLeft(row.countdown));
+        }
+        return String(row.value ?? "");
+    }
+
+    function filteredRows() {
+        const terms = root.searchQuery.trim().toLocaleLowerCase().split(/\s+/).filter(Boolean);
+        const values = root.allRows();
+        if (terms.length === 0 || /^\d+\s*(m|min|mins|minute|minutes)?$/i.test(root.searchQuery.trim()))
+            return values;
+        return values.filter(row => {
+            const text = [row.title, row.subtitle, row.value, row.searchable].join(" ").toLocaleLowerCase();
+            return terms.every(term => text.includes(term));
+        });
     }
 
     function clampSelection() {
-        if (root.countdowns.length === 0) {
-            root.selectedIndex = -1;
-            return;
-        }
-        root.selectedIndex = Math.max(0, Math.min(root.selectedIndex, root.countdowns.length - 1));
+        root.selectedIndex = root.rows.length === 0
+            ? -1
+            : Math.max(0, Math.min(root.selectedIndex, root.rows.length - 1));
     }
 
     function navigateUp(): bool {
         if (root.selectedIndex <= 0)
             return false;
         root.selectedIndex--;
-        countdownList.positionViewAtIndex(root.selectedIndex, ListView.Contain);
+        timerList.positionViewAtIndex(root.selectedIndex, ListView.Contain);
         return true;
     }
 
     function navigateDown(): bool {
-        if (root.selectedIndex < 0 || root.selectedIndex >= root.countdowns.length - 1)
+        if (root.selectedIndex < 0 || root.selectedIndex >= root.rows.length - 1)
             return false;
         root.selectedIndex++;
-        countdownList.positionViewAtIndex(root.selectedIndex, ListView.Contain);
+        timerList.positionViewAtIndex(root.selectedIndex, ListView.Contain);
         return true;
     }
 
     function activateSelected(): bool {
-        if (root.selectedCountdown) {
-            TimerService.removeCountdown(root.selectedCountdown.id);
-            root.selectedIndex = Math.max(0, root.selectedIndex - 1);
+        const row = root.selectedRow;
+        if (!row)
+            return false;
+        if (row.kind === "pomodoro")
+            TimerService.togglePomodoro();
+        else if (row.kind === "preset")
+            TimerService.addCountdown(row.minutes);
+        else if (row.kind === "stopwatch")
+            TimerService.toggleStopwatch();
+        else if (row.kind === "countdown")
+            TimerService.removeCountdown(row.countdown.id);
+        else if (row.kind === "alarm")
+            AlarmService.toggleAlarm(row.alarmIndex);
+        else
+            return false;
+        return true;
+    }
+
+    function secondaryActivateSelected(): bool {
+        const row = root.selectedRow;
+        if (!row)
+            return false;
+        if (row.kind === "pomodoro") {
+            TimerService.resetPomodoro();
             return true;
         }
-        TimerService.togglePomodoro();
-        return true;
+        if (row.kind === "stopwatch") {
+            TimerService.stopwatchReset();
+            return true;
+        }
+        return false;
     }
 
     function createFromQuery(): bool {
@@ -70,15 +199,21 @@ Item {
         if (!match)
             return false;
         TimerService.addCountdown(Number(match[1]));
-        root.searchQuery = "";
         return true;
     }
 
-    function focusInput(): bool {
-        return false;
-    }
+    function focusInput(): bool { return false; }
 
-    onCountdownsChanged: root.clampSelection()
+    onRowsChanged: root.clampSelection()
+    onSearchQueryChanged: root.selectedIndex = 0
+
+    Timer {
+        interval: 1000
+        repeat: true
+        running: true
+        triggeredOnStart: true
+        onTriggered: root.displayClockTick++
+    }
 
     SearchPanelScaffold {
         id: scaffold
@@ -86,180 +221,66 @@ Item {
         title: Translation.tr("Timers")
         icon: "timer"
         accent: true
+        showStatus: true
         statusText: root.statusText
-        primaryHint: ({ label: root.selectedCountdown ? Translation.tr("Dismiss") : (TimerService.pomodoroRunning ? Translation.tr("Pause") : Translation.tr("Start")), keys: ["↵"] })
-        hints: [{ label: Translation.tr("Create typed minutes"), keys: ["Ctrl", "N"] }]
+        primaryHint: ({ label: root.selectedRow?.action ?? Translation.tr("Run"), keys: ["↵"] })
+        hints: [
+            { label: Translation.tr("Reset"), keys: ["Ctrl", "↵"] },
+            { label: Translation.tr("Create typed minutes"), keys: ["Ctrl", "N"] }
+        ]
 
-        ColumnLayout {
+        ListView {
+            id: timerList
             width: parent.width
-            spacing: Appearance.sizes.elevationMargin
+            height: parent.height
+            clip: true
+            reuseItems: true
+            spacing: Appearance.sizes.elevationMargin / 2
+            model: root.rows
 
-            RowLayout {
-                Layout.fillWidth: true
-                visible: Config.options.search.modules.timers.showPomodoro
-                spacing: Appearance.sizes.elevationMargin
-
-                Item {
-                    Layout.preferredWidth: Appearance.sizes.elevationMargin * 7
-                    Layout.preferredHeight: Appearance.sizes.elevationMargin * 7
-
-                    CircularProgress {
-                        anchors.centerIn: parent
-                        implicitSize: parent.width
-                        lineWidth: Appearance.sizes.elevationMargin / 2
-                        value: TimerService.pomodoroLapDuration > 0
-                            ? TimerService.pomodoroSecondsLeft / TimerService.pomodoroLapDuration
-                            : 0
-                        colPrimary: Appearance.colors.colPrimary
-                        colSecondary: Appearance.colors.colSurfaceContainerHigh
-                    }
-
-                    StyledText {
-                        anchors.centerIn: parent
-                        text: root.formatSeconds(TimerService.pomodoroSecondsLeft)
-                        font.pixelSize: Appearance.font.pixelSize.small
-                        color: Appearance.colors.colOnSurface
-                    }
+            delegate: RippleButton {
+                required property int index
+                required property var modelData
+                width: timerList.width
+                implicitHeight: timerContent.implicitHeight + Appearance.sizes.elevationMargin * 2
+                buttonRadius: Appearance.rounding.normal
+                colBackground: root.selectedIndex === index
+                    ? Appearance.colors.colPrimaryContainer
+                    : Appearance.colors.colSurfaceContainerHigh
+                colBackgroundHover: root.selectedIndex === index
+                    ? Appearance.colors.colPrimaryContainerHover
+                    : Appearance.colors.colSurfaceContainerHighHover
+                colRipple: root.selectedIndex === index
+                    ? Appearance.colors.colPrimaryContainerActive
+                    : Appearance.colors.colSurfaceContainerHighActive
+                onClicked: {
+                    root.selectedIndex = index;
+                    root.activateSelected();
                 }
 
-                ColumnLayout {
-                    Layout.fillWidth: true
+                RowLayout {
+                    id: timerContent
+                    anchors.fill: parent
+                    anchors.margins: Appearance.sizes.elevationMargin
+                    spacing: Appearance.sizes.elevationMargin
 
-                    StyledText {
-                        text: TimerService.pomodoroLongBreak
-                            ? Translation.tr("Long break")
-                            : (TimerService.pomodoroBreak ? Translation.tr("Break") : Translation.tr("Pomodoro · Focus"))
-                        color: Appearance.colors.colOnSurface
+                    MaterialSymbol {
+                        text: modelData.icon
+                        iconSize: Appearance.font.pixelSize.large
+                        color: root.selectedIndex === index
+                            ? Appearance.colors.colOnPrimaryContainer
+                            : Appearance.colors.colPrimary
                     }
 
-                    StyledText {
-                        text: Translation.tr("Cycle %1 of %2").arg(String(TimerService.pomodoroCycle + 1)).arg(String(TimerService.cyclesBeforeLongBreak))
-                        font.pixelSize: Appearance.font.pixelSize.smaller
-                        color: Appearance.colors.colSubtext
-                    }
-                }
-
-                RippleButton {
-                    implicitWidth: pomodoroLabel.implicitWidth + Appearance.sizes.elevationMargin * 2
-                    implicitHeight: pomodoroLabel.implicitHeight + Appearance.sizes.elevationMargin
-                    buttonRadius: Appearance.rounding.full
-                    colBackground: Appearance.colors.colPrimaryContainer
-                    colBackgroundHover: Appearance.colors.colPrimaryContainerHover
-                    colRipple: Appearance.colors.colPrimaryContainerActive
-                    onClicked: TimerService.togglePomodoro()
-
-                    StyledText {
-                        id: pomodoroLabel
-                        anchors.centerIn: parent
-                        text: TimerService.pomodoroRunning ? Translation.tr("Pause") : Translation.tr("Start")
-                        font.pixelSize: Appearance.font.pixelSize.small
-                        color: Appearance.colors.colOnPrimaryContainer
-                    }
-                }
-            }
-
-            RowLayout {
-                Layout.fillWidth: true
-                visible: Config.options.search.modules.timers.quickPresets.length > 0
-                spacing: Appearance.sizes.elevationMargin / 2
-
-                Repeater {
-                    model: Config.options.search.modules.timers.quickPresets
-
-                    delegate: RippleButton {
-                        required property int index
-                        required property int modelData
-                        implicitWidth: presetLabel.implicitWidth + Appearance.sizes.elevationMargin * 2
-                        implicitHeight: presetLabel.implicitHeight + Appearance.sizes.elevationMargin
-                        buttonRadius: Appearance.rounding.full
-                        colBackground: Appearance.colors.colSurfaceContainerHigh
-                        colBackgroundHover: Appearance.colors.colSurfaceContainerHighHover
-                        colRipple: Appearance.colors.colSurfaceContainerHighActive
-                        onClicked: TimerService.addCountdown(modelData)
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: Appearance.sizes.elevationMargin / 4
 
                         StyledText {
-                            id: presetLabel
-                            anchors.centerIn: parent
-                            text: Translation.tr("%1m").arg(String(modelData))
-                            font.pixelSize: Appearance.font.pixelSize.smallest
-                            color: Appearance.colors.colOnSurface
-                        }
-                    }
-                }
-            }
-
-            RowLayout {
-                Layout.fillWidth: true
-                visible: Config.options.search.modules.timers.showStopwatch
-                spacing: Appearance.sizes.elevationMargin
-
-                MaterialSymbol {
-                    text: "timer"
-                    iconSize: Appearance.font.pixelSize.normal
-                    color: Appearance.colors.colOnSurface
-                }
-
-                StyledText {
-                    Layout.fillWidth: true
-                    text: root.formatSeconds(Math.floor(TimerService.stopwatchTime / 100))
-                    color: Appearance.colors.colOnSurface
-                }
-
-                RippleButton {
-                    implicitWidth: stopwatchLabel.implicitWidth + Appearance.sizes.elevationMargin * 2
-                    implicitHeight: stopwatchLabel.implicitHeight + Appearance.sizes.elevationMargin
-                    buttonRadius: Appearance.rounding.full
-                    colBackground: Appearance.colors.colSurfaceContainerHigh
-                    colBackgroundHover: Appearance.colors.colSurfaceContainerHighHover
-                    colRipple: Appearance.colors.colSurfaceContainerHighActive
-                    onClicked: TimerService.toggleStopwatch()
-
-                    StyledText {
-                        id: stopwatchLabel
-                        anchors.centerIn: parent
-                        text: TimerService.stopwatchRunning ? Translation.tr("Pause") : Translation.tr("Start")
-                        font.pixelSize: Appearance.font.pixelSize.smallest
-                        color: Appearance.colors.colOnSurface
-                    }
-                }
-            }
-
-            ListView {
-                id: countdownList
-                Layout.fillWidth: true
-                Layout.preferredHeight: Appearance.sizes.elevationMargin * 14
-                clip: true
-                spacing: Appearance.sizes.elevationMargin / 2
-                model: root.countdowns
-
-                delegate: RippleButton {
-                    required property int index
-                    required property var modelData
-                    width: countdownList.width
-                    implicitHeight: countdownContent.implicitHeight + Appearance.sizes.elevationMargin * 2
-                    buttonRadius: Appearance.rounding.normal
-                    colBackground: root.selectedIndex === index
-                        ? Appearance.colors.colPrimaryContainer
-                        : Appearance.colors.colSurfaceContainerHigh
-                    colBackgroundHover: root.selectedIndex === index
-                        ? Appearance.colors.colPrimaryContainerHover
-                        : Appearance.colors.colSurfaceContainerHighHover
-                    colRipple: root.selectedIndex === index
-                        ? Appearance.colors.colPrimaryContainerActive
-                        : Appearance.colors.colSurfaceContainerHighActive
-                    onClicked: {
-                        root.selectedIndex = index;
-                        root.activateSelected();
-                    }
-
-                    RowLayout {
-                        id: countdownContent
-                        anchors.fill: parent
-                        anchors.margins: Appearance.sizes.elevationMargin
-
-                        MaterialSymbol {
-                            text: modelData.notified ? "notifications_off" : "timer"
-                            iconSize: Appearance.font.pixelSize.normal
+                            Layout.fillWidth: true
+                            text: modelData.title
+                            elide: Text.ElideRight
+                            font.weight: Font.DemiBold
                             color: root.selectedIndex === index
                                 ? Appearance.colors.colOnPrimaryContainer
                                 : Appearance.colors.colOnSurface
@@ -267,66 +288,39 @@ Item {
 
                         StyledText {
                             Layout.fillWidth: true
-                            text: modelData.label
+                            text: modelData.subtitle
                             elide: Text.ElideRight
-                            color: root.selectedIndex === index
-                                ? Appearance.colors.colOnPrimaryContainer
-                                : Appearance.colors.colOnSurface
-                        }
-
-                        StyledText {
-                            text: root.formatSeconds(TimerService.countdownSecondsLeft(modelData))
+                            font.pixelSize: Appearance.font.pixelSize.smaller
                             color: root.selectedIndex === index
                                 ? Appearance.colors.colOnPrimaryContainer
                                 : Appearance.colors.colSubtext
                         }
                     }
-                }
 
-                StyledText {
-                    anchors.centerIn: parent
-                    visible: root.countdowns.length === 0
-                    text: Translation.tr("Choose a quick timer or type minutes and press Ctrl+N")
-                    color: Appearance.colors.colSubtext
+                    StyledText {
+                        text: root.valueFor(modelData)
+                        font.family: Appearance.font.family.monospace
+                        font.pixelSize: Appearance.font.pixelSize.normal
+                        color: root.selectedIndex === index
+                            ? Appearance.colors.colOnPrimaryContainer
+                            : Appearance.colors.colOnSurface
+                    }
+
+                    StyledText {
+                        text: modelData.action
+                        font.pixelSize: Appearance.font.pixelSize.smallest
+                        color: root.selectedIndex === index
+                            ? Appearance.colors.colOnPrimaryContainer
+                            : Appearance.colors.colPrimary
+                    }
                 }
             }
 
-            Repeater {
-                model: Config.options.search.modules.timers.showAlarms
-                    ? Array.from(AlarmService.alarms ?? []).slice(0, 2)
-                    : []
-
-                delegate: RippleButton {
-                    required property int index
-                    required property var modelData
-                    Layout.fillWidth: true
-                    implicitHeight: alarmContent.implicitHeight + Appearance.sizes.elevationMargin
-                    buttonRadius: Appearance.rounding.normal
-                    colBackground: Appearance.colors.colSurfaceContainerHigh
-                    colBackgroundHover: Appearance.colors.colSurfaceContainerHighHover
-                    colRipple: Appearance.colors.colSurfaceContainerHighActive
-                    onClicked: AlarmService.toggleAlarm(index)
-
-                    RowLayout {
-                        id: alarmContent
-                        anchors.fill: parent
-                        anchors.margins: Appearance.sizes.elevationMargin / 2
-
-                        MaterialSymbol {
-                            text: modelData.enabled ? "alarm" : "alarm_off"
-                            iconSize: Appearance.font.pixelSize.small
-                            color: Appearance.colors.colOnSurface
-                        }
-
-                        StyledText {
-                            Layout.fillWidth: true
-                            text: `${modelData.time} · ${modelData.label}`
-                            elide: Text.ElideRight
-                            font.pixelSize: Appearance.font.pixelSize.smallest
-                            color: Appearance.colors.colOnSurface
-                        }
-                    }
-                }
+            StyledText {
+                anchors.centerIn: parent
+                visible: root.rows.length === 0
+                text: Translation.tr("No timer actions match")
+                color: Appearance.colors.colSubtext
             }
         }
     }

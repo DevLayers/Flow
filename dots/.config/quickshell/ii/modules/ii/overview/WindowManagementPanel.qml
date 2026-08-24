@@ -25,7 +25,9 @@ Item {
         : null
     readonly property string targetLabel: root.targetWindow
         ? String(root.targetWindow.title ?? root.targetWindow.class ?? root.targetAddress)
-        : Translation.tr("No target window")
+        : (root.targetAddress.length > 0
+            ? Translation.tr("Focused window · %1").arg(String(root.targetAddress))
+            : Translation.tr("No target window"))
     readonly property string statusText: root.selectedAction
         ? `${root.targetLabel} · ${root.selectedAction.name}`
         : root.targetLabel
@@ -132,6 +134,7 @@ Item {
         icon: "splitscreen"
         accent: true
         statusText: root.statusText
+        showStatus: true
         primaryHint: ({ label: Translation.tr("Run"), keys: ["↵"] })
         hints: [
             { label: Translation.tr("Keep open"), keys: ["Ctrl", "↵"] },
@@ -141,6 +144,7 @@ Item {
 
         ColumnLayout {
             width: parent.width
+            height: parent.height
             spacing: Appearance.sizes.elevationMargin
 
             RowLayout {
@@ -174,7 +178,7 @@ Item {
             ListView {
                 id: actionList
                 Layout.fillWidth: true
-                Layout.preferredHeight: Appearance.sizes.elevationMargin * 34
+                Layout.fillHeight: true
                 clip: true
                 spacing: Appearance.sizes.elevationMargin / 2
                 model: root.rows

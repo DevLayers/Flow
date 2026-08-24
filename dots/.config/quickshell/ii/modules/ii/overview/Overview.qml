@@ -68,6 +68,7 @@ Scope {
                         property list<real> animCurveExit: Appearance.animationCurves.emphasizedAccel
                         readonly property bool overviewShouldShow: LauncherSearch.query === ""
                             && !(searchWidget?.isAiMode ?? false)
+                            && !(searchWidget?.isAnySpecialMode ?? false)
                             && !GlobalStates.searchOnlyMode
                             && !GlobalStates.searchCenterMode
                             && !Config.options.search.suggestions.enable
@@ -136,6 +137,13 @@ Scope {
                         Connections {
                             target: LauncherSearch
                             function onQueryChanged() {
+                                root.syncOverviewReveal();
+                            }
+                        }
+
+                        Connections {
+                            target: searchWidget
+                            function onIsAnySpecialModeChanged() {
                                 root.syncOverviewReveal();
                             }
                         }
@@ -385,8 +393,7 @@ Scope {
 
                                 Keys.onPressed: event => {
                                     if (event.key === Qt.Key_Escape) {
-                                        if (searchWidget.isAiMode) {
-                                            searchWidget.exitAiMode();
+                                        if (searchWidget.handleEscape()) {
                                             event.accepted = true;
                                             return;
                                         }

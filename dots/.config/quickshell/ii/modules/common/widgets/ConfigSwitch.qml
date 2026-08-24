@@ -9,6 +9,7 @@ import QtQuick.Controls
 RippleButton {
     id: root
     property string buttonIcon
+    property string description: ""
     property real iconSize: 18
     property Component extraComponent: null
     property url configPage: ""
@@ -257,14 +258,28 @@ RippleButton {
                 }
             }
 
-            StyledText {
-                id: labelWidget
+            ColumnLayout {
                 Layout.fillWidth: true
-                text: root.text
-                font.pixelSize: root.font.pixelSize
-                color: Appearance.colors.colOnLayer2
+                spacing: Appearance.sizes.elevationMargin / 4
                 opacity: root.enabled ? 1 : 0.4
-                wrapMode: Text.WordWrap
+
+                StyledText {
+                    id: labelWidget
+                    Layout.fillWidth: true
+                    text: root.text
+                    font.pixelSize: root.font.pixelSize
+                    color: Appearance.colors.colOnLayer2
+                    wrapMode: Text.WordWrap
+                }
+
+                StyledText {
+                    Layout.fillWidth: true
+                    visible: root.description.length > 0
+                    text: root.description
+                    font.pixelSize: Appearance.font.pixelSize.smaller
+                    color: Appearance.colors.colSubtext
+                    wrapMode: Text.WordWrap
+                }
             }
 
             Loader {

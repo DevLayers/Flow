@@ -48,6 +48,12 @@ Item {
     }
 
     // ─── Entrance ───
+    // Visible on creation, animated only when the month view bumps entranceKey.
+    // A chip is recreated whenever its cell rebuilds its entry array — which
+    // happens every time SportsService republishes, right after the grid has
+    // settled — so replaying the entrance on creation makes the whole month
+    // flash. The open case is covered by MonthView.gridOpacity starting at 0:
+    // the first entranceKey bump lands while the grid is still invisible.
     property real revealProgress: 1.0
     transform: Translate {
         id: revealTranslate

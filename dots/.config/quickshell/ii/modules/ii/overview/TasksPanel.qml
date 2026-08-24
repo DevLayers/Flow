@@ -147,6 +147,7 @@ Item {
         icon: "task_alt"
         accent: true
         statusText: root.statusText
+        showStatus: true
         primaryHint: ({ label: root.selectedTask?.done ? Translation.tr("Reopen") : Translation.tr("Complete"), keys: ["↵"] })
         hints: [
             { label: Translation.tr("New from query"), keys: ["Ctrl", "N"] },
@@ -155,6 +156,7 @@ Item {
 
         ColumnLayout {
             width: parent.width
+            height: parent.height
             spacing: Appearance.sizes.elevationMargin
 
             StyledText {
@@ -168,7 +170,7 @@ Item {
             ListView {
                 id: taskList
                 Layout.fillWidth: true
-                Layout.preferredHeight: Appearance.sizes.elevationMargin * 34
+                Layout.fillHeight: true
                 clip: true
                 spacing: Appearance.sizes.elevationMargin / 2
                 model: root.rows

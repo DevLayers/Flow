@@ -14,7 +14,9 @@ Item {
     property var activePanel: SearchPanelRegistry.byId(activePanelId)
     property Item activeItem: null
 
-    implicitWidth: root.activeItem?.implicitWidth ?? (root.activePanel?.width?.() ?? 0)
+    // The registry owns hosted-panel geometry. Individual panels may retain
+    // legacy implicit widths, but they fill this host and must not shrink it.
+    implicitWidth: root.activePanel?.width?.() ?? (root.activeItem?.implicitWidth ?? 0)
     implicitHeight: root.activeItem?.implicitHeight ?? (root.activePanel ? 520 : 0)
 
     function queryFor(panel) {

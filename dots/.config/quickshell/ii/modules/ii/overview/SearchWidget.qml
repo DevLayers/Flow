@@ -36,7 +36,7 @@ Item {
         const query = LauncherSearch.query;
         if (!query)
             return 15;
-        const isPrefixed = query.startsWith(Config.options.search.prefix.app) || query.startsWith(Config.options.search.prefix.fileBrowser) || query.startsWith(Config.options.search.prefix.windowSearch) || query.startsWith(Config.options.search.prefix.fileSearch);
+        const isPrefixed = root.searchPrefixValues.some(prefix => query.startsWith(prefix));
         return isPrefixed ? 500 : 15;
     }
     readonly property bool isSearching: false
@@ -116,18 +116,22 @@ Item {
     // the launcher query is cleared or the draft is restored asynchronously.
     property bool aiDraftHydrated: false
     readonly property bool aiAutoTriggerEnabled: Ai.enabled && (Config.options.search.ai?.trigger ?? "prefix") === "auto"
-    readonly property var searchPrefixValues: SearchPanelRegistry.activePrefixes.concat([
-        Config.options.search.prefix.action, Config.options.search.prefix.app,
-        Config.options.search.prefix.fileSearch,
-        Config.options.search.prefix.math, Config.options.search.prefix.shellCommand,
-        Config.options.search.prefix.webSearch, Config.options.search.prefix.windowSearch,
-        Config.options.search.prefix.fileBrowser
-    ]).filter((value, index, values) => value && values.indexOf(value) === index)
+    readonly property var searchPrefixValues: SearchPanelRegistry.activePrefixes
+        .concat(LauncherSearch.enabledUtilityPrefixes())
+        .filter((value, index, values) => value && values.indexOf(value) === index)
     readonly property bool queryHasAnyPrefix: root.searchPrefixValues.some(prefix => root.searchingText.startsWith(prefix))
     // Results that are actual matches — the always-there fallback rows
     // (shell command, math, web, ask-AI) never count.
     readonly property int realResultCount: LauncherSearch.results.filter(r => r && r.key !== "cmd:shell" && r.key !== "web:search" && r.key !== "ai:ask" && r.key !== "mpris:now-playing" && !r.key.startsWith("math:")).length
     readonly property bool isAnySpecialMode: root.activePanelId.length > 0
+    readonly property string activePanelQuery: {
+        if (!root.activePanel)
+            return "";
+        const prefix = SearchPanelRegistry.prefixOf(root.activePanel);
+        return prefix.length > 0 && root.searchingText.startsWith(prefix)
+            ? root.searchingText.slice(prefix.length)
+            : root.searchingText;
+    }
 
     readonly property var activePanelItem: {
         if (root.activePanelUsesHost)
@@ -529,16 +533,32 @@ Item {
         root.resetAiSearchState(true);
     }
 
+    function exitActivePanel(): bool {
+        if (!root.isAnySpecialMode)
+            return false;
+        if (root.isAiMode) {
+            root.exitAiMode();
+            return true;
+        }
+        root.requestedPanelId = "";
+        root.searchingText = "";
+        LauncherSearch.query = "";
+        searchBar.searchInput.text = "";
+        Qt.callLater(root.focusSearchInput);
+        return true;
+    }
+
     // One Escape path for the whole overview surface. A PanelWindow cannot
     // host a Keys attached property, so Overview's window shortcut delegates
     // here; the focused composer and child controls use the same function.
     function handleEscape(): bool {
-        if (!root.isAiMode)
-            return false;
-        if (aiPanelLoader.item && typeof aiPanelLoader.item.handleEscape === "function" && aiPanelLoader.item.handleEscape())
+        if (root.isAiMode) {
+            if (aiPanelLoader.item && typeof aiPanelLoader.item.handleEscape === "function" && aiPanelLoader.item.handleEscape())
+                return true;
+            root.exitAiMode();
             return true;
-        root.exitAiMode();
-        return true;
+        }
+        return root.exitActivePanel();
     }
 
     // Send the current search bar text as a chat message. The search bar is
@@ -648,13 +668,12 @@ Item {
             return;
         }
 
-        // ESC: in AI mode, delegate to panel (closes history first, then exits AI mode)
+        // ESC first leaves any child panel. Plain Search lets it propagate so
+        // Overview can close on the next press.
         if (event.key === Qt.Key_Escape) {
-            if (root.isAiMode) {
-                root.handleEscape();
+            if (root.handleEscape()) {
                 event.accepted = true;
             }
-            // In non-AI mode, let the event propagate to OverviewWindow for closing
             return;
         }
 
@@ -676,6 +695,11 @@ Item {
         if (event.key === Qt.Key_Backspace) {
             if (root.isAiMode) {
                 root.focusSearchInput();
+                return;
+            }
+            if (root.isAnySpecialMode && root.activePanelQuery.trim().length === 0) {
+                root.exitActivePanel();
+                event.accepted = true;
                 return;
             }
             if (!searchBar.searchInput.activeFocus) {
@@ -860,7 +884,8 @@ Item {
                 }
 
                 clipboardMode: root.isClipboardMode || root.isBluetoothMode || root.isTranslatorMode || root.isMediaDownloaderMode || root.isMaterialSymbolsMode
-                activePanelMode: root.activePanelItem !== null
+                activePanelMode: root.isAnySpecialMode
+                activePanelQueryEmpty: root.activePanelQuery.trim().length === 0
                 supportsPanelSectionToggle: root.activePanelId === "settings"
                 clipboardWidth: 830
                 currentResultIndex: appResults.currentIndex
@@ -919,8 +944,7 @@ Item {
                 }
 
                 onEscapeToSearch: {
-                    if (root.isAiMode)
-                        root.handleEscape();
+                    root.handleEscape();
                 }
 
                 onSendMessage: {

@@ -117,6 +117,7 @@ Item {
         icon: "terminal"
         accent: true
         statusText: root.statusText
+        showStatus: true
         primaryHint: ({ label: Translation.tr("Copy"), keys: ["↵"] })
         hints: [
             { label: Translation.tr("Run"), keys: ["Ctrl", "↵"] },
@@ -125,6 +126,7 @@ Item {
 
         ColumnLayout {
             width: parent.width
+            height: parent.height
             spacing: Appearance.sizes.elevationMargin
 
             RowLayout {
@@ -159,7 +161,7 @@ Item {
             ListView {
                 id: commandsList
                 Layout.fillWidth: true
-                Layout.preferredHeight: Math.min(contentHeight, Appearance.sizes.elevationMargin * 34)
+                Layout.fillHeight: true
                 clip: true
                 spacing: Appearance.sizes.elevationMargin / 2
                 model: root.rows

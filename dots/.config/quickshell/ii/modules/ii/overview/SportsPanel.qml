@@ -17,21 +17,19 @@ Item {
     readonly property var selectedGame: root.selectedIndex >= 0 && root.selectedIndex < root.rows.length ? root.rows[root.selectedIndex] : null
     readonly property string statusText: root.selectedGame
         ? String(root.selectedGame.name ?? "") + " · " + String(root.selectedGame.status ?? "")
-        : (SportsService.loading ? Translation.tr("Loading games…") : Translation.tr("%1 games").arg(String(root.rows.length)))
+        : (SportsService.searchLoading ? Translation.tr("Loading today’s games…") : Translation.tr("%1 games today").arg(String(root.rows.length)))
 
     implicitWidth: 720
     implicitHeight: scaffold.implicitHeight
 
     function filteredGames() {
         const query = root.searchQuery.trim().toLocaleLowerCase();
-        const lookahead = Math.max(1, Config.options.search.modules.sports.lookaheadHours) * 3600000;
-        const cutoff = Date.now() + lookahead;
+        const today = SportsService.dayKey(DateTime.clock.date);
         const leagues = Array.from(Config.options.search.modules.sports.leagues ?? []);
-        return Array.from(SportsService.allGames ?? []).filter(game => {
-            const date = new Date(game?.date);
-            if (!isNaN(date.getTime()) && date.getTime() > cutoff)
+        return Array.from(SportsService.searchGames ?? []).filter(game => {
+            if (SportsService.dayKey(game?.date) !== today)
                 return false;
-            if (leagues.length > 0 && !leagues.includes(String(game?.league ?? "")))
+            if (leagues.length > 0 && !leagues.includes(String(game?.leagueId ?? game?.league ?? "")))
                 return false;
             if (query.length === 0)
                 return true;
@@ -66,6 +64,8 @@ Item {
         if (index >= 0) {
             SportsService.currentGameIndex = index;
             SportsService.currentGame = SportsService.allGames[index];
+        } else {
+            SportsService.currentGame = root.selectedGame;
         }
         return true;
     }
@@ -98,17 +98,18 @@ Item {
     SearchPanelScaffold {
         id: scaffold
         anchors.fill: parent
-        title: Translation.tr("Upcoming games")
+        title: Translation.tr("Today’s games")
         icon: "sports_soccer"
         accent: true
         statusText: root.statusText
+        showStatus: true
         primaryHint: ({ label: Translation.tr("Select"), keys: ["↵"] })
         hints: [{ label: Translation.tr("Remind"), keys: ["Ctrl", "N"] }]
 
         ListView {
             id: gamesList
             width: parent.width
-            implicitHeight: Math.min(contentHeight, Appearance.sizes.elevationMargin * 34)
+            height: parent.height
             clip: true
             spacing: Appearance.sizes.elevationMargin / 2
             model: root.rows
@@ -159,8 +160,12 @@ Item {
 
             StyledText {
                 anchors.centerIn: parent
-                visible: root.rows.length === 0 && !SportsService.loading
-                text: Translation.tr("No games in the selected window")
+                visible: root.rows.length === 0
+                text: SportsService.searchLoading
+                    ? Translation.tr("Loading today’s games…")
+                    : (SportsService.searchError.length > 0
+                        ? SportsService.searchError
+                        : Translation.tr("No games today"))
                 color: Appearance.colors.colSubtext
             }
         }

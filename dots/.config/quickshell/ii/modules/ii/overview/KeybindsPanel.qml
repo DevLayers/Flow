@@ -148,6 +148,7 @@ Item {
         icon: "keyboard"
         accent: true
         statusText: root.statusText
+        showStatus: true
         primaryHint: ({ label: Translation.tr("Run"), keys: ["↵"] })
         hints: [
             { label: Translation.tr("Copy"), keys: ["Ctrl", "C"] },
@@ -156,12 +157,13 @@ Item {
 
         ColumnLayout {
             width: parent.width
+            height: parent.height
             spacing: Appearance.sizes.elevationMargin
 
             ListView {
                 id: keybindList
                 Layout.fillWidth: true
-                Layout.preferredHeight: Math.min(contentHeight, 460)
+                Layout.fillHeight: true
                 Layout.minimumHeight: emptyState.implicitHeight
                 clip: true
                 spacing: Appearance.sizes.elevationMargin / 2

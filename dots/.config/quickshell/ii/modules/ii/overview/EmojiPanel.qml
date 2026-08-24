@@ -23,42 +23,51 @@ Item {
     // searchable; the browse view uses a responsive, bounded window.
     readonly property int maxVisibleEntries: 240
     readonly property real gridSpacing: Appearance.sizes.elevationMargin / 2
-    readonly property var categories: [
-        { id: "all", label: Translation.tr("All") },
-        { id: "people", label: Translation.tr("People") },
-        { id: "nature", label: Translation.tr("Nature") },
-        { id: "food", label: Translation.tr("Food") },
-        { id: "objects", label: Translation.tr("Objects") },
-        { id: "symbols", label: Translation.tr("Symbols") }
-    ]
+    readonly property var categories: {
+        const rows = [
+            { id: "all", label: Translation.tr("All categories"), icon: "category" },
+            { id: "people", label: Translation.tr("People"), icon: "face" },
+            { id: "nature", label: Translation.tr("Nature"), icon: "nature" },
+            { id: "food", label: Translation.tr("Food"), icon: "restaurant" },
+            { id: "objects", label: Translation.tr("Objects"), icon: "lightbulb" },
+            { id: "symbols", label: Translation.tr("Symbols"), icon: "tag" }
+        ];
+        if (Config.options.search.modules.emojis.showRecents
+                && (Persistent.states.search.recentEmojis?.length ?? 0) > 0)
+            rows.splice(1, 0, { id: "recent", label: Translation.tr("Recent"), icon: "history" });
+        return rows;
+    }
     readonly property var filteredEntries: root.filteredEmojiEntries()
     readonly property var selectedEntry: root.selectedIndex >= 0 && root.selectedIndex < root.filteredEntries.length
         ? root.filteredEntries[root.selectedIndex]
         : null
+    readonly property string selectedCategoryLabel: root.categories.find(category => category.id === root.selectedCategory)?.label
+        ?? Translation.tr("All categories")
     implicitWidth: 720
     implicitHeight: scaffold.implicitHeight
 
     function filterByCategory(entries) {
         if (root.selectedCategory === "all")
             return entries;
+        if (root.selectedCategory === "recent") {
+            const available = new Set(entries.map(entry => entry.raw));
+            return Array.from(Persistent.states.search.recentEmojis ?? [])
+                .filter(raw => available.has(raw))
+                .map(raw => Emojis.entryFor(raw))
+                .filter(Boolean);
+        }
         return entries.filter(entry => entry.category === root.selectedCategory);
     }
 
     function filteredEmojiEntries() {
         const query = root.searchQuery.trim();
-        const allEntries = Array.from(Emojis.entries ?? []);
+        const allEntries = Emojis.entries ?? [];
         if (query.length > 0) {
             const matchingRawEntries = new Set(Emojis.fuzzyQuery(query));
             return root.filterByCategory(allEntries.filter(entry => matchingRawEntries.has(entry.raw)))
                 .slice(0, root.maxVisibleEntries);
         }
 
-        if (Config.options.search.modules.emojis.showRecents) {
-            const recent = Array.from(Persistent.states.search.recentEmojis ?? []);
-            const recentEntries = recent.map(raw => Emojis.entryFor(raw)).filter(Boolean);
-            if (recentEntries.length > 0)
-                return root.filterByCategory(recentEntries).slice(0, root.maxVisibleEntries);
-        }
         return root.filterByCategory(allEntries).slice(0, root.maxVisibleEntries);
     }
 
@@ -163,54 +172,51 @@ Item {
         title: Translation.tr("Emojis")
         icon: "mood"
         accent: true
+        showStatus: true
+        statusText: Emojis.loading
+            ? Translation.tr("Loading emojis…")
+            : root.selectedEntry
+            ? root.skinToneEmoji(root.selectedEntry) + "  " + String(root.selectedEntry.name ?? "")
+            : Translation.tr("No emojis found")
         primaryHint: ({ label: Translation.tr("Copy"), keys: ["↵"] })
         hints: [{ label: Translation.tr("Navigate"), keys: ["↑", "↓", "←", "→"] }]
 
         ColumnLayout {
             width: parent.width
+            height: parent.height
             spacing: Appearance.sizes.elevationMargin
 
             RowLayout {
                 Layout.fillWidth: true
-                spacing: root.gridSpacing
+                StyledText {
+                    Layout.fillWidth: true
+                    text: root.filteredEntries.length >= root.maxVisibleEntries
+                        ? Translation.tr("Results  %1+").arg(String(root.filteredEntries.length))
+                        : Translation.tr("Results  %1").arg(String(root.filteredEntries.length))
+                    font.pixelSize: Appearance.font.pixelSize.small
+                    color: Appearance.colors.colOnSurfaceVariant
+                }
 
-                Repeater {
+                StyledComboBox {
+                    id: categoryPicker
+                    Layout.preferredWidth: Appearance.sizes.elevationMargin * 20
+                    Layout.fillWidth: false
                     model: root.categories
-
-                    delegate: RippleButton {
-                        required property var modelData
-                        implicitWidth: categoryText.implicitWidth + Appearance.sizes.elevationMargin * 2
-                        implicitHeight: categoryText.implicitHeight + Appearance.sizes.elevationMargin
-                        buttonRadius: Appearance.rounding.full
-                        colBackground: root.selectedCategory === modelData.id
-                            ? Appearance.colors.colPrimaryContainer
-                            : Appearance.colors.colSurfaceContainerHigh
-                        colBackgroundHover: root.selectedCategory === modelData.id
-                            ? Appearance.colors.colPrimaryContainerHover
-                            : Appearance.colors.colSurfaceContainerHighHover
-                        colRipple: root.selectedCategory === modelData.id
-                            ? Appearance.colors.colPrimaryContainerActive
-                            : Appearance.colors.colSurfaceContainerHighActive
-                        onClicked: root.selectCategory(modelData.id)
-
-                        StyledText {
-                            id: categoryText
-                            anchors.centerIn: parent
-                            text: modelData.label
-                            font.pixelSize: Appearance.font.pixelSize.smallest
-                            color: root.selectedCategory === modelData.id
-                                ? Appearance.colors.colOnPrimaryContainer
-                                : Appearance.colors.colOnSurface
-                        }
-                    }
+                    textRole: "label"
+                    valueRole: "id"
+                    buttonIcon: "category"
+                    currentIndex: Math.max(0, root.categories.findIndex(category => category.id === root.selectedCategory))
+                    onActivated: index => root.selectCategory(root.categories[index].id)
                 }
             }
 
             GridView {
                 id: emojiGrid
                 Layout.fillWidth: true
-                Layout.preferredHeight: Appearance.sizes.elevationMargin * 32
+                Layout.fillHeight: true
                 clip: true
+                reuseItems: true
+                cacheBuffer: cellHeight * 2
                 model: root.filteredEntries
                 cellWidth: (width + root.gridSpacing) / root.gridColumns
                 cellHeight: Appearance.sizes.elevationMargin * 5
@@ -248,7 +254,7 @@ Item {
                 StyledText {
                     anchors.centerIn: parent
                     visible: root.filteredEntries.length === 0
-                    text: Translation.tr("No emojis found")
+                    text: Emojis.loading ? Translation.tr("Loading emojis…") : Translation.tr("No emojis found")
                     color: Appearance.colors.colSubtext
                 }
             }

@@ -3808,6 +3808,8 @@ Singleton {
                     property real accentStrength: 0.12
                     property bool showKeyHints: true
                     property bool showKeyHintBar: true
+                    property int panelWidth: 860
+                    property int panelBodyHeight: 420
                 }
                 property JsonObject imageSearch: JsonObject {
                     property string imageSearchEngineBaseUrl: "https://lens.google.com/uploadbyurl?url=" //lens.google.com/uploadbyurl?url="
