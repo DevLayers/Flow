@@ -125,6 +125,10 @@ Singleton {
         NetworkCommands.addWifiProfile(name, ssid, settings, secretKey, secret, root.afterWrite(callback));
     }
 
+    function createWired(name: string, ifname: string, settings: var, secretKey = "", secret = "", callback = null): void {
+        NetworkCommands.addWiredProfile(name, ifname, settings, secretKey, secret, root.afterWrite(callback));
+    }
+
     Timer {
         id: settleTimer
         interval: 1500
@@ -135,6 +139,12 @@ Singleton {
         target: NetworkState
 
         function onActiveWifiNetworkChanged(): void {
+            settleTimer.restart();
+        }
+
+        // A cable going in or out activates or drops a profile without this
+        // shell asking for it, and the list would otherwise stay as it was.
+        function onWiredConnectedChanged(): void {
             settleTimer.restart();
         }
     }

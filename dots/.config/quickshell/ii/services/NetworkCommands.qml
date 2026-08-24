@@ -608,6 +608,99 @@ Singleton {
             });
     }
 
+    // ---- Wired ------------------------------------------------------------
+    readonly property string kAddWiredSecret: 'name="$1"; key="$2"; shift 2; nmcli connection add type ethernet con-name "$name" "$key" "$PASSWORD" "$@"'
+
+    /**
+     * What a port actually is beyond its name: the chip, its driver, the MTU in
+     * force, and whether a cable is in it. None of that is on the device's D-Bus
+     * interface, so it comes back through nmcli like the rest of the reads.
+     */
+    function readDeviceDetails(ifname: string, callback): void {
+        if (ifname.length === 0) {
+            callback({});
+            return;
+        }
+        const fields = ["GENERAL.VENDOR", "GENERAL.PRODUCT", "GENERAL.DRIVER", "GENERAL.MTU",
+            "GENERAL.STATE", "GENERAL.CONNECTION", "GENERAL.HWADDR", "CAPABILITIES.SPEED",
+            "WIRED-PROPERTIES.CARRIER"];
+        root.run(["nmcli", "-t", "-e", "yes", "-f", fields.join(","), "device", "show", ifname],
+            "device", (code, out) => {
+                callback(code === 0 ? root.parseDeviceDetails(out) : ({}));
+            });
+    }
+
+    /**
+     * nmcli drops whole field groups that do not apply to the device rather than
+     * printing them empty, so a missing carrier line means "not a wired port"
+     * and not "no cable".
+     */
+    function parseDeviceDetails(text: string): var {
+        const result = {
+            vendor: "",
+            product: "",
+            driver: "",
+            mtu: 0,
+            state: "",
+            connection: "",
+            mac: "",
+            speed: "",
+            carrier: ""
+        };
+        const plain = {
+            "GENERAL.VENDOR": "vendor",
+            "GENERAL.PRODUCT": "product",
+            "GENERAL.DRIVER": "driver",
+            "GENERAL.CONNECTION": "connection",
+            "GENERAL.HWADDR": "mac",
+            "CAPABILITIES.SPEED": "speed",
+            "WIRED-PROPERTIES.CARRIER": "carrier"
+        };
+        text.trim().split("\n").forEach(line => {
+            const parts = root.splitEscaped(line);
+            if (parts.length < 2)
+                return;
+            const key = parts[0];
+            // The hardware address is the one value carrying colons of its own,
+            // and nmcli leaves them unescaped even when asked not to.
+            const value = parts.slice(1).join(":");
+            if (plain[key] !== undefined) {
+                result[plain[key]] = value === "--" ? "" : value;
+                return;
+            }
+            if (key === "GENERAL.MTU") {
+                result.mtu = parseInt(value) || 0;
+                return;
+            }
+            if (key !== "GENERAL.STATE")
+                return;
+            // Reported as "100 (connected)", where the number is NetworkManager's
+            // own scale and means nothing outside it.
+            const match = value.match(/\(([^)]*)\)/);
+            result.state = match ? match[1] : value;
+        });
+        return result;
+    }
+
+    /**
+     * A wired profile, pinned to the port it was made for. As with the hotspot,
+     * an empty ifname is left out rather than passed through: nmcli would take
+     * it as a device named "", which nothing ever matches.
+     */
+    function addWiredProfile(name: string, ifname: string, settings: var, secretKey = "", secret = "", callback = null): void {
+        const pairs = root.settingsToArgv(settings);
+        const device = ifname.length > 0 ? ["connection.interface-name", ifname] : [];
+        if (secret.length === 0 || secretKey.length === 0) {
+            root.run(["nmcli", "connection", "add", "type", "ethernet", "con-name", name,
+                ...device, ...pairs], "add", callback);
+            return;
+        }
+        root.runScript(root.kAddWiredSecret, [name, secretKey, ...device, ...pairs], "add",
+            callback, {
+                PASSWORD: secret
+            });
+    }
+
     Process {
         id: runner
         stdout: StdioCollector {

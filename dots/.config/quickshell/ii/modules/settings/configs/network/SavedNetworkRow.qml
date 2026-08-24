@@ -26,6 +26,7 @@ Rectangle {
     readonly property bool isActive: root.profile?.active ?? false
     readonly property bool autoconnect: root.profile?.autoconnect ?? false
     readonly property bool everUsed: (root.profile?.timestamp ?? 0) > 0
+    readonly property bool wired: (root.profile?.type ?? "") === "802-3-ethernet"
 
     readonly property real outerRadius: Appearance.rounding.normal
     readonly property real innerRadius: Appearance.rounding.verysmall
@@ -225,7 +226,9 @@ Rectangle {
                         StyledText {
                             Layout.fillWidth: true
                             wrapMode: Text.Wrap
-                            text: Translation.tr("Joins this network on its own whenever it is in range.")
+                            text: root.wired
+                                ? Translation.tr("Comes up on its own as soon as a cable is plugged in.")
+                                : Translation.tr("Joins this network on its own whenever it is in range.")
                             font.pixelSize: Appearance.font.pixelSize.smaller
                             color: Appearance.colors.colSubtext
                         }

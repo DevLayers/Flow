@@ -21,7 +21,16 @@ Item {
     // How the settings window restores a page's scroll position.
     property real contentY: 0
 
-    readonly property var tabs: [
+    /**
+     * The wired tab is only built where there is a socket to talk about, so the
+     * list is computed rather than fixed. Changing it rebuilds every tab
+     * delegate, which is why the port is appended last: unplugging a USB
+     * adapter must not renumber the three tabs that are always there.
+     */
+    readonly property var tabs: NetworkState.hasWiredDevice
+        ? [...root.baseTabs, root.wiredTab] : root.baseTabs
+
+    readonly property var baseTabs: [
         {
             "source": "network/WifiTab.qml",
             "icon": "wifi",
@@ -45,6 +54,14 @@ Item {
                 Translation.tr("Connected devices")]
         }
     ]
+
+    readonly property var wiredTab: ({
+        "source": "network/WiredTab.qml",
+        "icon": "settings_ethernet",
+        "name": Translation.tr("Wired"),
+        "sections": [Translation.tr("Ethernet ports"), Translation.tr("Saved connections"),
+            Translation.tr("Addressing")]
+    })
 
     readonly property Item currentPage: tabHost.currentPage
 
