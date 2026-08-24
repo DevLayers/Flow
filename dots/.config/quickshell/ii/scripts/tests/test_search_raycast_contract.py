@@ -80,15 +80,31 @@ class SearchRaycastContractTests(unittest.TestCase):
         self.assertIn("function ensurePrepared(): void", emojis)
         self.assertIn("structureTimer", emojis)
         self.assertNotIn("root.entries = root.list.map", emojis)
+        self.assertIn("function queryEntries(", emojis)
+        self.assertIn("property var entriesByCategory", emojis)
+        self.assertNotIn("property list<var> entries", emojis)
         list_change = emojis.split("onListChanged:", 1)[1].split("function ensurePrepared", 1)[0]
         self.assertNotIn("preparationTimer.restart()", list_change)
 
         emoji_panel = source("modules/ii/overview/EmojiPanel.qml")
+        self.assertIn("import qs.modules.common.functions", emoji_panel)
         self.assertIn("StyledComboBox", emoji_panel)
         self.assertIn("GridView", emoji_panel)
         self.assertIn("showStatus: true", emoji_panel)
         self.assertIn("Math.min(8", emoji_panel)
         self.assertIn("skinTone", emoji_panel)
+        self.assertIn("toggled: root.selectedIndex === index", emoji_panel)
+        self.assertIn("Appearance.rounding.verylarge", emoji_panel)
+        self.assertIn("Layout.preferredWidth: root.headerPillWidth", emoji_panel)
+        self.assertIn("property int loadedEntryLimit", emoji_panel)
+        self.assertIn("function loadMoreEntries(): void", emoji_panel)
+        self.assertIn("onAtYEndChanged:", emoji_panel)
+        self.assertIn("reuseItems: true", emoji_panel)
+        self.assertIn("cacheBuffer: cellHeight", emoji_panel)
+        self.assertIn("id: emojiPageModel", emoji_panel)
+        self.assertIn("emojiPageModel.append", emoji_panel)
+        self.assertIn("model: emojiPageModel", emoji_panel)
+        self.assertIn("font.pixelSize: root.emojiGlyphSize", emoji_panel)
 
         launcher_files = (
             "modules/settings/configs/LauncherConfig.qml",
@@ -219,6 +235,28 @@ class SearchRaycastContractTests(unittest.TestCase):
         self.assertIn("GlobalStates.overviewOpen = false", panel)
         settings_result = launcher.split("function createSettingsResultObject", 1)[1].split("function createSettingsPanelResultObject", 1)[0]
         self.assertIn("GlobalStates.overviewOpen = false", settings_result)
+
+    def test_settings_panel_preserves_filter_and_has_expressive_recovery_states(self):
+        states = source("GlobalStates.qml")
+        widget = source("modules/ii/overview/SearchWidget.qml")
+        panel = source("modules/ii/overview/SettingsTogglesPanel.qml")
+        launcher = source("services/LauncherSearch.qml")
+        card = source("services/ai/blocks/AiSettingResultCard.qml")
+
+        self.assertIn("property string searchPendingPanelQuery", states)
+        self.assertIn("consumePendingSearchPanelQuery", states)
+        self.assertIn("consumePendingSearchPanelQuery", widget)
+        self.assertIn('openSearchPanel("settings", "", queryText)', launcher)
+        self.assertIn("StackLayout", panel)
+        self.assertIn("MaterialShape", panel)
+        self.assertIn("requestSetSearchQuery", panel)
+        self.assertIn("expressiveStyle: true", panel)
+        self.assertNotIn("implicitHeight: childrenRect.height", panel)
+        self.assertIn("property bool expressiveStyle: false", card)
+        self.assertIn("readonly property bool canEditInline", card)
+        self.assertIn("readonly property string settingIcon", card)
+        self.assertIn("text: root.settingIcon", card)
+        self.assertIn("root.setting?.hasUi === true", card)
 
     def test_new_search_surfaces_do_not_introduce_borders(self):
         paths = (

@@ -138,7 +138,7 @@ Singleton {
             comment,
             panelId: "settings",
             keepOverviewOpen: true,
-            execute: () => GlobalStates.openSearchPanel("settings")
+            execute: () => GlobalStates.openSearchPanel("settings", "", queryText)
         });
     }
 

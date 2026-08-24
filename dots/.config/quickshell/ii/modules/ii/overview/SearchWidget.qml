@@ -277,9 +277,12 @@ Item {
         if (!GlobalStates.overviewOpen)
             return;
         const requested = GlobalStates.consumePendingSearchPanel();
+        const requestedQuery = GlobalStates.consumePendingSearchPanelQuery();
         const panel = SearchPanelRegistry.byId(requested);
         if (panel && panel.enabled()) {
             root.requestedPanelId = requested;
+            if (requestedQuery.length > 0)
+                root.setSearchingText(requestedQuery);
             Qt.callLater(root.focusSearchInput);
         }
     }

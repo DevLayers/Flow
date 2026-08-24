@@ -20,6 +20,7 @@ Rectangle {
 
     required property var setting
     property bool compact: false
+    property bool expressiveStyle: false
     // The launcher presents settings beside program rows, while chat uses a
     // calmer layer card. Keep both surfaces in this shared control without
     // giving the launcher an unframed, visually floating result.
@@ -55,19 +56,23 @@ Rectangle {
     readonly property bool isAboveSelected: root.listIndex >= 0 && root.listCurrentIndex === root.listIndex + 1
     readonly property bool isBelowSelected: root.listIndex >= 0 && root.listCurrentIndex === root.listIndex - 1
     readonly property real pillRadius: Math.min(root.height / 2, Appearance.rounding.large)
-    readonly property bool supportsHorizontalNavigation: root.settingType === "bool"
+    readonly property bool canEditInline: root.setting?.hasUi === true
+    readonly property bool supportsHorizontalNavigation: root.canEditInline && (root.settingType === "bool"
         || root.settingType === "int"
         || root.settingType === "real"
-        || (root.settingType === "enum" && root.enumOptions.length > 0)
-    readonly property color foregroundColor: root.launcherStyle && root.isSelected
-        ? Appearance.colors.colOnPrimary : Appearance.colors.colOnLayer2
-    readonly property color secondaryColor: root.launcherStyle && root.isSelected
-        ? Appearance.colors.colOnPrimary : Appearance.colors.colSubtext
+        || (root.settingType === "enum" && root.enumOptions.length > 0))
+    readonly property color foregroundColor: root.expressiveStyle && root.isSelected
+        ? Appearance.colors.colOnSecondaryContainer
+        : (root.launcherStyle && root.isSelected ? Appearance.colors.colOnPrimary : Appearance.colors.colOnLayer2)
+    readonly property color secondaryColor: root.expressiveStyle && root.isSelected
+        ? Appearance.colors.colOnSecondaryContainer
+        : (root.launcherStyle && root.isSelected ? Appearance.colors.colOnPrimary : Appearance.colors.colSubtext)
     readonly property bool isHovered: cardHover.hovered
     // One label, already in the language the interface is showing. The index
     // used to carry two and pick between them here, which is how an English
     // interface displayed Portuguese names.
     readonly property string displayLabel: String(root.setting?.label ?? "") || root.key
+    readonly property string settingIcon: String(root.setting?.icon ?? "").trim() || "tune"
     readonly property string sectionTitle: String(root.setting?.sectionTitle ?? "")
     readonly property string sectionPath: [
         root.setting?.pageName ?? "",
@@ -81,7 +86,7 @@ Rectangle {
     }
 
     function writeValue(value: var): bool {
-        if (root.key.length === 0)
+        if (!root.canEditInline || root.key.length === 0)
             return false;
         const verdict = Ai.settingsIntegration.validate(root.key, value);
         if (!verdict.ok) {
@@ -139,6 +144,8 @@ Rectangle {
 
     /** Applies one horizontal keyboard move without giving the control focus. */
     function adjustBy(direction: int): bool {
+        if (!root.canEditInline)
+            return false;
         const stepDirection = direction < 0 ? -1 : (direction > 0 ? 1 : 0);
         if (stepDirection === 0)
             return false;
@@ -188,6 +195,10 @@ Rectangle {
      * adjusted with Left/Right and open their source on Enter.
      */
     function activate(): bool {
+        if (!root.canEditInline) {
+            root.openInSettings();
+            return true;
+        }
         if (root.settingType === "bool")
             return root.writeValue(!Boolean(root.currentValue));
         if (root.settingType === "string" && controlLoader.item) {
@@ -218,18 +229,24 @@ Rectangle {
 
     Layout.fillWidth: true
     implicitHeight: cardColumn.implicitHeight + (root.compact ? 16 : 20)
-    radius: Appearance.rounding.normal
-    topLeftRadius: root.launcherStyle
+    radius: root.expressiveStyle
+        ? (root.isSelected ? Appearance.rounding.verylarge : Appearance.rounding.large)
+        : Appearance.rounding.normal
+    topLeftRadius: root.expressiveStyle ? root.radius : (root.launcherStyle
         ? (root.isFirst ? Appearance.rounding.large : (root.isSelected || root.isBelowSelected ? root.pillRadius : Appearance.rounding.small))
-        : Appearance.rounding.normal
+        : Appearance.rounding.normal)
     topRightRadius: root.topLeftRadius
-    bottomLeftRadius: root.launcherStyle
+    bottomLeftRadius: root.expressiveStyle ? root.radius : (root.launcherStyle
         ? (root.isLast ? Appearance.rounding.large : (root.isSelected || root.isAboveSelected ? root.pillRadius : Appearance.rounding.small))
-        : Appearance.rounding.normal
+        : Appearance.rounding.normal)
     bottomRightRadius: root.bottomLeftRadius
-    color: root.launcherStyle
+    color: root.expressiveStyle
+        ? (root.isSelected
+            ? Appearance.colors.colSecondaryContainer
+            : (root.isHovered ? Appearance.colors.colSurfaceContainerHighestHover : Appearance.colors.colSurfaceContainerHigh))
+        : (root.launcherStyle
         ? (root.isSelected ? Appearance.colors.colPrimaryHover : (root.isHovered ? Appearance.colors.colSurfaceContainerHighestHover : Appearance.colors.colSurfaceContainerHigh))
-        : Appearance.colors.colLayer2
+        : Appearance.colors.colLayer2)
 
     // The full card gets a neutral surface hover. Its state must stay
     // separate from a checked switch, which uses the primary color.
@@ -269,11 +286,33 @@ Rectangle {
             Layout.fillWidth: true
             spacing: 8
 
-            MaterialSymbol {
+            Item {
                 Layout.alignment: Qt.AlignTop
-                text: String(root.setting?.icon ?? "tune")
-                iconSize: Appearance.font.pixelSize.normal
-                color: root.foregroundColor
+                Layout.preferredWidth: root.expressiveStyle
+                    ? Appearance.sizes.elevationMargin * 5
+                    : Appearance.font.pixelSize.normal
+                Layout.preferredHeight: Layout.preferredWidth
+
+                MaterialShape {
+                    anchors.fill: parent
+                    visible: root.expressiveStyle
+                    implicitSize: parent.width
+                    shapeString: root.settingType === "bool" ? "Clover4Leaf"
+                        : (root.settingType === "enum" ? "Cookie7Sided"
+                        : (root.settingType === "string" ? "Arch" : "SoftBurst"))
+                    color: root.isSelected
+                        ? Appearance.colors.colPrimary
+                        : Appearance.colors.colTertiaryContainer
+                }
+
+                MaterialSymbol {
+                    anchors.centerIn: parent
+                    text: root.settingIcon
+                    iconSize: Appearance.font.pixelSize.normal
+                    color: root.expressiveStyle
+                        ? (root.isSelected ? Appearance.colors.colOnPrimary : Appearance.colors.colOnTertiaryContainer)
+                        : root.foregroundColor
+                }
             }
 
             ColumnLayout {
@@ -296,6 +335,15 @@ Rectangle {
                     font.pixelSize: Appearance.font.pixelSize.smaller
                     color: root.secondaryColor
                     opacity: root.launcherStyle && root.isSelected ? 0.78 : 1
+                }
+            }
+
+            StyledSwitch {
+                visible: root.expressiveStyle && root.canEditInline && root.settingType === "bool"
+                checked: Boolean(root.currentValue)
+                onToggled: {
+                    if (checked !== Boolean(root.currentValue))
+                        root.writeValue(checked);
                 }
             }
 
@@ -324,6 +372,8 @@ Rectangle {
             id: controlLoader
             Layout.fillWidth: true
             sourceComponent: {
+                if (!root.canEditInline || (root.expressiveStyle && root.settingType === "bool"))
+                    return null;
                 if (root.settingType === "bool")
                     return switchControl;
                 if (root.settingType === "int")
@@ -340,8 +390,10 @@ Rectangle {
 
         StyledText {
             Layout.fillWidth: true
-            visible: controlLoader.item === null
-            text: Translation.tr("Open this setting to change its value.")
+            visible: !root.canEditInline
+            text: root.enumOptions.length > 0
+                ? Translation.tr("Composite control · open its page to choose safely")
+                : Translation.tr("Open this setting to change its value.")
             font.pixelSize: Appearance.font.pixelSize.smaller
             color: Appearance.colors.colSubtext
         }

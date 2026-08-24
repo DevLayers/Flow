@@ -279,6 +279,7 @@ Singleton {
     // transient intent here so callers do not need to know which SearchWidget
     // instance will render it.
     property string searchPendingPanel: ""
+    property string searchPendingPanelQuery: ""
     property int searchPanelNavigationRequest: 0
     property bool searchDropActive: false
     property real searchDropExclusionX: 0
@@ -892,11 +893,12 @@ Singleton {
         root.overviewOpen = true;
     }
 
-    function openSearchPanel(panelId, monitorName) {
+    function openSearchPanel(panelId, monitorName, initialQuery) {
         const requested = String(panelId ?? "").trim();
         if (requested.length === 0)
             return;
         root.searchPendingPanel = requested;
+        root.searchPendingPanelQuery = String(initialQuery ?? "");
         root.searchPanelNavigationRequest++;
         root.openSearch(monitorName);
     }
@@ -904,6 +906,12 @@ Singleton {
     function consumePendingSearchPanel() {
         const pending = root.searchPendingPanel;
         root.searchPendingPanel = "";
+        return pending;
+    }
+
+    function consumePendingSearchPanelQuery() {
+        const pending = root.searchPendingPanelQuery;
+        root.searchPendingPanelQuery = "";
         return pending;
     }
 

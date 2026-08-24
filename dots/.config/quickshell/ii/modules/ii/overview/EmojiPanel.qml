@@ -6,6 +6,7 @@ import Quickshell
 import qs
 import qs.services
 import qs.modules.common
+import qs.modules.common.functions
 import qs.modules.common.widgets
 import "../../common/functions/emojiHues.js" as EmojiHues
 
@@ -16,11 +17,17 @@ Item {
     property int selectedIndex: 0
     property string selectedCategory: Config.options.search.modules.emojis.defaultCategory
     property string noticeText: ""
+    property int loadedEntryLimit: pageSize
+    property bool loadMorePending: false
+    property bool pageModelUpdating: false
 
     readonly property bool supportsSectionToggle: true
     readonly property int gridColumns: Math.max(5, Math.min(8, Config.options.search.modules.emojis.gridColumns))
-    readonly property int maxVisibleEntries: 180
+    readonly property int pageRows: 6
+    readonly property int pageSize: root.gridColumns * root.pageRows
     readonly property real gridSpacing: Appearance.sizes.elevationMargin / 2
+    readonly property real headerPillWidth: Appearance.sizes.elevationMargin * 21
+    readonly property real emojiGlyphSize: Math.round(Appearance.font.pixelSize.hugeass * 1.6)
     readonly property var categories: {
         const rows = [
             { id: "all", label: Translation.tr("All categories"), icon: "category" },
@@ -34,7 +41,11 @@ Item {
             rows.splice(1, 0, { id: "recent", label: Translation.tr("Recent"), icon: "history" });
         return rows;
     }
-    readonly property var filteredEntries: root.filteredEmojiEntries()
+    // Ask for one extra entry so pagination can detect whether another page
+    // exists without evaluating the complete emoji corpus in the panel.
+    readonly property var pagedEntries: root.filteredEmojiEntries(root.loadedEntryLimit + 1)
+    readonly property bool hasMoreEntries: root.pagedEntries.length > root.loadedEntryLimit
+    readonly property var filteredEntries: root.pagedEntries.slice(0, root.loadedEntryLimit)
     readonly property var selectedEntry: root.selectedIndex >= 0 && root.selectedIndex < root.filteredEntries.length
         ? root.filteredEntries[root.selectedIndex]
         : null
@@ -49,25 +60,69 @@ Item {
     implicitWidth: Config.options.search.appearance.panelWidth
     implicitHeight: scaffold.implicitHeight
 
-    function filterByCategory(entries) {
-        if (root.selectedCategory === "all")
-            return entries;
-        if (root.selectedCategory === "recent") {
-            const available = new Set(entries.map(entry => entry.raw));
-            return Array.from(Persistent.states.search.recentEmojis ?? [])
-                .filter(raw => available.has(raw)).map(raw => Emojis.entryFor(raw)).filter(Boolean);
-        }
-        return entries.filter(entry => entry.category === root.selectedCategory);
+    function filteredEmojiEntries(limit) {
+        return Emojis.queryEntries(
+            root.searchQuery,
+            root.selectedCategory,
+            limit,
+            Persistent.states.search.recentEmojis ?? []
+        );
     }
 
-    function filteredEmojiEntries() {
-        const query = root.searchQuery.trim();
-        const allEntries = Array.from(Emojis.entries ?? []);
-        if (query.length > 0) {
-            const matchingRawEntries = new Set(Emojis.fuzzyQuery(query));
-            return root.filterByCategory(allEntries.filter(entry => matchingRawEntries.has(entry.raw))).slice(0, root.maxVisibleEntries);
+    function resetPagination(): void {
+        root.loadMorePending = false;
+        root.loadedEntryLimit = root.pageSize;
+        root.selectedIndex = 0;
+        root.pageModelUpdating = true;
+        emojiPageModel.clear();
+        root.pageModelUpdating = false;
+        Qt.callLater(function() {
+            root.syncPageModel();
+            if (root.filteredEntries.length > 0)
+                emojiGrid.positionViewAtIndex(0, GridView.Beginning);
+        });
+    }
+
+    function syncPageModel(): void {
+        const entries = root.filteredEntries;
+        root.pageModelUpdating = true;
+        let appendOnly = emojiPageModel.count <= entries.length;
+        if (appendOnly) {
+            for (let index = 0; index < emojiPageModel.count; index++) {
+                const current = emojiPageModel.get(index);
+                if (String(current.raw) !== String(entries[index]?.raw ?? "")) {
+                    appendOnly = false;
+                    break;
+                }
+            }
         }
-        return root.filterByCategory(allEntries).slice(0, root.maxVisibleEntries);
+        if (!appendOnly)
+            emojiPageModel.clear();
+        for (let index = emojiPageModel.count; index < entries.length; index++) {
+            const entry = entries[index];
+            emojiPageModel.append({
+                raw: String(entry?.raw ?? ""),
+                emoji: String(entry?.emoji ?? ""),
+                name: String(entry?.name ?? ""),
+                category: String(entry?.category ?? "objects")
+            });
+        }
+        root.pageModelUpdating = false;
+    }
+
+    function loadMoreEntries(): void {
+        if (root.pageModelUpdating || root.loadMorePending || !root.hasMoreEntries)
+            return;
+        root.loadMorePending = true;
+        // Defer the model expansion until the current scroll/input frame ends.
+        // GridView only keeps visible delegates plus one cached row alive and
+        // reuses them as the user advances, so emojis left behind are unloaded
+        // from the rendered scene without breaking upward navigation.
+        Qt.callLater(function() {
+            if (root.hasMoreEntries)
+                root.loadedEntryLimit += root.pageSize;
+            root.loadMorePending = false;
+        });
     }
 
     function skinToneEmoji(entry) {
@@ -105,8 +160,11 @@ Item {
         root.selectedIndex = root.filteredEntries.length === 0 ? -1 : Math.max(0, Math.min(root.selectedIndex, root.filteredEntries.length - 1));
     }
     function ensureVisible() {
-        if (root.selectedIndex >= 0)
+        if (root.selectedIndex >= 0) {
             emojiGrid.positionViewAtIndex(root.selectedIndex, GridView.Contain);
+            if (root.selectedIndex >= root.filteredEntries.length - root.gridColumns * 2)
+                root.loadMoreEntries();
+        }
     }
     function navigateUp(): bool {
         if (root.selectedIndex >= root.gridColumns)
@@ -151,18 +209,23 @@ Item {
     function selectCategory(category) {
         root.selectedCategory = category;
         Config.options.search.modules.emojis.defaultCategory = category;
-        root.selectedIndex = 0;
+        root.resetPagination();
     }
     function showNotice(message) {
         root.noticeText = String(message ?? "");
         noticeTimer.restart();
     }
 
-    onSearchQueryChanged: root.selectedIndex = 0
-    onFilteredEntriesChanged: root.clampSelection()
-    Component.onCompleted: { Emojis.load(); root.clampSelection(); }
+    onSearchQueryChanged: root.resetPagination()
+    onGridColumnsChanged: root.resetPagination()
+    onFilteredEntriesChanged: {
+        root.clampSelection();
+        root.syncPageModel();
+    }
+    Component.onCompleted: { Emojis.load(); root.clampSelection(); root.syncPageModel(); }
 
     Timer { id: noticeTimer; interval: 3200; onTriggered: root.noticeText = "" }
+    ListModel { id: emojiPageModel }
 
     SearchPanelScaffold {
         id: scaffold
@@ -188,15 +251,15 @@ Item {
                 spacing: Appearance.sizes.elevationMargin / 2
                 StyledText {
                     Layout.fillWidth: true
-                    text: root.filteredEntries.length >= root.maxVisibleEntries
+                    text: root.hasMoreEntries
                         ? Translation.tr("%1+ results").arg(String(root.filteredEntries.length))
                         : Translation.tr("%1 results").arg(String(root.filteredEntries.length))
                     font.pixelSize: Appearance.font.pixelSize.small
                     color: Appearance.colors.colOnSurfaceVariant
                 }
                 RippleButton {
-                    implicitWidth: toneContent.implicitWidth + Appearance.sizes.elevationMargin * 2
-                    implicitHeight: Appearance.sizes.elevationMargin * 3
+                    Layout.preferredWidth: root.headerPillWidth
+                    implicitHeight: categoryPicker.implicitHeight
                     buttonRadius: Appearance.rounding.full
                     colBackground: Appearance.colors.colSurfaceContainerHigh
                     colBackgroundHover: Appearance.colors.colSurfaceContainerHighestHover
@@ -204,14 +267,23 @@ Item {
                     onClicked: root.cycleTone()
                     RowLayout {
                         id: toneContent
-                        anchors.centerIn: parent
+                        anchors.fill: parent
+                        anchors.leftMargin: Appearance.sizes.elevationMargin
+                        anchors.rightMargin: Appearance.sizes.elevationMargin
                         spacing: Appearance.sizes.elevationMargin / 2
                         StyledText { text: root.skinToneEmoji({ emoji: "👋", category: "people" }); font.pixelSize: Appearance.font.pixelSize.normal }
-                        StyledText { text: root.toneLabel(); font.pixelSize: Appearance.font.pixelSize.smallest; color: Appearance.colors.colOnSurface }
+                        StyledText {
+                            Layout.fillWidth: true
+                            text: root.toneLabel()
+                            elide: Text.ElideRight
+                            font.pixelSize: Appearance.font.pixelSize.smallest
+                            color: Appearance.colors.colOnSurface
+                        }
                     }
                 }
                 StyledComboBox {
-                    Layout.preferredWidth: Appearance.sizes.elevationMargin * 18
+                    id: categoryPicker
+                    Layout.preferredWidth: root.headerPillWidth
                     Layout.fillWidth: false
                     model: root.categories
                     textRole: "label"
@@ -230,30 +302,54 @@ Item {
                 clip: true
                 reuseItems: true
                 cacheBuffer: cellHeight
-                model: root.filteredEntries
+                model: emojiPageModel
                 cellWidth: width / root.gridColumns
                 cellHeight: cellWidth
+                onAtYEndChanged: {
+                    if (atYEnd)
+                        root.loadMoreEntries();
+                }
 
                 delegate: Item {
+                    id: emojiDelegate
                     required property int index
-                    required property var modelData
+                    required property string raw
+                    required property string emoji
+                    required property string name
+                    required property string category
+                    readonly property var entry: ({
+                        raw: emojiDelegate.raw,
+                        emoji: emojiDelegate.emoji,
+                        name: emojiDelegate.name,
+                        category: emojiDelegate.category
+                    })
+                    readonly property bool selected: root.selectedIndex === index
+                    readonly property color selectedColor: ColorUtils.categoryAccent(
+                        EmojiHues.hueForCategory(emojiDelegate.category),
+                        1,
+                        Appearance.m3colors.m3primary
+                    )
                     width: emojiGrid.cellWidth
                     height: emojiGrid.cellHeight
                     RippleButton {
                         anchors.fill: parent
                         anchors.margins: root.gridSpacing / 2
-                        buttonRadius: root.selectedIndex === index ? Appearance.rounding.large : Appearance.rounding.normal
-                        colBackground: root.selectedIndex === index
-                            ? ColorUtils.categoryAccent(EmojiHues.hueForCategory(modelData.category), 1, Appearance.m3colors.m3primary)
-                            : Appearance.colors.colSurfaceContainerHigh
+                        toggled: root.selectedIndex === index
+                        buttonRadius: emojiDelegate.selected ? Appearance.rounding.verylarge : Appearance.rounding.normal
+                        colBackground: Appearance.colors.colSurfaceContainerHigh
                         colBackgroundHover: Appearance.colors.colSurfaceContainerHighestHover
+                        colBackgroundActive: Appearance.colors.colSurfaceContainerHighestActive
+                        colBackgroundToggled: emojiDelegate.selectedColor
+                        colBackgroundToggledHover: ColorUtils.mix(emojiDelegate.selectedColor, Appearance.colors.colOnSurface, 0.9)
+                        colBackgroundToggledActive: ColorUtils.mix(emojiDelegate.selectedColor, Appearance.colors.colOnSurface, 0.82)
                         colRipple: Appearance.colors.colPrimaryContainerActive
+                        colRippleToggled: Appearance.colors.colPrimaryContainerActive
                         onClicked: root.selectedIndex = index
                         onDoubleClicked: root.activateSelected()
                         StyledText {
                             anchors.centerIn: parent
-                            text: root.skinToneEmoji(modelData)
-                            font.pixelSize: Appearance.font.pixelSize.huge
+                            text: root.skinToneEmoji(emojiDelegate.entry)
+                            font.pixelSize: root.emojiGlyphSize
                             color: Appearance.colors.colOnSurface
                         }
                     }
