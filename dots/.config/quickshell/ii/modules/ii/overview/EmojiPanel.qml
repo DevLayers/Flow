@@ -17,14 +17,18 @@ Item {
     property int selectedIndex: 0
     property string selectedCategory: Config.options.search.modules.emojis.defaultCategory
     property string noticeText: ""
-    property int loadedEntryLimit: pageSize
+    property int loadedEntryLimit: Math.max(1, root.pageSize)
     property bool loadMorePending: false
     property bool pageModelUpdating: false
+    property bool paginationReady: false
 
     readonly property bool supportsSectionToggle: true
-    readonly property int gridColumns: Math.max(5, Math.min(8, Config.options.search.modules.emojis.gridColumns))
+    readonly property int gridColumns: {
+        const configured = Number(Config.options?.search?.modules?.emojis?.gridColumns ?? 7);
+        return isFinite(configured) ? Math.max(5, Math.min(8, Math.round(configured))) : 7;
+    }
     readonly property int pageRows: 6
-    readonly property int pageSize: root.gridColumns * root.pageRows
+    readonly property int pageSize: Math.max(1, root.gridColumns * root.pageRows)
     readonly property real gridSpacing: Appearance.sizes.elevationMargin / 2
     readonly property real headerPillWidth: Appearance.sizes.elevationMargin * 21
     readonly property real emojiGlyphSize: Math.round(Appearance.font.pixelSize.hugeass * 1.6)
@@ -216,13 +220,23 @@ Item {
         noticeTimer.restart();
     }
 
-    onSearchQueryChanged: root.resetPagination()
-    onGridColumnsChanged: root.resetPagination()
+    onSearchQueryChanged: {
+        if (root.paginationReady)
+            root.resetPagination();
+    }
+    onGridColumnsChanged: {
+        if (root.paginationReady)
+            root.resetPagination();
+    }
     onFilteredEntriesChanged: {
         root.clampSelection();
         root.syncPageModel();
     }
-    Component.onCompleted: { Emojis.load(); root.clampSelection(); root.syncPageModel(); }
+    Component.onCompleted: {
+        root.paginationReady = true;
+        root.resetPagination();
+        Emojis.load();
+    }
 
     Timer { id: noticeTimer; interval: 3200; onTriggered: root.noticeText = "" }
     ListModel { id: emojiPageModel }
