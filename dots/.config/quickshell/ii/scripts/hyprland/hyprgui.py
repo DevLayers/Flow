@@ -647,12 +647,30 @@ def _unresolved(kind, value, line_number):
     return {"kind": kind, "key": None, "keyRaw": source, "unresolved": True, "line": line_number}
 
 
-def call_to_entries(fn, args_source, line_number, args_offset=None, locate=None):
+_MISSING = object()
+
+
+def resolve_config(table, key):
+    """The value at a colon-separated key inside an hl.config table."""
+    node = table
+    for part in key.split(":"):
+        if not isinstance(node, dict) or part not in node:
+            return _MISSING
+        node = node[part]
+    return node
+
+
+def call_to_entries(fn, args_source, line_number, args_offset=None, locate=None, key_hint=None):
     """Turn one parsed hl.* call into zero or more entries.
 
     One `hl.config` call can set thirty keys across thirty lines. With `args_offset` and a
     `locate(offset) -> (line, file_offset)` callback, each key reports its own line and the
     exact span that sets it, which is what makes "remove that one line" possible.
+
+    `key_hint` is for a line the hub wrote and tagged: the tag says where the key ends, which
+    matters when the value is itself a table. A gradient is `{ colors = {...}, angle = 45 }`,
+    and flattening that blindly turns one key into `...:colors` and `...:angle` - two keys that
+    were never written, neither of which can be reset or edited by the name it was set under.
     """
     kind = FN_KIND.get(fn)
     if kind is None:
@@ -668,6 +686,11 @@ def call_to_entries(fn, args_source, line_number, args_offset=None, locate=None)
         table = args[0]
         if not isinstance(table, dict):
             return []
+        if key_hint:
+            value = resolve_config(table, key_hint)
+            if value is not _MISSING:
+                return [{"kind": "config", "key": key_hint, "value": value,
+                         "line": line_number}]
         out = []
         for key, value in flatten_config(table):
             entry = {"kind": "config", "key": key, "value": value, "line": line_number}
@@ -752,7 +775,9 @@ def parse_region(lines, begin, end):
             calls = scan_calls(code)
             if calls:
                 fn, args, _, _, _ = calls[0]
-                parsed = call_to_entries(fn, args, offset + 1)
+                parsed = call_to_entries(fn, args, offset + 1,
+                                         key_hint=m.group(2)
+                                         if m.group(1) == TAG_LETTERS["config"] else None)
             elif m.group(1) == TAG_LETTERS["global"]:
                 found = scan_assignments(code)
                 if found:

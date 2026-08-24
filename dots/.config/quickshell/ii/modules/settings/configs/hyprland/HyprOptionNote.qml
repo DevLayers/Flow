@@ -25,7 +25,10 @@ Rectangle {
     /// applies on some hardware - so a section still has one place where the caveats live.
     property var notes: []
 
-    readonly property var optionStates: Array.from(root.keys).map(key => HyprlandGui.resolve(key))
+    // Defensive: a caller whose own `keys` binding throws hands this undefined, and one bad
+    // reference there would otherwise take out all six properties below it as well.
+    readonly property var optionStates: Array.from(root.keys ?? [])
+        .filter(key => String(key ?? "") !== "").map(key => HyprlandGui.resolve(key))
     readonly property var managed: root.optionStates.filter(state => state.isManaged)
     readonly property var inherited: root.optionStates.filter(state => state.inherited !== null)
     readonly property var shadowed: root.optionStates.filter(state => state.shadowedBy !== null)

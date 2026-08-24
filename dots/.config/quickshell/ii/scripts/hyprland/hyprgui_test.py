@@ -227,6 +227,36 @@ check("drop-key can empty a table", json.loads(out15).get("ok") is True, out15)
 check("emptied table is still valid Lua", "input = {  }" in open(solo).read() or "input = { }" in open(solo).read(),
       open(solo).read())
 
+# ── A value that is itself a table ────────────────────────────────────────────
+# A gradient is { colors = {...}, angle = n } and four gaps are named sides. Flattening those
+# the way a plain hl.config table is flattened turns one key into two that were never written,
+# and the browser could then neither reset nor re-edit what it had just set. The tag says where
+# the key ends, so the tag is what decides.
+nested = os.path.join(custom, "nested.lua")
+open(nested, "w").write("-- header\n")
+doc = {"version": 1, "entries": [
+    {"kind": "config", "key": "general:col.nogroup_border",
+     "value": {"colors": ["0xaaffb59b", "0x66aabbcc"], "angle": 45}},
+    {"kind": "config", "key": "general:float_gaps",
+     "value": {"top": 5, "right": 8, "bottom": 5, "left": 8}},
+    {"kind": "config", "key": "decoration:shadow:offset", "value": [3, -7]},
+]}
+run(["write", "--file", nested, "--json", "-", "--custom-dir", custom], json.dumps(doc))
+_, out16, _ = run(["read", "--file", nested])
+back = {e["key"]: e["value"] for e in json.loads(out16)["entries"] if e.get("kind") == "config"}
+check("a table value keeps the key it was written under",
+      sorted(back) == ["decoration:shadow:offset", "general:col.nogroup_border",
+                       "general:float_gaps"], sorted(back))
+check("a gradient table round-trips whole",
+      back.get("general:col.nogroup_border") == {"colors": ["0xaaffb59b", "0x66aabbcc"],
+                                                 "angle": 45},
+      back.get("general:col.nogroup_border"))
+check("named gaps round-trip whole",
+      back.get("general:float_gaps") == {"top": 5, "right": 8, "bottom": 5, "left": 8},
+      back.get("general:float_gaps"))
+check("a list value round-trips whole", back.get("decoration:shadow:offset") == [3, -7],
+      back.get("decoration:shadow:offset"))
+
 shutil.rmtree(work)
 print()
 print("%d failed" % len(FAIL) if FAIL else "all passed")

@@ -26,6 +26,8 @@ HyprActionPickerPage 1.0 HyprActionPickerPage.qml
 HyprAppChainPage 1.0 HyprAppChainPage.qml
 HyprCursorThemePage 1.0 HyprCursorThemePage.qml
 HyprEnvEditorPage 1.0 HyprEnvEditorPage.qml
+HyprOptionRow 1.0 HyprOptionRow.qml
+HyprOptionBrowserPage 1.0 HyprOptionBrowserPage.qml
 InputTab 1.0 InputTab.qml
 LayoutTab 1.0 LayoutTab.qml
 ShortcutsTab 1.0 ShortcutsTab.qml
