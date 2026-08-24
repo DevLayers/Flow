@@ -1,5 +1,47 @@
 # Hyprland Scripts
 
+## Hyprland GUI writer (`hyprgui.py`)
+
+Backs Settings -> Hyprland. It owns a fenced block at the **end** of each `~/.config/hypr/custom/*.lua`
+file and leaves everything outside that fence byte for byte alone:
+
+```lua
+-- >>> quickshell:managed:begin v1 - written by Settings -> Hyprland. Edits here are overwritten; put your own Lua above.
+hl.config({ input = { kb_layout = "fr" } })                     --@k input:kb_layout
+hl.device({ name = "znt0001:00-14e5:e760-mouse", sensitivity = -0.2 })  --@d mouse-1
+-- <<< quickshell:managed:end
+```
+
+The block sits last so its statements run after the hand-written ones in the same file and therefore
+win. `hyprland.lua` loads `custom/env.lua` first, then `general`, `rules` and `keybinds`, and
+`hyprland/shellOverrides/main.lua` after all of them — so Modes, Game Mode and the screen shader still
+outrank anything written here.
+
+Each generated line carries a `--@` tag naming what produced it (`k` config key, `d` device, `e` env,
+`r` rule, `b` bind, `u` unbind), so reading the block back is a line-shaped parse rather than Lua
+evaluation. A line whose tag this version does not recognise is kept verbatim and reported as
+unrecognised, so a newer shell's output is never silently dropped by an older one.
+
+```bash
+hyprgui.py read  --file ~/.config/hypr/custom/general.lua      # managed entries + what they override
+hyprgui.py write --file ~/.config/hypr/custom/general.lua --json -   # desired state on stdin
+hyprgui.py write --file ... --json - --dry-run                 # unified diff instead of a write
+hyprgui.py strip --file ~/.config/hypr/custom/general.lua      # remove the block, keep the rest
+```
+
+`hyprgui_test.py` next to it exercises the round trip end to end — hand-written Lua preservation,
+patterns containing `" \\ $ |`, unknown-tag forward compatibility, the no-op write, the path guard, and
+write-then-strip returning each file byte for byte. Run it directly after touching the writer.
+
+State arrives on **stdin, never argv**: window-rule patterns contain `$`, `|`, `\` and quotes, and none
+of it should ever reach a shell.
+
+Writes refuse any path outside `~/.config/hypr/custom/` (override with `--custom-dir` for tests), back
+the file up to `$XDG_STATE_HOME/quickshell/hyprland-backups/` keeping the last 20 per file, and replace
+it atomically. A write that would change nothing is skipped entirely — rewriting the file costs a
+Hyprland reload, which drops every runtime-only option (border size and colour, gaps, rounding, blur)
+back to whatever the Lua config says.
+
 ## Workspace Profile Manager
 
 A high-performance Rust backend that captures live Hyprland clients via `hyprctl`, saves them as JSON profiles, and restores layouts on demand. Used by the Cheatsheet.

@@ -1,0 +1,901 @@
+#!/usr/bin/env python3
+"""Read and write the Quickshell-managed region of a ~/.config/hypr/custom/*.lua file.
+
+Settings -> Hyprland owns a fenced block at the end of each custom Lua file:
+
+    -- >>> quickshell:managed:begin v1 ...
+    hl.config({ input = { kb_layout = "fr" } })   --@k input:kb_layout
+    -- <<< quickshell:managed:end
+
+Everything outside the fence is hand-written and is preserved byte for byte.
+The fence sits at the end of the file so its statements run after the
+hand-written ones in the same file and therefore win.
+
+Commands
+    read   --file F              JSON: managed entries + recognisable unmanaged ones
+    write  --file F --json -     replace the region from a JSON document on stdin
+    write  --file F --json - --dry-run    print a unified diff instead of writing
+    strip  --file F              remove the region entirely
+
+The desired state arrives on stdin, never on argv: window-rule patterns contain
+$ | \\ and quotes, and none of that should ever reach a shell.
+"""
+
+import argparse
+import difflib
+import json
+import os
+import re
+import sys
+import tempfile
+import time
+
+REGION_VERSION = 1
+BEGIN_RE = re.compile(r'^\s*--\s*>>>\s*quickshell:managed:begin(?:\s+v(\d+))?')
+END_RE = re.compile(r'^\s*--\s*<<<\s*quickshell:managed:end')
+BEGIN_LINE = ("-- >>> quickshell:managed:begin v%d - written by Settings -> Hyprland. "
+              "Edits here are overwritten; put your own Lua above.\n" % REGION_VERSION)
+END_LINE = "-- <<< quickshell:managed:end\n"
+
+DEFAULT_CUSTOM_DIR = os.path.expanduser("~/.config/hypr/custom")
+BACKUP_DIR = os.path.join(os.environ.get("XDG_STATE_HOME", os.path.expanduser("~/.local/state")),
+                          "quickshell", "hyprland-backups")
+BACKUP_KEEP = 20
+ALIGN_COLUMN = 78
+
+# ---------------------------------------------------------------------------
+# Lua lexing
+# ---------------------------------------------------------------------------
+
+NAME_RE = re.compile(r'[A-Za-z_][A-Za-z0-9_]*')
+NUMBER_RE = re.compile(r'0[xX][0-9a-fA-F]+|(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?')
+IDENT_RE = re.compile(r'^[A-Za-z_][A-Za-z0-9_]*$')
+LUA_KEYWORDS = {
+    "and", "break", "do", "else", "elseif", "end", "false", "for", "function", "goto", "if",
+    "in", "local", "nil", "not", "or", "repeat", "return", "then", "true", "until", "while",
+}
+
+
+class Token:
+    __slots__ = ("kind", "value", "start", "end")
+
+    def __init__(self, kind, value, start, end):
+        self.kind = kind          # name | number | string | op
+        self.value = value        # decoded value for strings, source text otherwise
+        self.start = start
+        self.end = end
+
+    def __repr__(self):
+        return "Token(%s, %r)" % (self.kind, self.value)
+
+
+def _skip_long_bracket(text, i):
+    """If text[i] opens a [=*[ long bracket, return the index past its close."""
+    if text[i] != '[':
+        return None
+    j = i + 1
+    level = 0
+    while j < len(text) and text[j] == '=':
+        level += 1
+        j += 1
+    if j >= len(text) or text[j] != '[':
+        return None
+    close = ']' + '=' * level + ']'
+    end = text.find(close, j + 1)
+    return len(text) if end < 0 else end + len(close)
+
+
+def _skip_string(text, i):
+    """text[i] is a quote. Return the index past the closing quote."""
+    quote = text[i]
+    j = i + 1
+    while j < len(text):
+        c = text[j]
+        if c == '\\':
+            j += 2
+            continue
+        if c == quote:
+            return j + 1
+        j += 1
+    return len(text)
+
+
+def _skip_comment(text, i):
+    """text[i:i+2] == '--'. Return the index past the comment."""
+    j = _skip_long_bracket(text, i + 2)
+    if j is not None:
+        return j
+    nl = text.find('\n', i)
+    return len(text) if nl < 0 else nl
+
+
+_ESCAPES = {'a': '\a', 'b': '\b', 'f': '\f', 'n': '\n', 'r': '\r', 't': '\t', 'v': '\v',
+            '\\': '\\', '"': '"', "'": "'", '\n': '\n'}
+
+
+def _decode_string(raw):
+    """raw includes its delimiters."""
+    if raw.startswith('['):
+        m = re.match(r'^\[(=*)\[(.*)\]\1\]$', raw, re.S)
+        body = m.group(2) if m else raw
+        return body[1:] if body.startswith('\n') else body
+    body = raw[1:-1]
+    out = []
+    i = 0
+    while i < len(body):
+        c = body[i]
+        if c != '\\':
+            out.append(c)
+            i += 1
+            continue
+        i += 1
+        if i >= len(body):
+            break
+        e = body[i]
+        if e in _ESCAPES:
+            out.append(_ESCAPES[e])
+            i += 1
+        elif e == 'x':
+            out.append(chr(int(body[i + 1:i + 3], 16)))
+            i += 3
+        elif e == 'z':
+            i += 1
+            while i < len(body) and body[i].isspace():
+                i += 1
+        elif e.isdigit():
+            m = re.match(r'\d{1,3}', body[i:])
+            out.append(chr(int(m.group(0))))
+            i += len(m.group(0))
+        else:
+            out.append(e)
+            i += 1
+    return ''.join(out)
+
+
+def tokenize(text):
+    tokens = []
+    i = 0
+    n = len(text)
+    while i < n:
+        c = text[i]
+        if c.isspace():
+            i += 1
+            continue
+        if text.startswith('--', i):
+            i = _skip_comment(text, i)
+            continue
+        if c in '"\'':
+            j = _skip_string(text, i)
+            tokens.append(Token('string', _decode_string(text[i:j]), i, j))
+            i = j
+            continue
+        if c == '[':
+            j = _skip_long_bracket(text, i)
+            if j is not None:
+                tokens.append(Token('string', _decode_string(text[i:j]), i, j))
+                i = j
+                continue
+        m = NAME_RE.match(text, i)
+        if m:
+            tokens.append(Token('name', m.group(0), i, m.end()))
+            i = m.end()
+            continue
+        m = NUMBER_RE.match(text, i)
+        if m:
+            tokens.append(Token('number', m.group(0), i, m.end()))
+            i = m.end()
+            continue
+        tokens.append(Token('op', c, i, i + 1))
+        i += 1
+    return tokens
+
+
+def split_code_and_comment(line):
+    """Split a source line into (code, comment) without breaking on -- inside a string."""
+    i = 0
+    n = len(line)
+    while i < n:
+        c = line[i]
+        if c in '"\'':
+            i = _skip_string(line, i)
+            continue
+        if c == '[':
+            j = _skip_long_bracket(line, i)
+            if j is not None:
+                i = j
+                continue
+        if line.startswith('--', i):
+            return line[:i], line[i:]
+        i += 1
+    return line, ''
+
+
+# ---------------------------------------------------------------------------
+# Lua value parsing
+# ---------------------------------------------------------------------------
+
+class Parser:
+    def __init__(self, tokens, text):
+        self.t = tokens
+        self.text = text
+        self.i = 0
+
+    def peek(self, offset=0):
+        j = self.i + offset
+        return self.t[j] if j < len(self.t) else None
+
+    def at_op(self, op, offset=0):
+        tok = self.peek(offset)
+        return tok is not None and tok.kind == 'op' and tok.value == op
+
+    def take(self):
+        tok = self.peek()
+        self.i += 1
+        return tok
+
+    def expect_op(self, op):
+        if not self.at_op(op):
+            raise ValueError("expected %r" % op)
+        return self.take()
+
+    def parse_value(self):
+        tok = self.peek()
+        if tok is None:
+            raise ValueError("unexpected end of value")
+        if tok.kind == 'op' and tok.value == '{':
+            return self.parse_table()
+        if tok.kind == 'string':
+            self.take()
+            return tok.value
+        if tok.kind == 'number' and not self._continues_expression(1):
+            self.take()
+            return _lua_number(tok.value)
+        if tok.kind == 'op' and tok.value == '-':
+            nxt = self.peek(1)
+            if nxt is not None and nxt.kind == 'number' and not self._continues_expression(2):
+                self.take()
+                self.take()
+                return -_lua_number(nxt.value)
+        if tok.kind == 'name' and tok.value in ('true', 'false') and not self._continues_expression(1):
+            self.take()
+            return tok.value == 'true'
+        if tok.kind == 'name' and tok.value == 'nil' and not self._continues_expression(1):
+            self.take()
+            return None
+        return self.parse_raw()
+
+    def _continues_expression(self, offset):
+        """True when the token at offset keeps the current value going (a .. b, f(x), t.k)."""
+        tok = self.peek(offset)
+        if tok is None:
+            return False
+        if tok.kind == 'op' and tok.value in ',;}])=':
+            return False
+        return True
+
+    def parse_raw(self):
+        """Consume tokens up to the next top-level , ; or } and keep the source verbatim."""
+        start = self.peek().start
+        depth = 0
+        end = start
+        while True:
+            tok = self.peek()
+            if tok is None:
+                break
+            if tok.kind == 'op':
+                if tok.value in '({[':
+                    depth += 1
+                elif tok.value in ')}]':
+                    if depth == 0:
+                        break
+                    depth -= 1
+                elif tok.value in ',;' and depth == 0:
+                    break
+            end = tok.end
+            self.take()
+        return {"__raw": self.text[start:end].strip()}
+
+    def parse_table(self):
+        self.expect_op('{')
+        array = []
+        hash_ = {}
+        order = []
+        while True:
+            if self.at_op('}'):
+                self.take()
+                break
+            if self.peek() is None:
+                raise ValueError("unterminated table")
+            if self.at_op(',') or self.at_op(';'):
+                self.take()
+                continue
+            key = None
+            if self.at_op('['):
+                self.take()
+                key = self.parse_value()
+                self.expect_op(']')
+                self.expect_op('=')
+            else:
+                tok = self.peek()
+                if tok is not None and tok.kind == 'name' and self.at_op('=', 1):
+                    key = tok.value
+                    self.take()
+                    self.take()
+            value = self.parse_value()
+            if key is None:
+                array.append(value)
+            else:
+                key = str(key)
+                if key not in hash_:
+                    order.append(key)
+                hash_[key] = value
+        if not hash_:
+            return array
+        result = {}
+        if array:
+            result["__array"] = array
+        for key in order:
+            result[key] = hash_[key]
+        return result
+
+
+def _lua_number(src):
+    if src.lower().startswith('0x'):
+        return int(src, 16)
+    if re.match(r'^\d+$', src):
+        return int(src)
+    return float(src)
+
+
+def parse_args(source):
+    """Parse a Lua argument list (the text between the outer parentheses)."""
+    text = source
+    parser = Parser(tokenize(text), text)
+    args = []
+    while parser.peek() is not None:
+        if parser.at_op(','):
+            parser.take()
+            continue
+        args.append(parser.parse_value())
+    return args
+
+
+# ---------------------------------------------------------------------------
+# Lua rendering
+# ---------------------------------------------------------------------------
+
+def render_value(value):
+    if isinstance(value, dict):
+        if "__raw" in value and len(value) == 1:
+            return value["__raw"]
+        return render_table(value)
+    if isinstance(value, list):
+        return render_table(value)
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if value is None:
+        return "nil"
+    if isinstance(value, int):
+        return str(value)
+    if isinstance(value, float):
+        out = repr(value)
+        return out
+    return render_string(str(value))
+
+
+def render_string(value):
+    out = ['"']
+    for c in value:
+        if c == '"':
+            out.append('\\"')
+        elif c == '\\':
+            out.append('\\\\')
+        elif c == '\n':
+            out.append('\\n')
+        elif c == '\r':
+            out.append('\\r')
+        elif c == '\t':
+            out.append('\\t')
+        elif ord(c) < 0x20:
+            out.append('\\%d' % ord(c))
+        else:
+            out.append(c)
+    out.append('"')
+    return ''.join(out)
+
+
+def render_key(key):
+    if IDENT_RE.match(key) and key not in LUA_KEYWORDS:
+        return key
+    return "[%s]" % render_string(key)
+
+
+def render_table(table, key_order=None):
+    parts = []
+    if isinstance(table, list):
+        parts = [render_value(v) for v in table]
+    else:
+        for item in table.get("__array", []):
+            parts.append(render_value(item))
+        keys = [k for k in table.keys() if k != "__array"]
+        if key_order:
+            keys.sort(key=lambda k: (key_order.index(k) if k in key_order else len(key_order)))
+        for key in keys:
+            parts.append("%s = %s" % (render_key(key), render_value(table[key])))
+    if not parts:
+        return "{}"
+    return "{ %s }" % ", ".join(parts)
+
+
+# ---------------------------------------------------------------------------
+# Entries
+# ---------------------------------------------------------------------------
+
+TAG_LETTERS = {"config": "k", "device": "d", "env": "e", "windowrule": "r",
+               "layerrule": "r", "workspacerule": "r", "bind": "b", "unbind": "u"}
+RULE_FN = {"windowrule": "hl.window_rule", "layerrule": "hl.layer_rule",
+           "workspacerule": "hl.workspace_rule"}
+FN_KIND = {"hl.window_rule": "windowrule", "hl.layer_rule": "layerrule",
+           "hl.workspace_rule": "workspacerule", "hl.config": "config",
+           "hl.device": "device", "hl.env": "env", "hl.bind": "bind", "hl.unbind": "unbind"}
+
+
+def flatten_config(table, prefix=""):
+    """hl.config({a = {b = 1, c = 2}}) -> [("a:b", 1), ("a:c", 2)]"""
+    out = []
+    if not isinstance(table, dict):
+        return out
+    for key, value in table.items():
+        if key == "__array":
+            continue
+        path = "%s:%s" % (prefix, key) if prefix else key
+        if isinstance(value, dict) and "__raw" not in value:
+            out.extend(flatten_config(value, path))
+        else:
+            out.append((path, value))
+    return out
+
+
+def nest_config(path, value):
+    parts = path.split(":")
+    node = value
+    for part in reversed(parts):
+        node = {part: node}
+    return node
+
+
+def render_entry(entry):
+    """Return the Lua source line for an entry, without the tag or newline."""
+    kind = entry.get("kind")
+    if kind == "config":
+        return "hl.config(%s)" % render_table(nest_config(entry["key"], entry.get("value")))
+    if kind == "device":
+        return "hl.device(%s)" % render_table(entry.get("spec") or {}, key_order=["name"])
+    if kind == "env":
+        return "hl.env(%s, %s)" % (render_string(entry["name"]), render_string(str(entry.get("value", ""))))
+    if kind in RULE_FN:
+        return "%s(%s)" % (RULE_FN[kind], render_table(entry.get("spec") or {}, key_order=["match"]))
+    if kind == "unbind":
+        return "pcall(hl.unbind, %s)" % render_string(entry["key"])
+    if kind == "bind":
+        parts = [render_string(entry["key"]), render_value(entry.get("dispatcher"))]
+        opts = entry.get("opts")
+        if opts:
+            parts.append(render_table(opts))
+        return "hl.bind(%s)" % ", ".join(parts)
+    raise ValueError("unknown entry kind %r" % kind)
+
+
+def entry_id(entry, index):
+    given = entry.get("id")
+    if given:
+        return str(given).replace("\n", " ")
+    kind = entry.get("kind")
+    if kind == "config":
+        return entry["key"]
+    if kind == "env":
+        return entry["name"]
+    if kind == "device":
+        return (entry.get("spec") or {}).get("name", "device%d" % index)
+    if kind in ("bind", "unbind"):
+        return entry["key"]
+    return "%s%d" % (TAG_LETTERS.get(kind, "x"), index)
+
+
+def render_region(entries):
+    """Render the whole managed region, fences included, as a list of lines."""
+    rendered = []
+    for index, entry in enumerate(entries):
+        if entry.get("kind") == "raw":
+            rendered.append((entry.get("text", "").rstrip("\n"), None))
+            continue
+        code = render_entry(entry)
+        tag = "--@%s %s" % (TAG_LETTERS[entry["kind"]], entry_id(entry, index))
+        rendered.append((code, tag))
+    width = max([len(code) for code, tag in rendered if tag] or [0])
+    width = min(width, ALIGN_COLUMN)
+    lines = [BEGIN_LINE]
+    for code, tag in rendered:
+        if tag is None:
+            lines.append(code + "\n")
+        else:
+            lines.append("%s%s%s\n" % (code, " " * max(2, width - len(code) + 2), tag))
+    lines.append(END_LINE)
+    return lines
+
+
+# ---------------------------------------------------------------------------
+# Scanning a file
+# ---------------------------------------------------------------------------
+
+CALL_RE = re.compile(r'(?m)^[ \t]*(pcall\(\s*(hl\.unbind)\s*,|(hl\.[a-z_]+)\s*\()')
+
+
+def scan_calls(text):
+    """Yield (fn, args_source, start_offset, end_offset) for every top-level hl.* call."""
+    out = []
+    for m in CALL_RE.finditer(text):
+        if m.group(2):                      # pcall(hl.unbind, "KEY")
+            fn = m.group(2)
+            open_paren = text.index('(', m.start(1))
+        else:
+            fn = m.group(3)
+            open_paren = m.end(1) - 1
+        close = _match_paren(text, open_paren)
+        if close is None:
+            continue
+        args = text[open_paren + 1:close]
+        if m.group(2):
+            args = args.split(',', 1)[1] if ',' in args else args
+        out.append((fn, args, m.start(), close + 1))
+    return out
+
+
+def _match_paren(text, i):
+    depth = 0
+    n = len(text)
+    while i < n:
+        c = text[i]
+        if c in '"\'':
+            i = _skip_string(text, i)
+            continue
+        if c == '[':
+            j = _skip_long_bracket(text, i)
+            if j is not None:
+                i = j
+                continue
+        if text.startswith('--', i):
+            i = _skip_comment(text, i)
+            continue
+        if c in '([{':
+            depth += 1
+        elif c in ')]}':
+            depth -= 1
+            if depth == 0:
+                return i
+        i += 1
+    return None
+
+
+def _unresolved(kind, value, line_number):
+    """A call whose key is a variable rather than a literal: visible, but not editable."""
+    source = value.get("__raw") if isinstance(value, dict) else repr(value)
+    return {"kind": kind, "key": None, "keyRaw": source, "unresolved": True, "line": line_number}
+
+
+def call_to_entries(fn, args_source, line_number):
+    """Turn one parsed hl.* call into zero or more entries."""
+    kind = FN_KIND.get(fn)
+    if kind is None:
+        return []
+    try:
+        args = parse_args(args_source)
+    except (ValueError, IndexError):
+        return []
+    if not args:
+        return []
+    if kind == "config":
+        table = args[0]
+        if not isinstance(table, dict):
+            return []
+        return [{"kind": "config", "key": key, "value": value, "line": line_number}
+                for key, value in flatten_config(table)]
+    if kind == "device":
+        spec = args[0]
+        if not isinstance(spec, dict):
+            return []
+        return [{"kind": "device", "spec": spec, "line": line_number}]
+    if kind == "env":
+        if len(args) >= 2:
+            if not isinstance(args[0], str):
+                return [_unresolved("env", args[0], line_number)]
+            name, value = args[0], args[1]
+        else:
+            if not isinstance(args[0], str) or "=" not in args[0]:
+                return [_unresolved("env", args[0], line_number)]
+            name, value = args[0].split("=", 1)
+            name, value = name.strip(), value.strip()
+        return [{"kind": "env", "name": name, "value": value, "line": line_number}]
+    if kind in RULE_FN:
+        spec = args[0]
+        if not isinstance(spec, dict):
+            return []
+        return [{"kind": kind, "spec": spec, "line": line_number}]
+    if kind == "unbind":
+        if not isinstance(args[0], str):
+            return [_unresolved("unbind", args[0], line_number)]
+        return [{"kind": "unbind", "key": args[0], "line": line_number}]
+    if kind == "bind":
+        if not isinstance(args[0], str):
+            return [_unresolved("bind", args[0], line_number)]
+        entry = {"kind": "bind", "key": args[0],
+                 "dispatcher": args[1] if len(args) > 1 else None, "line": line_number}
+        if len(args) > 2 and isinstance(args[2], dict):
+            entry["opts"] = args[2]
+        return [entry]
+    return []
+
+
+def find_region(lines):
+    """Return (begin_index, end_index, version) with end exclusive, or (None, None, None)."""
+    begin = end = version = None
+    for index, line in enumerate(lines):
+        m = BEGIN_RE.match(line)
+        if m and begin is None:
+            begin = index
+            version = int(m.group(1)) if m.group(1) else 0
+            continue
+        if begin is not None and END_RE.match(line):
+            end = index + 1
+            break
+    if begin is None or end is None:
+        return None, None, None
+    return begin, end, version
+
+
+def read_file(path):
+    if not os.path.exists(path):
+        return None
+    with open(path, 'r', encoding='utf-8', errors='surrogateescape') as handle:
+        return handle.readlines()
+
+
+def parse_region(lines, begin, end):
+    """Parse the tagged entries inside the fence, preserving anything unrecognised."""
+    entries = []
+    for offset in range(begin + 1, end - 1):
+        line = lines[offset]
+        code, comment = split_code_and_comment(line)
+        m = re.match(r'--@([a-z])\s*(.*?)\s*$', comment.strip())
+        parsed = []
+        if m and code.strip():
+            calls = scan_calls(code)
+            if calls:
+                fn, args, _, _ = calls[0]
+                parsed = call_to_entries(fn, args, offset + 1)
+                # A tag letter this version does not know about, or one that disagrees with the
+                # call on the line, means a newer shell wrote it. Keep the line, do not reinterpret.
+                if parsed and TAG_LETTERS.get(parsed[0].get("kind")) != m.group(1):
+                    parsed = []
+        if parsed:
+            entry = parsed[0]
+            entry["id"] = m.group(2)
+            entry["managed"] = True
+            entries.append(entry)
+        else:
+            entries.append({"kind": "raw", "text": line.rstrip("\n"), "line": offset + 1,
+                            "managed": True, "unrecognised": True})
+    return entries
+
+
+def scan_unmanaged(lines, begin, end):
+    """Entries outside the fence: what the hub would be overriding."""
+    kept = []
+    offsets = []
+    position = 0
+    for index, line in enumerate(lines):
+        if begin is not None and begin <= index < end:
+            position += len(line)
+            continue
+        kept.append(line)
+        offsets.append((position, index + 1))
+        position += len(line)
+    text = ''.join(kept)
+    # Map an offset in the joined text back to a source line number.
+    joined = []
+    running = 0
+    for line, (_, source_line) in zip(kept, offsets):
+        joined.append((running, running + len(line), source_line))
+        running += len(line)
+
+    def line_at(offset):
+        for start, stop, source_line in joined:
+            if start <= offset < stop:
+                return source_line
+        return 0
+
+    out = []
+    for fn, args, start, _ in scan_calls(text):
+        out.extend(call_to_entries(fn, args, line_at(start)))
+    for entry in out:
+        entry["managed"] = False
+    return out
+
+
+# ---------------------------------------------------------------------------
+# Writing
+# ---------------------------------------------------------------------------
+
+def guard_path(path, custom_dir):
+    resolved = os.path.realpath(os.path.expanduser(path))
+    root = os.path.realpath(os.path.expanduser(custom_dir))
+    if resolved != root and not resolved.startswith(root + os.sep):
+        raise SystemExit("refusing to write outside %s: %s" % (root, resolved))
+    return resolved
+
+
+def compose(lines, region_lines):
+    """Put the region back, in place if it was already there, otherwise at the end."""
+    begin, end, _ = find_region(lines)
+    if begin is not None:
+        return lines[:begin] + region_lines + lines[end:]
+    body = list(lines)
+    while body and not body[-1].strip():
+        body.pop()
+    if body and not body[-1].endswith("\n"):
+        body[-1] += "\n"
+    if body:
+        body.append("\n")
+    return body + region_lines
+
+
+def backup(path):
+    os.makedirs(BACKUP_DIR, exist_ok=True)
+    name = os.path.basename(path)
+    stamp = time.strftime("%Y%m%d-%H%M%S")
+    target = os.path.join(BACKUP_DIR, "%s.%s.bak" % (name, stamp))
+    suffix = 0
+    while os.path.exists(target):
+        suffix += 1
+        target = os.path.join(BACKUP_DIR, "%s.%s-%d.bak" % (name, stamp, suffix))
+    with open(path, 'rb') as src, open(target, 'wb') as dst:
+        dst.write(src.read())
+    old = sorted(f for f in os.listdir(BACKUP_DIR) if f.startswith(name + "."))
+    for stale in old[:-BACKUP_KEEP]:
+        try:
+            os.remove(os.path.join(BACKUP_DIR, stale))
+        except OSError:
+            pass
+    return target
+
+
+def write_atomic(path, lines):
+    directory = os.path.dirname(os.path.abspath(path))
+    os.makedirs(directory, exist_ok=True)
+    with tempfile.NamedTemporaryFile(mode='w', encoding='utf-8', errors='surrogateescape',
+                                     dir=directory, delete=False) as tmp:
+        tmp.writelines(lines)
+        tmp_name = tmp.name
+    if os.path.exists(path):
+        os.chmod(tmp_name, os.stat(path).st_mode)
+    else:
+        os.chmod(tmp_name, 0o644)
+    os.replace(tmp_name, path)
+
+
+# ---------------------------------------------------------------------------
+# Commands
+# ---------------------------------------------------------------------------
+
+def cmd_read(args):
+    path = os.path.realpath(os.path.expanduser(args.file))
+    lines = read_file(path)
+    result = {"version": REGION_VERSION, "file": path, "exists": lines is not None,
+              "hasRegion": False, "regionVersion": None, "entries": [], "unmanaged": []}
+    if lines is None:
+        print(json.dumps(result))
+        return 0
+    begin, end, version = find_region(lines)
+    if begin is not None:
+        result["hasRegion"] = True
+        result["regionVersion"] = version
+        result["regionStart"] = begin + 1
+        result["regionEnd"] = end
+        result["entries"] = parse_region(lines, begin, end)
+    if not args.no_unmanaged:
+        result["unmanaged"] = scan_unmanaged(lines, begin, end)
+    print(json.dumps(result))
+    return 0
+
+
+def cmd_write(args):
+    path = guard_path(args.file, args.custom_dir)
+    raw = sys.stdin.read() if args.json == '-' else open(os.path.expanduser(args.json)).read()
+    try:
+        document = json.loads(raw)
+    except ValueError as error:
+        print(json.dumps({"ok": False, "error": "invalid JSON: %s" % error}))
+        return 1
+    entries = document.get("entries", [])
+    lines = read_file(path)
+    existed = lines is not None
+    lines = lines or []
+    try:
+        region = render_region(entries) if entries else []
+    except (ValueError, KeyError) as error:
+        print(json.dumps({"ok": False, "error": "cannot render: %s" % error}))
+        return 1
+    if entries:
+        new_lines = compose(lines, region)
+    else:
+        begin, end, _ = find_region(lines)
+        new_lines = lines[:begin] + lines[end:] if begin is not None else lines
+
+    if new_lines == lines and existed:
+        print(json.dumps({"ok": True, "changed": False, "file": path}))
+        return 0
+    if args.dry_run:
+        diff = ''.join(difflib.unified_diff(lines, new_lines,
+                                            fromfile=path + " (current)",
+                                            tofile=path + " (proposed)"))
+        print(json.dumps({"ok": True, "changed": True, "file": path, "diff": diff,
+                          "created": not existed}))
+        return 0
+    saved = backup(path) if existed else None
+    write_atomic(path, new_lines)
+    print(json.dumps({"ok": True, "changed": True, "file": path, "backup": saved,
+                      "created": not existed}))
+    return 0
+
+
+def cmd_strip(args):
+    path = guard_path(args.file, args.custom_dir)
+    lines = read_file(path)
+    if lines is None:
+        print(json.dumps({"ok": True, "changed": False, "file": path}))
+        return 0
+    begin, end, _ = find_region(lines)
+    if begin is None:
+        print(json.dumps({"ok": True, "changed": False, "file": path}))
+        return 0
+    new_lines = lines[:begin] + lines[end:]
+    while new_lines and not new_lines[-1].strip():
+        new_lines.pop()
+    if args.dry_run:
+        diff = ''.join(difflib.unified_diff(lines, new_lines, fromfile=path, tofile=path))
+        print(json.dumps({"ok": True, "changed": True, "file": path, "diff": diff}))
+        return 0
+    saved = backup(path)
+    write_atomic(path, new_lines)
+    print(json.dumps({"ok": True, "changed": True, "file": path, "backup": saved}))
+    return 0
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    read = sub.add_parser("read")
+    read.add_argument("--file", required=True)
+    read.add_argument("--no-unmanaged", action="store_true")
+    read.set_defaults(func=cmd_read)
+
+    write = sub.add_parser("write")
+    write.add_argument("--file", required=True)
+    write.add_argument("--json", default="-")
+    write.add_argument("--dry-run", action="store_true")
+    write.add_argument("--custom-dir", default=DEFAULT_CUSTOM_DIR)
+    write.set_defaults(func=cmd_write)
+
+    strip = sub.add_parser("strip")
+    strip.add_argument("--file", required=True)
+    strip.add_argument("--dry-run", action="store_true")
+    strip.add_argument("--custom-dir", default=DEFAULT_CUSTOM_DIR)
+    strip.set_defaults(func=cmd_strip)
+
+    args = parser.parse_args()
+    return args.func(args)
+
+
+if __name__ == "__main__":
+    sys.exit(main())
