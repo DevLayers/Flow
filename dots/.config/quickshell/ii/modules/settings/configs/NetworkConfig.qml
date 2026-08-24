@@ -36,6 +36,13 @@ Item {
             "name": Translation.tr("Bluetooth"),
             "sections": [Translation.tr("Bluetooth"), Translation.tr("Pairing"),
                 Translation.tr("Paired devices"), Translation.tr("Nearby devices")]
+        },
+        {
+            "source": "network/HotspotTab.qml",
+            "icon": "wifi_tethering",
+            "name": Translation.tr("Hotspot"),
+            "sections": [Translation.tr("Hotspot"), Translation.tr("Access point"),
+                Translation.tr("Connected devices")]
         }
     ]
 

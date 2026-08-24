@@ -293,7 +293,7 @@ Singleton {
             "icon": "wifi",
             "component": "modules/settings/configs/NetworkConfig.qml",
             "subPages": [],
-            "searchSources": ["network/WifiTab.qml", "network/BluetoothTab.qml"],
+            "searchSources": ["network/WifiTab.qml", "network/BluetoothTab.qml", "network/HotspotTab.qml"],
             "aliases": ["Wi-Fi", "WiFi", "Wireless", "Bluetooth", "Pairing", "Hotspot", "Tethering", "Access point", "Ethernet", "Wired", "802.1X", "Enterprise Wi-Fi", "Hidden network", "NetworkManager", "IP address", "DNS"]
         },
         {

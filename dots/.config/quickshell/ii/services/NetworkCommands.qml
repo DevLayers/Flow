@@ -413,6 +413,201 @@ Singleton {
         }, callback);
     }
 
+    // ---- Hotspot ----------------------------------------------------------
+    /**
+     * Sharing a connection needs more of the system than NetworkManager admits
+     * to: it spawns dnsmasq for DHCP and DNS, and it needs a firewall backend
+     * for the NAT. Neither is a hard dependency of the package, and neither is
+     * mentioned until the moment a hotspot comes up and hands out nothing.
+     */
+    readonly property string kHotspotDeps: 'for b in dnsmasq iptables nft iw; do if command -v $b >/dev/null 2>&1 || [ -x /usr/bin/$b ] || [ -x /usr/sbin/$b ]; then echo "$b=yes"; else echo "$b=no"; fi; done'
+    // The radio decides whether an access point may run beside the connection
+    // it is sharing, and how many channels it can hold while doing it.
+    readonly property string kIwCombinations: 'iw list 2>/dev/null | sed -n "/valid interface combinations/,/^[[:space:]]*[A-Z]/p"'
+    readonly property string kAddHotspotSecret: 'name="$1"; ssid="$2"; key="$3"; shift 3; nmcli connection add type wifi con-name "$name" ssid "$ssid" "$key" "$PASSWORD" "$@"'
+
+    function readHotspotDeps(callback): void {
+        root.runScript(root.kHotspotDeps, [], "deps", (code, out) => {
+            const deps = ({});
+            out.trim().split("\n").forEach(line => {
+                const parts = line.split("=");
+                if (parts.length === 2)
+                    deps[parts[0]] = parts[1] === "yes";
+            });
+            callback(deps);
+        });
+    }
+
+    function readInterfaceCombinations(callback): void {
+        root.runScript(root.kIwCombinations, [], "combinations", (code, out) => {
+            callback(root.parseCombinations(code === 0 ? out : ""));
+        });
+    }
+
+    /**
+     * One combination is a bullet that wraps onto a second line, so the block is
+     * split on the bullet and flattened rather than read line by line.
+     */
+    function parseCombinations(text: string): var {
+        const result = {
+            known: false,
+            concurrent: false,
+            channels: 0
+        };
+        text.split("*").forEach(entry => {
+            const flat = entry.replace(/\s+/g, " ");
+            if (flat.indexOf("#{") < 0)
+                return;
+            result.known = true;
+            // AP/VLAN is a different mode that carries no access point of its
+            // own, so the name has to end at the brace or the comma.
+            if (flat.indexOf("managed") < 0 || !/[{,]\s*AP\s*[,}]/.test(flat))
+                return;
+            result.concurrent = true;
+            const match = flat.match(/#channels <= (\d+)/);
+            result.channels = Math.max(result.channels, match ? parseInt(match[1]) : 0);
+        });
+        return result;
+    }
+
+    function readWifiCapabilities(ifname: string, callback): void {
+        if (ifname.length === 0) {
+            callback({});
+            return;
+        }
+        root.run(["nmcli", "-t", "-f", "WIFI-PROPERTIES", "device", "show", ifname], "wificaps", (code, out) => {
+            callback(code === 0 ? root.parseWifiCapabilities(out) : ({}));
+        });
+    }
+
+    function parseWifiCapabilities(text: string): var {
+        const caps = ({});
+        text.trim().split("\n").forEach(line => {
+            const parts = root.splitEscaped(line);
+            if (parts.length < 2)
+                return;
+            caps[parts[0].replace("WIFI-PROPERTIES.", "").toLowerCase()] = parts[1] === "yes";
+        });
+        return caps;
+    }
+
+    function wirelessUuids(text: string): var {
+        const uuids = [];
+        text.trim().split("\n").forEach(line => {
+            const parts = root.splitEscaped(line);
+            if ((parts[1] ?? "") === "802-11-wireless" && (parts[0] ?? "").length > 0)
+                uuids.push(parts[0]);
+        });
+        return uuids;
+    }
+
+    /**
+     * The saved access points. A connection's mode is not part of the list
+     * output, so the wireless profiles are asked for theirs in one batched call
+     * rather than one call each.
+     */
+    function readHotspotProfiles(callback): void {
+        root.run(["nmcli", "-t", "-g", "UUID,TYPE", "connection", "show"], "aplist", (code, out) => {
+            const uuids = code === 0 ? root.wirelessUuids(out) : [];
+            if (uuids.length === 0) {
+                callback([]);
+                return;
+            }
+            const fields = ["connection.uuid", "connection.id", "connection.autoconnect",
+                "802-11-wireless.mode", "802-11-wireless.ssid", "802-11-wireless.band",
+                "802-11-wireless.hidden", "802-11-wireless-security.key-mgmt"];
+            const argv = ["nmcli", "-t", "-f", fields.join(","), "connection", "show"];
+            uuids.forEach(uuid => argv.push("uuid", uuid));
+            root.run(argv, "apshow", (showCode, showOut) => {
+                callback(showCode === 0 ? root.parseHotspotProfiles(showOut) : []);
+            });
+        });
+    }
+
+    function parseHotspotProfiles(text: string): var {
+        const rows = [];
+        text.split("\n\n").forEach(block => {
+            const entry = root.parseProfileSettings(block);
+            if ((entry["802-11-wireless.mode"] ?? "") !== "ap")
+                return;
+            rows.push({
+                uuid: entry["connection.uuid"] ?? "",
+                name: entry["connection.id"] ?? "",
+                ssid: entry["802-11-wireless.ssid"] ?? "",
+                band: entry["802-11-wireless.band"] ?? "",
+                hidden: (entry["802-11-wireless.hidden"] ?? "") === "yes",
+                keyMgmt: entry["802-11-wireless-security.key-mgmt"] ?? "",
+                autoconnect: (entry["connection.autoconnect"] ?? "") === "yes"
+            });
+        });
+        return rows;
+    }
+
+    // Who is actually associated with the access point. The DHCP leases would
+    // name them, but NetworkManager keeps that file root-only, while the radio
+    // will list its stations to anyone.
+    function readStations(ifname: string, callback): void {
+        if (ifname.length === 0) {
+            callback([]);
+            return;
+        }
+        root.run(["iw", "dev", ifname, "station", "dump"], "stations", (code, out) => {
+            callback(code === 0 ? root.parseStations(out) : []);
+        });
+    }
+
+    function parseStations(text: string): var {
+        const rows = [];
+        let current = null;
+        text.split("\n").forEach(line => {
+            const station = line.match(/^Station ([0-9a-fA-F:]{17})/);
+            if (station) {
+                current = {
+                    mac: station[1].toLowerCase(),
+                    signal: 0,
+                    rxBytes: 0,
+                    txBytes: 0,
+                    inactive: 0
+                };
+                rows.push(current);
+                return;
+            }
+            const sep = line.indexOf(":");
+            if (!current || sep < 0)
+                return;
+            const key = line.slice(0, sep).trim();
+            const value = line.slice(sep + 1).trim();
+            if (key === "signal")
+                current.signal = parseInt(value) || 0;
+            else if (key === "rx bytes")
+                current.rxBytes = parseInt(value) || 0;
+            else if (key === "tx bytes")
+                current.txBytes = parseInt(value) || 0;
+            else if (key === "inactive time")
+                current.inactive = parseInt(value) || 0;
+        });
+        return rows;
+    }
+
+    /**
+     * An empty ifname is left out rather than passed through: nmcli takes it as
+     * a device named "", and a profile pinned to a device that does not exist
+     * never activates.
+     */
+    function addHotspotProfile(name: string, ssid: string, ifname: string, settings: var, secret = "", callback = null): void {
+        const pairs = root.settingsToArgv(settings);
+        const device = ifname.length > 0 ? ["connection.interface-name", ifname] : [];
+        if (secret.length === 0) {
+            root.run(["nmcli", "connection", "add", "type", "wifi", "con-name", name, ...device,
+                "ssid", ssid, ...pairs], "add", callback);
+            return;
+        }
+        root.runScript(root.kAddHotspotSecret, [name, ssid, "802-11-wireless-security.psk",
+            ...device, ...pairs], "add", callback, {
+                PASSWORD: secret
+            });
+    }
+
     Process {
         id: runner
         stdout: StdioCollector {
