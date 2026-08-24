@@ -17,6 +17,7 @@ Rectangle {
     property int totalCols: 1
     property int dayIdx
     property var nextEventData
+    property real maxLogicalDistance: 1.0
     property real pixelsPerMinute
     property real eventSpacing
     property int startHour
@@ -58,9 +59,15 @@ Rectangle {
     radius: Appearance.rounding.normal
     clip: true
     z: isNextEvent ? 4 : 3
-    color: isNextEvent
-        ? ColorUtils.mix(eventBlock.semanticColor, ColorUtils.getContrastingTextColor(eventBlock.semanticColor), 0.88)
-        : eventBlock.semanticColor
+    color: H.eventColorWithProximity(
+        eventBlock.semanticColor,
+        Config.options.calendar.timetable.proximityColorGradient && !eventBlock.sportEvent,
+        eventBlock.dayIdx,
+        eventBlock.eventStartMinutes,
+        eventBlock.nextEventData,
+        eventBlock.maxLogicalDistance,
+        Appearance.colors
+    )
     y: H.minutesToY(eventStartMinutes, startHour, startMinute, pixelsPerMinute)
     height: H.timedBlockHeight(eventStartMinutes, eventEndMinutes, pixelsPerMinute, eventSpacing)
     opacity: eventBlock.manipulating ? 0.24 : 1

@@ -236,12 +236,57 @@ if (context.timedBlockHeight(0, 30, comfortablePixelsPerMinute, 4) <= 60)
         block = (TIMETABLE / "EventBlock.qml").read_text(encoding="utf-8")
         header = (TIMETABLE / "TimetableHeader.qml").read_text(encoding="utf-8")
 
-        self.assertIn("function chipColor(event, palette)", helper)
-        self.assertIn("H.chipColor(eventData, Appearance.colors)", block)
-        self.assertIn("H.chipColor(modelData, Appearance.colors)", header)
-        self.assertIn("H.chipColor(root.timedMutationEvent, Appearance.colors)", week)
-        self.assertNotIn("getEventColorRadial", helper + week + block)
-        self.assertNotIn("maxLogicalDistance", week + block)
+        self.assertIn("function chipColor(event, palette", helper)
+        self.assertIn("H.chipColor(eventData, Appearance.colors", block)
+        self.assertIn("H.chipColor(modelData, Appearance.colors", header)
+        self.assertIn("H.chipColor(root.timedMutationEvent, Appearance.colors", week)
+
+    def test_proximity_gradient_is_opt_in_and_preserves_synced_colors(self) -> None:
+        config = (ROOT / "modules" / "common" / "Config.qml").read_text(encoding="utf-8")
+        settings = (ROOT / "modules" / "settings" / "configs" / "widgets" / "TimetableConfig.qml").read_text(encoding="utf-8")
+        helper_path = TIMETABLE / "TimetableHelpers.js"
+        helper = helper_path.read_text(encoding="utf-8")
+        week = (TIMETABLE / "WeekView.qml").read_text(encoding="utf-8")
+        column = (TIMETABLE / "TimetableDayColumn.qml").read_text(encoding="utf-8")
+        block = (TIMETABLE / "EventBlock.qml").read_text(encoding="utf-8")
+        month = (TIMETABLE / "MonthView.qml").read_text(encoding="utf-8")
+
+        self.assertIn("property bool proximityColorGradient: false", config)
+        self.assertIn('text: Translation.tr("Proximity color gradient")', settings)
+        self.assertIn("checked: Config.options.calendar.timetable.proximityColorGradient", settings)
+        self.assertIn("function eventColorWithProximity(baseColor, enabled, dayIndex, startMinutes, nextEvtData, maxDist, colors)", helper)
+        self.assertIn("if (!enabled || !nextEvtData)", helper)
+        self.assertIn("return baseColor;", helper)
+        self.assertIn("H.eventColorWithProximity(", block)
+        self.assertIn("property real maxLogicalDistance: 1.0", week)
+        self.assertIn("maxLogicalDistance: root.maxLogicalDistance", week)
+        self.assertIn("maxLogicalDistance: dayColumn.maxLogicalDistance", column)
+        self.assertNotIn("ColorUtils.mix(eventBlock.semanticColor", block)
+        self.assertNotIn("eventColorWithProximity", month)
+
+        script = f"""
+const fs = require("fs");
+const vm = require("vm");
+const source = fs.readFileSync({json.dumps(str(helper_path))}, "utf8")
+    .replace(/^\\.pragma library\\s*/, "");
+const context = {{}};
+vm.createContext(context);
+vm.runInContext(source, context);
+const syncedColor = "#a1b2c3";
+const actual = context.eventColorWithProximity(syncedColor, false, 0, 600, {{dayIndex: 0, startMinutes: 600}}, 1, {{}});
+if (actual !== syncedColor)
+    throw new Error(`disabled proximity gradient changed ${{syncedColor}} to ${{actual}}`);
+const palette = {{
+    colPrimary: "#112233",
+    colSecondary: "#445566",
+    colTertiary: "#778899",
+    colSurfaceContainerHighest: "#aabbcc"
+}};
+const highlighted = context.eventColorWithProximity(syncedColor, true, 0, 600, {{dayIndex: 0, startMinutes: 600}}, 1, palette);
+if (highlighted !== palette.colPrimary)
+    throw new Error(`enabled proximity gradient did not center on the next event: ${{highlighted}}`);
+"""
+        subprocess.run(["node", "-e", script], check=True, capture_output=True, text=True)
 
     def test_week_and_month_consume_the_same_calendar_event_dto(self) -> None:
         calendar = (ROOT / "services" / "CalendarService.qml").read_text(encoding="utf-8")

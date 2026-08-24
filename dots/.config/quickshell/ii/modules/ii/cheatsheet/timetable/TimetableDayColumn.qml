@@ -39,6 +39,7 @@ Item {
 
     // For events
     property var nextEventData
+    property real maxLogicalDistance: 1.0
 
     // Colors
     property color todayHighlightFill
@@ -253,6 +254,7 @@ Item {
             totalCols: modelData.totalCols
             dayIdx: dayColumn.dayIdx
             nextEventData: dayColumn.nextEventData
+            maxLogicalDistance: dayColumn.maxLogicalDistance
             pixelsPerMinute: dayColumn.pixelsPerMinute
             eventSpacing: dayColumn.eventSpacing
             startHour: dayColumn.startHour

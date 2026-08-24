@@ -65,6 +65,23 @@ ContentPage {
         }
 
         ConfigSwitch {
+            buttonIcon: "gradient"
+            text: Translation.tr("Proximity color gradient")
+            checked: Config.options.calendar.timetable.proximityColorGradient
+            onCheckedChanged: {
+                Config.options.calendar.timetable.proximityColorGradient = checked;
+            }
+        }
+
+        StyledText {
+            Layout.fillWidth: true
+            text: Translation.tr("When enabled, Day, 3 days and Week replace synced event colors with a gradient based on distance from the next event.")
+            font.pixelSize: Appearance.font.pixelSize.small
+            color: Appearance.colors.colOnSurfaceVariant
+            wrapMode: Text.Wrap
+        }
+
+        ConfigSwitch {
             buttonIcon: "nightlight"
             text: Translation.tr("Moon phases in month view")
             checked: Config.options.calendar.timetable.moonPhases.enable

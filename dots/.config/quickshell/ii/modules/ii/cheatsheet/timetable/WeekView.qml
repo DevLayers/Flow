@@ -131,6 +131,7 @@ Item {
 
     // ─── State ───
     property var nextEventData: null
+    property real maxLogicalDistance: 1.0
 
     property bool ghostVisible: false
     property int ghostDayIndex: -1
@@ -154,6 +155,7 @@ Item {
     function updateNextEvent() {
         if (!root.days || root.days.length === 0) {
             root.nextEventData = null;
+            root.maxLogicalDistance = 1.0;
             return;
         }
 
@@ -212,6 +214,24 @@ Item {
         }
 
         root.nextEventData = nextEvt;
+        if (!Config.options.calendar.timetable.proximityColorGradient || !nextEvt) {
+            root.maxLogicalDistance = 1.0;
+            return;
+        }
+
+        let maxDistance = 0;
+        for (let i = 0; i < root.days.length; i++) {
+            const events = (root.days[i]?.events ?? []).filter(event => !CalendarService.isAllDayEvent(event));
+            for (const event of events) {
+                const startMinutes = H.eventStartMinutes(event);
+                if (startMinutes === null)
+                    continue;
+                const dayDistance = i - nextEvt.dayIndex;
+                const hourDistance = (startMinutes - nextEvt.startMinutes) / 60.0;
+                maxDistance = Math.max(maxDistance, Math.sqrt(dayDistance * dayDistance + hourDistance * hourDistance));
+            }
+        }
+        root.maxLogicalDistance = Math.max(1.0, maxDistance);
     }
 
     function scrollToCurrentTime() {
@@ -610,6 +630,12 @@ Item {
             const focus = root.followingCurrentWeek ? DateTime.clock.date : root.viewWeekStart;
             root.viewWeekStart = root.rangeStartFor(focus);
             root.refreshVisibleRange();
+        }
+    }
+    Connections {
+        target: Config.options.calendar.timetable
+        function onProximityColorGradientChanged() {
+            root.updateNextEvent();
         }
     }
     Connections {
@@ -1053,6 +1079,7 @@ Item {
                                     ghostTopY: root.ghostTopY
                                     ghostHeight: root.ghostHeight
                                     nextEventData: root.nextEventData
+                                    maxLogicalDistance: root.maxLogicalDistance
                                     todayHighlightFill: root.todayHighlightFill
                                     dayBackgroundFill: root.dayBackgroundFill
                                     dayBackgroundFillVariant: root.dayBackgroundFillVariant

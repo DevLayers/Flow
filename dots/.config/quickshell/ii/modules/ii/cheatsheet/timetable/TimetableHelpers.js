@@ -59,6 +59,40 @@ function withOpacity(colorValue, alpha) {
     return Qt.rgba(color.r, color.g, color.b, alpha);
 }
 
+function lerpColor(color1, color2, factor) {
+    const c1 = Qt.color(color1);
+    const c2 = Qt.color(color2);
+    const clampedFactor = Math.max(0, Math.min(1, factor));
+    return Qt.rgba(
+        c1.r + (c2.r - c1.r) * clampedFactor,
+        c1.g + (c2.g - c1.g) * clampedFactor,
+        c1.b + (c2.b - c1.b) * clampedFactor,
+        c1.a + (c2.a - c1.a) * clampedFactor
+    );
+}
+
+function getEventColorRadial(dayIndex, startMinutes, nextEvtData, maxDist, colors) {
+    const dayDistance = dayIndex - nextEvtData.dayIndex;
+    const hourDistance = (startMinutes - nextEvtData.startMinutes) / 60.0;
+    if (dayDistance === 0 && hourDistance === 0)
+        return colors.colPrimary;
+
+    const safeMaxDistance = Math.max(1, maxDist);
+    const distance = Math.sqrt(dayDistance * dayDistance + hourDistance * hourDistance);
+    const normalizedDistance = Math.min(1, distance / safeMaxDistance);
+    if (normalizedDistance < 0.33)
+        return lerpColor(colors.colPrimary, colors.colSecondary, normalizedDistance / 0.33);
+    if (normalizedDistance < 0.66)
+        return lerpColor(colors.colSecondary, colors.colTertiary, (normalizedDistance - 0.33) / 0.33);
+    return lerpColor(colors.colTertiary, colors.colSurfaceContainerHighest, (normalizedDistance - 0.66) / 0.34);
+}
+
+function eventColorWithProximity(baseColor, enabled, dayIndex, startMinutes, nextEvtData, maxDist, colors) {
+    if (!enabled || !nextEvtData)
+        return baseColor;
+    return getEventColorRadial(dayIndex, startMinutes, nextEvtData, maxDist, colors);
+}
+
 function eventStartMinutes(event) {
     if (!event?.startDate)
         return null;

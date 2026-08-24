@@ -3058,6 +3058,9 @@ Singleton {
                     property list<string> subscriptions: []
                     // Number of dates summarized by the month view's agenda rail.
                     property int upcomingHorizonDays: 14
+                    // Opt-in: timeline views may replace calendar colours with
+                    // a gradient centred on the next event.
+                    property bool proximityColorGradient: false
                     property JsonObject moonPhases: JsonObject {
                         // Moon phase badges in the month grid; computed locally,
                         // never fetched from the network.
