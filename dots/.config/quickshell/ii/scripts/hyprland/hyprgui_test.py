@@ -65,6 +65,17 @@ check("second identical write is a no-op", r2.get("ok") and r2.get("changed") is
 rc3, out3, _ = run(["read", "--file", target])
 back = json.loads(out3)
 check("read finds the region", back["hasRegion"] and back["regionVersion"] == 1)
+region_text = back.get("regionText", "")
+check("read returns the region verbatim",
+      region_text in body
+      and region_text.startswith("-- >>> quickshell:managed:begin")
+      and region_text.rstrip("\n").endswith("-- <<< quickshell:managed:end"),
+      region_text[:80])
+check("read reports the newest backup",
+      isinstance(back.get("backup"), dict)
+      and back["backup"]["count"] >= 1
+      and back["backup"]["path"].startswith(os.path.join(work, "state")),
+      back.get("backup"))
 check("all entries round-trip", len(back["entries"]) == len(DOC["entries"]),
       [e.get("kind") for e in back["entries"]])
 by_id = {e.get("id"): e for e in back["entries"]}
@@ -132,6 +143,8 @@ rc9, out9, _ = run(["write", "--file", fresh, "--json", "-", "--custom-dir", cus
 r9 = json.loads(out9)
 check("creates a missing file", r9.get("created") is True and os.path.exists(fresh), out9)
 check("no backup for a created file", r9.get("backup") is None)
+rc9b, out9b, _ = run(["read", "--file", fresh])
+check("no backup reported for a never-backed-up file", json.loads(out9b).get("backup") is None, out9b)
 check("backups land under XDG_STATE_HOME",
       os.path.isdir(os.path.join(work, "state", "quickshell", "hyprland-backups")))
 

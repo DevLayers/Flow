@@ -72,12 +72,60 @@ Singleton {
     property var watchedKeys: []
     property bool dirty: false
     property string lastError: ""
+    /// Pages hold a subscription while they are on screen. The service re-reads after every
+    /// Hyprland reload only while something is looking at it, instead of forever.
+    property int subscribers: 0
+
+    /// What the hub's health strip needs, in one place: how much this page owns, how old the
+    /// safety net is, and which of our settings something else overrides after load.
+    readonly property var status: {
+        let managed = 0;
+        let unrecognised = 0;
+        const regionFiles = [];
+        let backupAt = 0;
+        const shadowedKeys = [];
+        for (const target of Object.keys(root.targetFiles)) {
+            const file = root.files[target];
+            if (file?.hasRegion) regionFiles.push(root.targetFiles[target].split("/").pop());
+            const stamp = file?.backup?.mtime ?? 0;
+            if (stamp > backupAt) backupAt = stamp;
+            for (const entry of root._entriesFor(target)) {
+                if (entry.kind === "raw") {
+                    unrecognised += 1;
+                    continue;
+                }
+                managed += 1;
+                if (entry.kind === "config" && root.shadowed[entry.key] !== undefined)
+                    shadowedKeys.push(entry.key);
+            }
+        }
+        return {
+            managed: managed,
+            unrecognised: unrecognised,
+            files: regionFiles,
+            backupAt: backupAt,
+            shadowed: shadowedKeys
+        };
+    }
 
     signal changed
     signal wrote(string target)
     signal writeFailed(string target, string message)
 
     // ---------------------------------------------------------------- reading
+
+    /// Called by a page that wants live data for as long as it exists.
+    function attach() {
+        root.subscribers += 1;
+        if (root.subscribers === 1 && root.ready) root.refresh();
+    }
+
+    function detach() {
+        root.subscribers = Math.max(0, root.subscribers - 1);
+        // Diff callbacks are closures owned by the page that asked. With nobody left watching,
+        // delivering them would only reach objects that are being torn down.
+        if (root.subscribers === 0) root._diffQueue = [];
+    }
 
     function refresh() {
         if (root._readQueue.length > 0) {
@@ -147,6 +195,11 @@ Singleton {
             shadowedBy: root.shadowed[key] ?? null,
             shellOwnedBy: root.shellOwnedKeys[key] ?? ""
         };
+    }
+
+    /// The managed block of one file exactly as it sits on disk, for the review dialog.
+    function regionText(target: string): string {
+        return root.files[target]?.regionText ?? "";
     }
 
     function shellOwned(key: string): string {
@@ -243,15 +296,11 @@ Singleton {
         root._drainWrites();
     }
 
-    /// Ask for a unified diff of what `flush()` would do to one target. `callback(diff)`.
+    /// Ask for a unified diff of what `flush()` would do to one target. `callback(target, diff)`.
+    /// Queued: the review dialog asks about all four files in a row.
     function previewDiff(target: string, callback: var) {
-        root._diffCallback = callback;
-        diffProc.target = target;
-        diffProc.payload = JSON.stringify({ version: 1, entries: root._entriesFor(target) });
-        diffProc.command = [root.scriptPath, "write", "--file", root.targetFiles[target],
-            "--json", "-", "--custom-dir", root.customDir, "--dry-run"];
-        diffProc.stdinEnabled = true;
-        diffProc.running = true;
+        root._diffQueue = root._diffQueue.concat([{ target: target, callback: callback }]);
+        root._drainDiffs();
     }
 
     // ------------------------------------------------------------- internals
@@ -261,7 +310,7 @@ Singleton {
     property var _readQueue: []
     property var _optionQueue: []
     property var _writeQueue: []
-    property var _diffCallback: null
+    property var _diffQueue: []
     property bool _awaitingReload: false
     property bool _refreshAgain: false
 
@@ -427,6 +476,25 @@ Singleton {
 
     // Writing -------------------------------------------------------------
 
+    function _drainDiffs() {
+        if (diffProc.running || root._diffQueue.length === 0) return;
+        const job = root._diffQueue[0];
+        diffProc.diff = "";
+        diffProc.target = job.target;
+        diffProc.payload = JSON.stringify({ version: 1, entries: root._entriesFor(job.target) });
+        diffProc.command = [root.scriptPath, "write", "--file", root.targetFiles[job.target],
+            "--json", "-", "--custom-dir", root.customDir, "--dry-run"];
+        diffProc.stdinEnabled = true;
+        diffProc.running = true;
+    }
+
+    function _finishDiff() {
+        const job = root._diffQueue[0];
+        root._diffQueue = root._diffQueue.slice(1);
+        if (job?.callback) job.callback(diffProc.target, diffProc.diff);
+        root._drainDiffs();
+    }
+
     function _drainWrites() {
         if (writeProc.running || root._writeQueue.length === 0) return;
         root.busy = true;
@@ -571,16 +639,14 @@ Singleton {
         id: diffProc
         property string target: ""
         property string payload: ""
+        property string diff: ""
         stdout: StdioCollector {
             onStreamFinished: {
-                let diff = "";
                 try {
-                    diff = JSON.parse(text).diff ?? "";
+                    diffProc.diff = JSON.parse(text).diff ?? "";
                 } catch (e) {
-                    diff = "";
+                    diffProc.diff = "";
                 }
-                if (root._diffCallback) root._diffCallback(diff);
-                root._diffCallback = null;
             }
         }
         onRunningChanged: {
@@ -588,6 +654,8 @@ Singleton {
             diffProc.write(diffProc.payload);
             diffProc.stdinEnabled = false;
         }
+        // stdout may still be draining; hand the diff over on the next turn so it is in.
+        onExited: (code, status) => Qt.callLater(root._finishDiff)
     }
 
     /// A write that never produces a reload means Hyprland rejected the file or is not
@@ -640,6 +708,7 @@ Singleton {
         id: reloadDebounce
         interval: 250
         onTriggered: {
+            if (root.subscribers === 0) return;
             root.refresh();
             root.refreshEffective(root.watchedKeys);
         }

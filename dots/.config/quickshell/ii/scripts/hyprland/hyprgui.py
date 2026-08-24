@@ -769,6 +769,28 @@ def backup(path):
     return target
 
 
+def latest_backup(path):
+    """Newest backup of `path`, so the page can say how old the safety net is."""
+    name = os.path.basename(path)
+    try:
+        names = [f for f in os.listdir(BACKUP_DIR)
+                 if f.startswith(name + ".") and f.endswith(".bak")]
+    except OSError:
+        return None
+    newest = None
+    for candidate in names:
+        full = os.path.join(BACKUP_DIR, candidate)
+        try:
+            stamp = os.stat(full).st_mtime
+        except OSError:
+            continue
+        if newest is None or stamp > newest[1]:
+            newest = (full, stamp)
+    if newest is None:
+        return None
+    return {"path": newest[0], "mtime": int(newest[1]), "count": len(names)}
+
+
 def write_atomic(path, lines):
     directory = os.path.dirname(os.path.abspath(path))
     os.makedirs(directory, exist_ok=True)
@@ -802,8 +824,10 @@ def cmd_read(args):
         result["regionStart"] = begin + 1
         result["regionEnd"] = end
         result["entries"] = parse_region(lines, begin, end)
+        result["regionText"] = "".join(lines[begin:end])
     if not args.no_unmanaged:
         result["unmanaged"] = scan_unmanaged(lines, begin, end)
+    result["backup"] = latest_backup(path)
     print(json.dumps(result))
     return 0
 

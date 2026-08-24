@@ -22,6 +22,10 @@ Each generated line carries a `--@` tag naming what produced it (`k` config key,
 evaluation. A line whose tag this version does not recognise is kept verbatim and reported as
 unrecognised, so a newer shell's output is never silently dropped by an older one.
 
+`read` also reports `regionText` — the block exactly as it sits on disk, which is what the page's
+Review dialog shows — and `backup`, the newest saved copy of that file with its mtime, so the page can
+say how old the safety net is without a second process.
+
 ```bash
 hyprgui.py read  --file ~/.config/hypr/custom/general.lua      # managed entries + what they override
 hyprgui.py write --file ~/.config/hypr/custom/general.lua --json -   # desired state on stdin
