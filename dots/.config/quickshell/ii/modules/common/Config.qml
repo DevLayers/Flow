@@ -3691,6 +3691,13 @@ Singleton {
                     property string textMode: "username" // "username", "uptime", "none", "custom"
                     property string customText: ""
                 }
+                property bool enableBanner
+                property bool useCustomBanner
+                property string bannerImage: ""
+                property JsonObject dashboardSubHeader: JsonObject {
+                    property string greetingSubtextMode: "uptime"  // "uptime", "custom", "none"
+                    property string customText: ""
+                }
                 property string position: "default"
                 property string sidebarStyle: "default" // "default" | "connect"
                 property bool keepRightSidebarLoaded: true
