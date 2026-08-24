@@ -50,8 +50,17 @@ Rectangle {
             }))
     readonly property bool hasRange: root.range?.from !== undefined && root.range?.from !== null
         && root.range?.to !== undefined && root.range?.to !== null
-    readonly property bool isFirst: root.listIndex === 0 && root.listCount > 0
-    readonly property bool isLast: root.listIndex >= 0 && root.listIndex === root.listCount - 1
+    // The launcher groups its rows per section, so "first" and "last" are
+    // section-scoped and only the host knows them. Chat has no sections and
+    // keeps the positional default.
+    property var groupFirst: null
+    property var groupLast: null
+    readonly property bool isFirst: root.groupFirst !== null
+        ? root.groupFirst === true
+        : (root.listIndex === 0 && root.listCount > 0)
+    readonly property bool isLast: root.groupLast !== null
+        ? root.groupLast === true
+        : (root.listIndex >= 0 && root.listIndex === root.listCount - 1)
     readonly property bool isSelected: root.listIndex >= 0 && root.listIndex === root.listCurrentIndex
     readonly property bool isAboveSelected: root.listIndex >= 0 && root.listCurrentIndex === root.listIndex + 1
     readonly property bool isBelowSelected: root.listIndex >= 0 && root.listCurrentIndex === root.listIndex - 1

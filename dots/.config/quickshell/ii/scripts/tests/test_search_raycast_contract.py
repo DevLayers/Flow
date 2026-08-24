@@ -175,15 +175,39 @@ class SearchRaycastContractTests(unittest.TestCase):
     def test_normal_results_are_deduplicated_and_grouped(self):
         widget = source("modules/ii/overview/SearchWidget.qml")
         launcher = source("services/LauncherSearch.qml")
-        self.assertIn("function organizeResults(results): var", widget)
+        self.assertIn("function organizeResults(results, limit)", widget)
         self.assertIn("Best match", widget)
-        self.assertIn('const hasApplications = unique.some', widget)
+        self.assertIn("let hasApplications = false", widget)
         self.assertIn('key !== "panel:settings"', widget)
-        self.assertIn('{ id: "settings", label: Translation.tr("Settings")', widget)
-        self.assertIn('section.property: "sectionId"', widget)
+        self.assertIn('case "settings": return { label: Translation.tr("Settings")', widget)
+        # Section captions are model rows, not ListView.section delegates: Qt
+        # positions section delegates outside the view transitions, which let
+        # them snap over rows that were still animating.
+        self.assertNotIn("section.property", widget)
+        self.assertNotIn("section.delegate", widget)
+        self.assertIn('key: "section:" + sectionId', widget)
+        self.assertIn("isHeader: true", widget)
+        self.assertIn("function moveSelection(step: int): bool", widget)
+        # Rows must carry the original result, not a per-keystroke copy of it.
+        self.assertNotIn("Object.assign({}, group.items", widget)
         self.assertIn("const seenKeys = new Set()", widget)
         self.assertIn("dynamicRoles: true", widget)
         self.assertIn("result.length === 0", launcher)
+
+    def test_result_rows_cannot_outlive_their_model_row(self):
+        widget = source("modules/ii/overview/SearchWidget.qml")
+        # A `remove` transition keeps a delegate alive after its model row is
+        # gone. Interrupt it — a burst of keystrokes, or the asynchronous file
+        # results landing after the query settled — and the delegate is stranded
+        # in the scene: no space reserved, still clickable.
+        self.assertNotIn("remove: Transition", widget)
+        # The view re-emits contentY and currentIndex while the model is being
+        # mutated, and both handlers can ask for another page.
+        self.assertIn("property bool applyingDiff: false", widget)
+        self.assertIn("if (appResults.applyingDiff)", widget)
+        self.assertIn("pageLoadTimer.restart()", widget)
+        # Length invariant: nothing may survive past the end of the new rows.
+        self.assertIn("while (resultModel.count > rows.length)", widget)
 
     def test_collapsed_search_does_not_reserve_hidden_result_margins(self):
         widget = source("modules/ii/overview/SearchWidget.qml")
@@ -191,8 +215,13 @@ class SearchRaycastContractTests(unittest.TestCase):
         self.assertIn("? 0", widget)
         self.assertIn("rowSpacing: 0", widget)
         self.assertIn("topMargin: 0", widget)
-        self.assertIn("? Appearance.rounding.windowRounding", widget)
-        self.assertIn(": Appearance.rounding.verylarge", widget)
+        # The corner blends across the container's own (already animated) height
+        # instead of snapping on a flag, so a still-tall panel never wears the
+        # collapsed pill radius mid-collapse.
+        self.assertIn("const pill = Appearance.rounding.verylarge", widget)
+        self.assertIn("const panel = Appearance.rounding.windowRounding", widget)
+        self.assertIn("cornerBlendDistance", widget)
+        self.assertNotIn("radius: root.showResults", widget)
         self.assertNotIn("Behavior on radius", widget)
         self.assertIn("showIdleNowPlaying", widget)
         self.assertNotIn('searchingText === "" && LauncherSearch.results.length > 0', widget)

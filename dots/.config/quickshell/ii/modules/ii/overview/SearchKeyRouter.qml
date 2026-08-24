@@ -21,17 +21,18 @@ QtObject {
             return false;
         switch (methodName) {
         case "navigateUp":
-            if (root.resultsList.currentIndex > 0) {
-                root.resultsList.currentIndex--;
-                return true;
-            }
-            return false;
-        case "navigateDown":
-            if (root.resultsList.currentIndex < root.resultsList.count - 1) {
-                root.resultsList.currentIndex++;
-                return true;
-            }
-            return false;
+        case "navigateDown": {
+            const step = methodName === "navigateUp" ? -1 : 1;
+            // A list whose model carries non-selectable rows (section captions)
+            // decides for itself which index the cursor may land on.
+            if (typeof root.resultsList.moveSelection === "function")
+                return root.resultsList.moveSelection(step);
+            const target = root.resultsList.currentIndex + step;
+            if (target < 0 || target > root.resultsList.count - 1)
+                return false;
+            root.resultsList.currentIndex = target;
+            return true;
+        }
         case "navigateLeft":
         case "navigateRight":
             return root.searchWidget?.navigateSelectedResult(methodName === "navigateLeft" ? "left" : "right") ?? false;

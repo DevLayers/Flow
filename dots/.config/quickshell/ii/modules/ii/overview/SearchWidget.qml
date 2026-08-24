@@ -42,7 +42,13 @@ Item {
     readonly property bool isSearching: false
     readonly property bool showSkeletons: false
 
-    property int loadedResultsCount: 50
+    // One page is what the list can plausibly show plus scroll buffer. The
+    // ListView only builds delegates for visible rows, so the cost of a page is
+    // the ListModel ops, not the delegates.
+    readonly property int resultPageSize: 30
+    // Tallest the result list is allowed to get before it starts scrolling.
+    readonly property real maxResultsHeight: 600
+    property int loadedResultsCount: root.resultPageSize
     // Left/Right stays available to edit the query unless the selected row is
     // one of the Settings controls that can consume a horizontal adjustment.
     property bool selectedResultHandlesHorizontalNavigation: false
@@ -78,8 +84,24 @@ Item {
         if (!GlobalStates.overviewOpen)
             return;
         const total = root.getFilteredResultsCount();
-        if (loadedResultsCount < total) {
-            loadedResultsCount = Math.min(total, loadedResultsCount + 50);
+        if (loadedResultsCount >= total)
+            return;
+        loadedResultsCount = Math.min(total, loadedResultsCount + root.resultPageSize);
+        // Both callers — the scroll position and the cursor nearing the end —
+        // are signals the view emits *while* a diff is mutating the model.
+        // Diffing from inside one would restart the diff halfway through the
+        // previous one, off a key mirror that no longer describes the model.
+        // `restart()` also collapses the burst of both signals into one pass.
+        pageLoadTimer.restart();
+    }
+
+    Timer {
+        id: pageLoadTimer
+        interval: 0
+        repeat: false
+        onTriggered: {
+            if (!GlobalStates.overviewOpen)
+                return;
             appResults.applyResultDiff(root.processResults(LauncherSearch.results));
         }
     }
@@ -317,12 +339,35 @@ Item {
 
     // Suppress item transitions during panel open/close to avoid flicker
     property bool suppressItemTransitions: true
-    // Keep list movement animations for settled results, not for every keypress.
-    // Reordering delegates while the fuzzy search is still changing competes
-    // with text input on the GUI thread.
+
+    /**
+     * Typing cadence gate.
+     *
+     * A burst of keystrokes wants the list to be *correct* as fast as possible:
+     * every intermediate ordering is thrown away before the eye can read it, so
+     * animating it only spends frames. A deliberate single edit is where the
+     * reorder actually reads as motion, and that is where it stays enabled.
+     *
+     * Measuring the gap between edits picks between the two without a debounce
+     * that would delay the results themselves.
+     */
+    readonly property int burstTypingThreshold: 120
+    property double lastQueryEditTime: 0
+    // Query the cursor was last snapped to the top for. Asynchronous result
+    // sources (file search, app index) refresh the list long after the query
+    // settled; those refreshes must not move the user's selection.
+    property string selectionAnchorQuery: "\u0000"
+
+    function noteQueryEdit() {
+        const now = Date.now();
+        root.suppressItemTransitions = (now - root.lastQueryEditTime) < root.burstTypingThreshold;
+        root.lastQueryEditTime = now;
+        typingSettleTimer.restart();
+    }
+
     Timer {
-        id: typingTransitionTimer
-        interval: 140
+        id: typingSettleTimer
+        interval: root.burstTypingThreshold
         repeat: false
         onTriggered: root.suppressItemTransitions = false
     }
@@ -335,21 +380,16 @@ Item {
                 root.suppressItemTransitions = true;
                 // Wipe stale results immediately so panel opens empty (no ghost expansion)
                 resultModel.clear();
-                root.loadedResultsCount = 50;
+                root.loadedResultsCount = root.resultPageSize;
                 if (root.alwaysListAppsMode) {
                     Qt.callLater(() => {
-                        // Show first 15 immediately for instant response,
-                        // then load the rest after a short delay
-                        const allResults = LauncherSearch.results;
-                        appResults.applyResultDiff(allResults.slice(0, 15));
+                        appResults.applyResultDiff(root.processResults(LauncherSearch.results));
                         root.focusFirstItem();
-                        resultsDebounce.restart();
                     });
                 }
                 // Re-enable transitions after open animation
                 enableTransitionsTimer.restart();
             } else {
-                resultsDebounce.stop();
                 // Suppress transitions then clear immediately.
                 // Since suppressItemTransitions=true, remove transitions run at duration:0
                 // (instantaneous/invisible), so no flicker even though model clears now.
@@ -403,7 +443,7 @@ Item {
         } else if (root.activePanelItem && typeof root.activePanelItem.focusInput === "function") {
             root.activePanelItem.focusInput();
         } else {
-            appResults.currentIndex = 0;
+            appResults.selectFirst();
         }
     }
 
@@ -667,27 +707,36 @@ Item {
         LauncherSearch.query = text;
     }
 
-    function resultSection(item): var {
+    // Row order for the flattened result list. "best" leads, the fallback
+    // "continue with" rows always close it out.
+    readonly property var sectionOrder: ["media", "best", "apps", "controls", "tools", "actions", "content", "other", "settings", "continue"]
+
+    function resultSectionId(item): string {
         const key = String(item?.key ?? "");
         if (key.startsWith("app:") || item?.type === Translation.tr("App Alias"))
-            return { id: "apps", label: Translation.tr("Applications"), icon: "apps" };
+            return "apps";
+        // The idle now-playing bubble is the only media row, and it used to land
+        // in "More results" — a caption that says nothing about it.
+        if (key.startsWith("mpris:"))
+            return "media";
         if (/^(setting:|panel:settings$|shortcut:openSettings$)/.test(key))
-            return { id: "settings", label: Translation.tr("Settings"), icon: "settings" };
+            return "settings";
         if (/^(qtoggle:|bluetooth-device:|sys:|mode:)/.test(key))
-            return { id: "controls", label: Translation.tr("Controls"), icon: "tune" };
+            return "controls";
         if (/^(panel:|keybind:|cheatsheet:|shortcut:)/.test(key))
-            return { id: "tools", label: Translation.tr("Search tools"), icon: "widgets" };
+            return "tools";
         if (/^(file:|fsearch:|quicklink:|alias:|text-snippet:)/.test(key))
-            return { id: "content", label: Translation.tr("Files, links & text"), icon: "link" };
+            return "content";
         if (/^(cmd:shell|web:search|ai:ask|fallback:|math:)/.test(key))
-            return { id: "continue", label: Translation.tr("Continue with"), icon: "arrow_forward" };
+            return "continue";
         if (/^(action:|snippet:|shell:|process:|generator:|sports:)/.test(key))
-            return { id: "actions", label: Translation.tr("Actions & shortcuts"), icon: "bolt" };
-        return { id: "other", label: Translation.tr("More results"), icon: "search" };
+            return "actions";
+        return "other";
     }
 
     function sectionPresentation(sectionId: string): var {
         switch (sectionId) {
+        case "media": return { label: Translation.tr("Now playing"), icon: "music_note" };
         case "best": return { label: Translation.tr("Best match"), icon: "stars" };
         case "apps": return { label: Translation.tr("Applications"), icon: "apps" };
         case "controls": return { label: Translation.tr("Controls"), icon: "tune" };
@@ -700,69 +749,110 @@ Item {
         }
     }
 
-    function organizeResults(results): var {
-        const query = root.searchingText.trim().toLocaleLowerCase();
-        const unique = [];
+    /**
+     * Flattens the ranked results into the row list the ListView consumes.
+     *
+     * Section captions are emitted as rows of their own instead of relying on
+     * `ListView.section`. Qt positions section delegates outside the view's
+     * add/move/displaced transitions, so every reorder left the captions
+     * snapping to their final spot while the rows around them were still
+     * travelling — the overlapping headers and doubled rows.
+     *
+     * Rows reference the original result object instead of a per-keystroke
+     * `Object.assign` copy, so the diff below can compare identities and skip
+     * rewriting roles that did not actually change.
+     */
+    function organizeResults(results, limit) {
+        const query = root.searchingText.trim();
+        const maxItems = limit > 0 ? limit : results.length;
+
         const seenKeys = new Set();
-        for (const item of results) {
+        const unique = [];
+        const sectionIds = [];
+        let hasApplications = false;
+
+        for (let i = 0; i < results.length; i++) {
+            const item = results[i];
             if (!item)
                 continue;
             const key = String(item.key ?? "");
-            if (key.length > 0 && seenKeys.has(key))
-                continue;
-            if (key.length > 0)
+            if (key.length > 0) {
+                if (seenKeys.has(key))
+                    continue;
                 seenKeys.add(key);
+            }
+            const sectionId = root.resultSectionId(item);
+            if (sectionId === "apps")
+                hasApplications = true;
             unique.push(item);
+            sectionIds.push(sectionId);
         }
 
         // Applications are always the strongest result class. Only promote a
         // command surface when no application matches, and never promote
         // Settings: configuration discovery is useful, but intentionally
         // secondary to things the user can launch or act on immediately.
-        let best = null;
-        const hasApplications = unique.some(item => root.resultSection(item).id === "apps");
         if (!hasApplications && query.length >= 2) {
-            best = unique.find(item => {
-                const key = String(item?.key ?? "");
-                return key.startsWith("panel:") && key !== "panel:settings";
-            }) ?? null;
-            if (!best)
-                best = unique.find(item => item?.type === Translation.tr("App Alias") || String(item?.key ?? "").startsWith("quicklink:")) ?? null;
-        }
-
-        const definitions = [
-            { id: "apps", label: Translation.tr("Applications"), icon: "apps" },
-            { id: "controls", label: Translation.tr("Controls"), icon: "tune" },
-            { id: "tools", label: Translation.tr("Search tools"), icon: "widgets" },
-            { id: "actions", label: Translation.tr("Actions & shortcuts"), icon: "bolt" },
-            { id: "content", label: Translation.tr("Files, links & text"), icon: "link" },
-            { id: "other", label: Translation.tr("More results"), icon: "search" },
-            { id: "settings", label: Translation.tr("Settings"), icon: "settings" },
-            { id: "continue", label: Translation.tr("Continue with"), icon: "arrow_forward" }
-        ];
-        const groups = [];
-        if (best)
-            groups.push({ id: "best", label: Translation.tr("Best match"), icon: "stars", items: [best] });
-        for (const definition of definitions) {
-            const items = unique.filter(item => item !== best && root.resultSection(item).id === definition.id);
-            if (items.length > 0)
-                groups.push({ id: definition.id, label: definition.label, icon: definition.icon, items });
-        }
-
-        const organized = [];
-        for (const group of groups) {
-            for (let index = 0; index < group.items.length; index++) {
-                organized.push(Object.assign({}, group.items[index], {
-                    _searchSectionId: group.id,
-                    _searchSectionLabel: group.label,
-                    _searchSectionIcon: group.icon,
-                    _searchSectionStart: index === 0,
-                    _searchSectionEnd: index === group.items.length - 1,
-                    _searchSectionCount: group.items.length
-                }));
+            let bestIndex = -1;
+            for (let i = 0; i < unique.length; i++) {
+                const key = String(unique[i].key ?? "");
+                if (key.startsWith("panel:") && key !== "panel:settings") {
+                    bestIndex = i;
+                    break;
+                }
             }
+            if (bestIndex === -1) {
+                for (let i = 0; i < unique.length; i++) {
+                    const key = String(unique[i].key ?? "");
+                    if (unique[i].type === Translation.tr("App Alias") || key.startsWith("quicklink:")) {
+                        bestIndex = i;
+                        break;
+                    }
+                }
+            }
+            if (bestIndex !== -1)
+                sectionIds[bestIndex] = "best";
         }
-        return organized;
+
+        const buckets = ({});
+        for (let i = 0; i < unique.length; i++) {
+            const bucket = buckets[sectionIds[i]];
+            if (bucket)
+                bucket.push(unique[i]);
+            else
+                buckets[sectionIds[i]] = [unique[i]];
+        }
+
+        const rows = [];
+        let emitted = 0;
+        for (let s = 0; s < root.sectionOrder.length; s++) {
+            const sectionId = root.sectionOrder[s];
+            const items = buckets[sectionId];
+            if (!items || items.length === 0 || emitted >= maxItems)
+                continue;
+            const take = Math.min(items.length, maxItems - emitted);
+            rows.push({
+                key: "section:" + sectionId,
+                sectionId: sectionId,
+                isHeader: true,
+                isFirst: false,
+                isLast: false,
+                ref: null
+            });
+            for (let i = 0; i < take; i++) {
+                const item = items[i];
+                rows.push({
+                    key: String(item.key ?? (sectionId + ":" + i)),
+                    sectionId: sectionId,
+                    isHeader: false,
+                    isFirst: i === 0,
+                    isLast: i === take - 1,
+                    ref: item
+                });
+            }
+            emitted += take;
+        }
+        return rows;
     }
 
     function processResults(results) {
@@ -774,7 +864,7 @@ Item {
             if (item && (!excludeMpris || item.key !== "mpris:now-playing"))
                 filtered.push(item);
         }
-        return root.organizeResults(filtered).slice(0, root.loadedResultsCount);
+        return root.organizeResults(filtered, root.loadedResultsCount);
     }
 
     Keys.onPressed: event => {
@@ -936,12 +1026,24 @@ Item {
             return gridLayout.implicitHeight;
         }
         // The collapsed field needs a pill; expanded content must use the same
-        // corner as the other shell windows. This switch is deliberately not
-        // animated: radius and height changing together creates a transient
-        // capsule/circle that covers the results.
-        radius: root.showResults
-            ? Appearance.rounding.windowRounding
-            : Appearance.rounding.verylarge
+        // corner as the other shell windows. Switching on `showResults` flipped
+        // the corner the instant the flag changed, so a still-tall panel wore the
+        // collapsed pill radius for the whole height animation — the fat-corner
+        // frame visible mid-collapse.
+        //
+        // Deriving it from the live (already animated) height instead keeps the
+        // two in step in both directions, with no second animation to sync.
+        readonly property real collapsedHeight: searchBar.implicitHeight + searchBar.verticalPadding * 2
+        readonly property real cornerBlendDistance: 72
+        radius: {
+            const pill = Appearance.rounding.verylarge;
+            const panel = Appearance.rounding.windowRounding;
+            if (pill === panel)
+                return pill;
+            const grown = searchWidgetContent.height - searchWidgetContent.collapsedHeight;
+            const t = Math.max(0, Math.min(1, grown / searchWidgetContent.cornerBlendDistance));
+            return pill + (panel - pill) * t;
+        }
         color: GlobalStates.searchConnectActive ? "transparent"
              : (root.activePanel?.accent ? Appearance.colors.colBackgroundSurfaceContainerAccent
                                         : Appearance.colors.colBackgroundSurfaceContainer)
@@ -1154,7 +1256,7 @@ Item {
                     ? 0
                     : (root.showSkeletons
                         ? searchSkeletons.implicitHeight + (GlobalStates.searchConnectActive ? 12 : 16)
-                        : Math.min(600, appResults.contentHeight + appResults.topMargin + appResults.bottomMargin))
+                        : Math.min(root.maxResultsHeight, appResults.contentHeight + appResults.topMargin + appResults.bottomMargin))
 
                 Behavior on opacity {
                     NumberAnimation {
@@ -1164,14 +1266,11 @@ Item {
                     }
                 }
 
-                Behavior on implicitHeight {
-                    enabled: !root.inNotchMode
-                    NumberAnimation {
-                        duration: Appearance.animation.elementMoveSmall.duration
-                        easing.type: Easing.BezierSpline
-                        easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
-                    }
-                }
+                // Deliberately not animated. This height feeds the container's own
+                // height Behavior, and animating both put two eased curves in
+                // series: the content slid while the frame grew, which is the
+                // mushy, laggy expansion. The container animates; the content is
+                // simply revealed by it.
 
                 ListView {
                     id: appResults
@@ -1193,40 +1292,56 @@ Item {
                     spacing: 2
                     KeyNavigation.up: searchBar
                     highlightMoveDuration: 100
-                    section.property: "sectionId"
+                    // The cascade is a reveal gesture for a list that just appeared.
+                    // Replaying it per keystroke made the seventh row wait half a
+                    // second to paint, which is the whole "it feels slow" report.
+                    property bool staggerReveal: false
+                    readonly property int staggerStep: 22
 
-                    section.delegate: Item {
-                        id: sectionHeader
-                        required property string section
-                        width: appResults.width
-                        implicitHeight: 30
-
-                        RowLayout {
-                            anchors.left: parent.left
-                            anchors.right: parent.right
-                            anchors.bottom: parent.bottom
-                            anchors.leftMargin: Appearance.sizes.elevationMargin + 6
-                            anchors.rightMargin: Appearance.sizes.elevationMargin + 6
-                            anchors.bottomMargin: 3
-                            spacing: 7
-
-                            MaterialSymbol {
-                                text: root.sectionPresentation(sectionHeader.section).icon
-                                iconSize: Appearance.font.pixelSize.small
-                                color: Appearance.colors.colOnSurfaceVariant
-                            }
-
-                            StyledText {
-                                Layout.fillWidth: true
-                                text: root.sectionPresentation(sectionHeader.section).label
-                                color: Appearance.colors.colOnSurfaceVariant
-                                font.pixelSize: Appearance.font.pixelSize.small
-                                font.weight: Font.Medium
-                            }
-                        }
+                    Timer {
+                        id: staggerRevealWindow
+                        interval: 320
+                        repeat: false
+                        onTriggered: appResults.staggerReveal = false
                     }
 
-                    layer.enabled: root.searchingText != "" && appResults.count > 0
+                    // Rows are selectable results only; section captions live
+                    // in the model and are skipped by keyboard navigation.
+                    function isHeaderRow(rowIndex: int): bool {
+                        if (rowIndex < 0 || rowIndex >= resultModel.count)
+                            return true;
+                        return resultModel.get(rowIndex).isHeader === true;
+                    }
+
+                    function selectableIndex(from: int, step: int): int {
+                        for (let i = from; i >= 0 && i < resultModel.count; i += step) {
+                            if (!appResults.isHeaderRow(i))
+                                return i;
+                        }
+                        return -1;
+                    }
+
+                    function selectFirst() {
+                        const target = appResults.selectableIndex(0, 1);
+                        appResults.currentIndex = target;
+                    }
+
+                    function moveSelection(step: int): bool {
+                        const target = appResults.selectableIndex(appResults.currentIndex + step, step);
+                        if (target === -1)
+                            return false;
+                        appResults.currentIndex = target;
+                        return true;
+                    }
+
+                    // An offscreen render target plus a shader pass on every frame of
+                    // every resize is not worth paying for a list that fits: the fade
+                    // only means anything while there is something to scroll to. The
+                    // test is stated against the fixed cap rather than the list's own
+                    // height, which is itself derived from contentHeight — comparing
+                    // the two made the layer flicker on and off around the boundary.
+                    layer.enabled: appResults.count > 0
+                        && appResults.contentHeight + appResults.topMargin + appResults.bottomMargin > root.maxResultsHeight
                     layer.effect: OpacityMask {
                         maskSource: Item {
                             id: maskRoot
@@ -1359,32 +1474,65 @@ Item {
                     }
 
                     onCurrentIndexChanged: {
+                        // A diff can slide a caption under the cursor. Step off it
+                        // in the direction the list grew rather than selecting a
+                        // row that cannot be activated.
+                        if (currentIndex >= 0 && appResults.isHeaderRow(currentIndex) && resultModel.count > 0) {
+                            const recovered = appResults.selectableIndex(currentIndex, 1);
+                            appResults.currentIndex = recovered !== -1 ? recovered : appResults.selectableIndex(currentIndex, -1);
+                            return;
+                        }
                         const selected = currentIndex >= 0 && currentIndex < resultModel.count
                             ? resultModel.get(currentIndex)?.modelRef ?? null
                             : null;
                         LauncherSearch.selectedResult = selected;
                         root.refreshSelectedResultNavigation();
-                        if (currentIndex >= count - 5 && count < root.getFilteredResultsCount()) {
+                        if (currentIndex >= count - 5)
                             root.loadMoreResults();
+                    }
+
+                    // ── Diff-based model update: drives the move/add/remove transitions ──
+                    // `rows` come from organizeResults(): section captions and result
+                    // rows in one flat list, each already carrying its grouping flags.
+                    // Every insert/remove/move below makes the view re-emit
+                    // contentY and currentIndex, and those handlers can ask for
+                    // another page. Re-entering here would restart the diff against
+                    // a `currentKeys` mirror that the outer pass is still editing,
+                    // and rows the outer pass had not reached yet would survive.
+                    property bool applyingDiff: false
+
+                    function applyResultDiff(rows) {
+                        if (appResults.applyingDiff)
+                            return;
+                        appResults.applyingDiff = true;
+                        try {
+                            appResults.applyResultDiffUnguarded(rows);
+                        } finally {
+                            appResults.applyingDiff = false;
                         }
                     }
 
-                    // ── Diff-based model update: triggers move/add/remove transitions ──
-                    function applyResultDiff(newItems) {
-                        if (newItems.length === 0) {
+                    function applyResultDiffUnguarded(rows) {
+                        if (rows.length === 0) {
                             if (resultModel.count > 0)
                                 resultModel.clear();
                             return;
+                        }
+
+                        if (resultModel.count === 0) {
+                            appResults.staggerReveal = true;
+                            staggerRevealWindow.restart();
                         }
 
                         const currentKeys = [];
                         for (let i = 0; i < resultModel.count; i++)
                             currentKeys.push(resultModel.get(i).key);
 
-                        const newKeys = newItems.map(item => item.key);
-                        const newKeySet = new Set(newKeys);
+                        const newKeySet = new Set();
+                        for (let i = 0; i < rows.length; i++)
+                            newKeySet.add(rows[i].key);
 
-                        // Remove stale rows from the end so model indexes remain valid.
+                        // Remove stale rows from the end so model indexes stay valid.
                         for (let i = currentKeys.length - 1; i >= 0; i--) {
                             if (!newKeySet.has(currentKeys[i])) {
                                 resultModel.remove(i);
@@ -1394,59 +1542,58 @@ Item {
 
                         // Move/insert each desired row once. The old implementation
                         // rebuilt a full index map after every operation.
-                        for (let newIndex = 0; newIndex < newItems.length; newIndex++) {
-                            const item = newItems[newIndex];
-                            const currentIndex = currentKeys.indexOf(item.key);
+                        for (let newIndex = 0; newIndex < rows.length; newIndex++) {
+                            const rowData = rows[newIndex];
+                            const currentIndex = currentKeys.indexOf(rowData.key);
 
                             if (currentIndex === -1) {
                                 resultModel.insert(newIndex, {
-                                    key: item.key,
-                                    sectionId: String(item._searchSectionId ?? "other"),
-                                    modelRef: item
+                                    key: rowData.key,
+                                    sectionId: rowData.sectionId,
+                                    isHeader: rowData.isHeader,
+                                    isFirst: rowData.isFirst,
+                                    isLast: rowData.isLast,
+                                    modelRef: rowData.ref
                                 });
-                                currentKeys.splice(newIndex, 0, item.key);
-                            } else if (currentIndex !== newIndex) {
+                                currentKeys.splice(newIndex, 0, rowData.key);
+                                continue;
+                            }
+
+                            if (currentIndex !== newIndex) {
                                 resultModel.move(currentIndex, newIndex, 1);
                                 const movedKey = currentKeys.splice(currentIndex, 1)[0];
                                 currentKeys.splice(newIndex, 0, movedKey);
                             }
 
+                            // Rows reference the original result object, so an
+                            // unchanged row costs zero setProperty calls — and zero
+                            // delegate rebinds — even when it moved.
                             const row = resultModel.get(newIndex);
-                            const sectionId = String(item._searchSectionId ?? "other");
-                            if (row.sectionId !== sectionId)
-                                resultModel.setProperty(newIndex, "sectionId", sectionId);
-                            if (row.modelRef !== item)
-                                resultModel.setProperty(newIndex, "modelRef", item);
+                            if (row.sectionId !== rowData.sectionId)
+                                resultModel.setProperty(newIndex, "sectionId", rowData.sectionId);
+                            if (row.isFirst !== rowData.isFirst)
+                                resultModel.setProperty(newIndex, "isFirst", rowData.isFirst);
+                            if (row.isLast !== rowData.isLast)
+                                resultModel.setProperty(newIndex, "isLast", rowData.isLast);
+                            if (row.modelRef !== rowData.ref)
+                                resultModel.setProperty(newIndex, "modelRef", rowData.ref);
                         }
+
+                        // Whatever the passes above did, the model must end up
+                        // exactly as long as `rows`. Anything past that length is a
+                        // row the diff failed to account for, and it would stay
+                        // visible and clickable.
+                        while (resultModel.count > rows.length)
+                            resultModel.remove(resultModel.count - 1);
                     }
 
                     Connections {
                         target: root
                         function onSearchingTextChanged() {
-                            root.loadedResultsCount = 50;
+                            root.loadedResultsCount = root.resultPageSize;
                             if (appResults.count > 0)
-                                appResults.currentIndex = 0;
-
-                            // Defer movement animations until typing settles. This
-                            // keeps the input path free of overlapping ListView work.
-                            root.suppressItemTransitions = true;
-                            if (root.searchingText !== "")
-                                typingTransitionTimer.restart();
-                            else
-                                typingTransitionTimer.stop();
-                        }
-                    }
-
-                    // Debounce timer: delivers full results 150ms after the last
-                    // results change, avoiding per-keystroke full list recomputation
-                    Timer {
-                        id: resultsDebounce
-                        interval: 150
-                        repeat: false
-                        onTriggered: {
-                            if (!GlobalStates.overviewOpen)
-                                return;
-                            appResults.applyResultDiff(root.processResults(LauncherSearch.results));
+                                appResults.selectFirst();
+                            root.noteQueryEdit();
                         }
                     }
 
@@ -1457,26 +1604,27 @@ Item {
                             // (stale LauncherSearch.results from previous session would cause ghost expansion)
                             if (!GlobalStates.overviewOpen)
                                 return;
-                            root.loadedResultsCount = 50;
+                            root.loadedResultsCount = root.resultPageSize;
 
-                            // When query is emptied, instantly clear model and cancel debounce for instant height shrink
-                            if (root.searchingText === "") {
-                                resultsDebounce.stop();
-                                typingTransitionTimer.stop();
+                            // An empty query only means an empty list when nothing
+                            // else claims the idle surface. Clearing unconditionally
+                            // wiped the always-list-apps grid and the now-playing row
+                            // the moment their own results arrived.
+                            if (root.searchingText === "" && !root.alwaysListAppsMode && !root.showIdleNowPlaying) {
                                 root.suppressItemTransitions = true;
                                 resultModel.clear();
                                 return;
                             }
 
-                            // Immediately show first 15 results for snappy visual feedback
-                            const immediate = root.processResults(LauncherSearch.results);
-                            const quickSlice = immediate.length > 15 ? immediate.slice(0, 15) : immediate;
-                            appResults.applyResultDiff(quickSlice);
-                            root.focusFirstItem();
-
-                            // Schedule full result delivery after debounce
-                            if (immediate.length > 15)
-                                resultsDebounce.restart();
+                            // One diff per results change. Applying a 15-row slice and
+                            // then the full list 150ms later made every keystroke add,
+                            // remove and re-add the same rows — the churn the reorder
+                            // animation was then asked to render.
+                            appResults.applyResultDiff(root.processResults(LauncherSearch.results));
+                            if (root.selectionAnchorQuery !== root.searchingText) {
+                                root.selectionAnchorQuery = root.searchingText;
+                                root.focusFirstItem();
+                            }
                         }
                     }
 
@@ -1499,15 +1647,76 @@ Item {
                         required property var modelData
                         width: appResults.width
                         height: item ? item.implicitHeight : 0
-                        sourceComponent: resultDelegate.modelData.modelRef?.settingRef ? settingResultCard : normalSearchItem
+                        sourceComponent: {
+                            if (resultDelegate.modelData.isHeader)
+                                return sectionCaption;
+                            return resultDelegate.modelData.modelRef?.settingRef ? settingResultCard : normalSearchItem;
+                        }
                         onLoaded: root.refreshSelectedResultNavigation()
 
-                        // Animate y when ListView repositions this delegate (via move/displaced)
-                        Behavior on y {
+                        // Entrance belongs to the delegate, not to the view's `add`
+                        // transition: an interrupted view transition can strand
+                        // opacity at 0, and a row that never paints is a worse bug
+                        // than a row that never animates. `y` is left entirely to
+                        // the view — a Behavior here raced the move/displaced
+                        // transitions and let rows drift over each other.
+                        property real revealProgress: 0
+                        opacity: revealProgress
+                        transform: Translate {
+                            y: (1 - resultDelegate.revealProgress) * -6
+                        }
+
+                        SequentialAnimation {
+                            id: revealAnim
+                            PauseAnimation {
+                                // `index` is briefly -1 while a delegate is being
+                                // torn down, and PauseAnimation rejects a negative
+                                // duration outright.
+                                duration: appResults.staggerReveal
+                                    ? Math.max(0, Math.min(5, resultDelegate.index)) * appResults.staggerStep
+                                    : 0
+                            }
                             NumberAnimation {
-                                duration: 220
-                                easing.type: Easing.BezierSpline
-                                easing.bezierCurve: Appearance.animationCurves.emphasized
+                                target: resultDelegate
+                                property: "revealProgress"
+                                to: 1
+                                duration: Appearance.animation.elementMoveFast.duration
+                                easing.type: Appearance.animation.elementMoveFast.type
+                                easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+                            }
+                        }
+
+                        Component.onCompleted: revealAnim.start()
+
+                        Component {
+                            id: sectionCaption
+
+                            Item {
+                                implicitHeight: 30
+
+                                RowLayout {
+                                    anchors.left: parent.left
+                                    anchors.right: parent.right
+                                    anchors.bottom: parent.bottom
+                                    anchors.leftMargin: Appearance.sizes.elevationMargin + 6
+                                    anchors.rightMargin: Appearance.sizes.elevationMargin + 6
+                                    anchors.bottomMargin: 3
+                                    spacing: 7
+
+                                    MaterialSymbol {
+                                        text: root.sectionPresentation(resultDelegate.modelData.sectionId).icon
+                                        iconSize: Appearance.font.pixelSize.small
+                                        color: Appearance.colors.colOnSurfaceVariant
+                                    }
+
+                                    StyledText {
+                                        Layout.fillWidth: true
+                                        text: root.sectionPresentation(resultDelegate.modelData.sectionId).label
+                                        color: Appearance.colors.colOnSurfaceVariant
+                                        font.pixelSize: Appearance.font.pixelSize.small
+                                        font.weight: Font.Medium
+                                    }
+                                }
                             }
                         }
 
@@ -1550,6 +1759,8 @@ Item {
                                     listIndex: resultDelegate.index
                                     listCount: appResults.count
                                     listCurrentIndex: appResults.currentIndex
+                                    groupFirst: resultDelegate.modelData.isFirst === true
+                                    groupLast: resultDelegate.modelData.isLast === true
                                 }
                             }
                         }
@@ -1562,10 +1773,15 @@ Item {
                                 width: resultDelegate.width
                                 listIndex: resultDelegate.index
                                 listCurrentIndex: appResults.currentIndex
-                                // modelData is {key, modelRef} from ListModel — pass the actual result object
+                                // The model row wraps the result; `modelRef` is the
+                                // original LauncherSearchResult, not a copy of it.
                                 entry: resultDelegate.modelData.modelRef
-                                isFirst: entry?._searchSectionStart ?? (listIndex === 0)
-                                isLast: entry?._searchSectionEnd ?? (listIndex === listCount - 1)
+                                isFirst: resultDelegate.modelData.isFirst === true
+                                isLast: resultDelegate.modelData.isLast === true
+                                // The delegate owns the entrance for every row kind,
+                                // captions included; a second fade underneath it only
+                                // muddies the curve.
+                                animateEntrance: false
                                 query: StringUtils.cleanOnePrefix(root.searchingText, [Config.options.search.prefix.action, Config.options.search.prefix.app, Config.options.search.prefix.clipboard, Config.options.search.prefix.math, Config.options.search.prefix.shellCommand, Config.options.search.prefix.webSearch])
                                 onResultExecuted: feedbackText => root.showActionFeedback(feedbackText)
 
@@ -1610,11 +1826,18 @@ Item {
                         }
                     }
 
-                    // ── Reorder animation: items jump to new positions as results change ──
+                    // ── Reorder animation ──
+                    // Captions and rows now share one positioning path, so a caption
+                    // can no longer snap to its final spot while the rows around it
+                    // are still travelling.
+                    readonly property int reorderDuration: root.suppressItemTransitions
+                        ? 0
+                        : Appearance.animation.elementMoveFast.duration
+
                     move: Transition {
                         NumberAnimation {
                             properties: "y"
-                            duration: root.suppressItemTransitions ? 0 : 220
+                            duration: appResults.reorderDuration
                             easing.type: Easing.BezierSpline
                             easing.bezierCurve: Appearance.animationCurves.emphasized
                         }
@@ -1623,38 +1846,26 @@ Item {
                     displaced: Transition {
                         NumberAnimation {
                             properties: "y"
-                            duration: root.suppressItemTransitions ? 0 : 220
+                            duration: appResults.reorderDuration
                             easing.type: Easing.BezierSpline
                             easing.bezierCurve: Appearance.animationCurves.emphasized
                         }
                     }
 
-                    add: Transition {
-                        ParallelAnimation {
-                            NumberAnimation {
-                                property: "opacity"
-                                from: 0.0
-                                to: 1.0
-                                duration: root.suppressItemTransitions ? 0 : 180
-                                easing.type: Easing.OutQuad
-                            }
-                            NumberAnimation {
-                                property: "y"
-                                duration: root.suppressItemTransitions ? 0 : 220
-                                easing.type: Easing.BezierSpline
-                                easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
-                            }
-                        }
-                    }
-
-                    remove: Transition {
-                        NumberAnimation {
-                            property: "opacity"
-                            to: 0.0
-                            duration: root.suppressItemTransitions ? 0 : 120
-                            easing.type: Easing.OutQuad
-                        }
-                    }
+                    // No `remove` transition, deliberately.
+                    //
+                    // It is the only view transition that keeps a delegate alive
+                    // after its model row is gone, and therefore the only one that
+                    // can strand one: interrupt a removal — which a burst of
+                    // keystrokes, or the asynchronous file results landing a beat
+                    // after the query settled, does constantly — and the delegate
+                    // is left in the scene with no row behind it. It keeps its old
+                    // y, reserves no space, and still answers clicks.
+                    //
+                    // `removeDisplaced` (which falls back to `displaced` above) is
+                    // what actually reads as a removal anyway: the rows below close
+                    // the gap. The vanishing row itself was never the motion the eye
+                    // was following.
                 }
 
                 Rectangle {
@@ -1874,317 +2085,6 @@ Item {
                         }
                     }
                 }
-            }
-
-            // Kept temporarily as an inert compatibility bundle while the
-            // unified SearchPanelHost owns every non-AI panel. Wrapping the
-            // old delegates prevents multiple direct children from claiming
-            // the same GridLayout cell during hot reloads.
-            Item {
-                visible: false
-                enabled: false
-                implicitWidth: 0
-                implicitHeight: 0
-                Layout.row: 2
-
-            Loader {
-                id: clipboardPanelLoader
-                active: false
-                visible: opacity > 0.01
-                Layout.fillWidth: true
-                Layout.preferredHeight: (root.isClipboardMode || opacity > 0.01) ? (item ? item.implicitHeight : 520) : 0
-                height: Layout.preferredHeight
-                source: "ClipboardPanel.qml"
-                Layout.row: root.overviewPosition == "bottom" ? 0 : 1
-
-                opacity: root.isClipboardMode ? 1.0 : 0.0
-                transform: Translate {
-                    y: (1.0 - clipboardPanelLoader.opacity) * 16
-                }
-                layer.enabled: opacity > 0.001 && opacity < 0.999
-                layer.effect: MultiEffect {
-                    blurEnabled: (1.0 - parent.opacity) > 0.001
-                    blurMax: 32.0
-                    blur: (1.0 - parent.opacity) * 0.5
-                }
-                Behavior on opacity {
-                    enabled: !root.inNotchMode
-                    NumberAnimation {
-                        duration: 220
-                        easing.type: Easing.BezierSpline
-                        easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
-                    }
-                }
-
-                Binding {
-                    target: clipboardPanelLoader.item
-                    property: "searchQuery"
-                    value: StringUtils.cleanOnePrefix(root.searchingText, [Config.options.search.prefix.clipboard])
-                    when: clipboardPanelLoader.status === Loader.Ready
-                }
-            }
-
-            Loader {
-                id: bluetoothPanelLoader
-                active: false
-                visible: opacity > 0.01
-                Layout.fillWidth: true
-                Layout.preferredHeight: (root.isBluetoothMode || opacity > 0.01) ? (item ? item.implicitHeight : 520) : 0
-                height: Layout.preferredHeight
-                source: "BluetoothPanel.qml"
-                Layout.row: root.overviewPosition == "bottom" ? 0 : 1
-
-                opacity: root.isBluetoothMode ? 1.0 : 0.0
-                transform: Translate {
-                    y: (1.0 - bluetoothPanelLoader.opacity) * 16
-                }
-                layer.enabled: opacity > 0.001 && opacity < 0.999
-                layer.effect: MultiEffect {
-                    blurEnabled: (1.0 - parent.opacity) > 0.001
-                    blurMax: 32.0
-                    blur: (1.0 - parent.opacity) * 0.5
-                }
-                Behavior on opacity {
-                    enabled: !root.inNotchMode
-                    NumberAnimation {
-                        duration: 220
-                        easing.type: Easing.BezierSpline
-                        easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
-                    }
-                }
-
-                Binding {
-                    target: bluetoothPanelLoader.item
-                    property: "searchQuery"
-                    value: StringUtils.cleanOnePrefix(root.searchingText, [Config.options.search.prefix.bluetooth])
-                    when: bluetoothPanelLoader.status === Loader.Ready
-                }
-            }
-
-            Loader {
-                id: translatorPanelLoader
-                active: false
-                visible: opacity > 0.01
-                Layout.fillWidth: true
-                Layout.preferredHeight: (root.isTranslatorMode || opacity > 0.01) ? (item ? item.implicitHeight : 520) : 0
-                height: Layout.preferredHeight
-                source: "TranslatorPanel.qml"
-                Layout.row: root.overviewPosition == "bottom" ? 0 : 1
-
-                opacity: root.isTranslatorMode ? 1.0 : 0.0
-                transform: Translate {
-                    y: (1.0 - translatorPanelLoader.opacity) * 16
-                }
-                layer.enabled: opacity > 0.001 && opacity < 0.999
-                layer.effect: MultiEffect {
-                    blurEnabled: (1.0 - parent.opacity) > 0.001
-                    blurMax: 32.0
-                    blur: (1.0 - parent.opacity) * 0.5
-                }
-                Behavior on opacity {
-                    enabled: !root.inNotchMode
-                    NumberAnimation {
-                        duration: 220
-                        easing.type: Easing.BezierSpline
-                        easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
-                    }
-                }
-
-                Binding {
-                    target: translatorPanelLoader.item
-                    property: "searchQuery"
-                    value: StringUtils.cleanOnePrefix(root.searchingText, [Config.options.search.prefix.translator])
-                    when: translatorPanelLoader.status === Loader.Ready
-                }
-
-                Connections {
-                    target: translatorPanelLoader.item
-                    ignoreUnknownSignals: true
-                    function onRequestSetSearchQuery(query) {
-                        root.setSearchingText(Config.options.search.prefix.translator + query);
-                    }
-                    function onRequestFocusSearchInput() {
-                        root.focusSearchInput();
-                    }
-                }
-            }
-
-            Loader {
-                id: mediaDownloaderPanelLoader
-                active: false
-                visible: opacity > 0.01
-                Layout.fillWidth: true
-                Layout.preferredHeight: (root.isMediaDownloaderMode || opacity > 0.01) ? (item ? item.implicitHeight : 520) : 0
-                height: Layout.preferredHeight
-                source: "MediaDownloaderPanel.qml"
-                Layout.row: root.overviewPosition == "bottom" ? 0 : 1
-
-                opacity: root.isMediaDownloaderMode ? 1.0 : 0.0
-                transform: Translate {
-                    y: (1.0 - mediaDownloaderPanelLoader.opacity) * 16
-                }
-                layer.enabled: opacity > 0.001 && opacity < 0.999
-                layer.effect: MultiEffect {
-                    blurEnabled: (1.0 - parent.opacity) > 0.001
-                    blurMax: 32.0
-                    blur: (1.0 - parent.opacity) * 0.5
-                }
-                Behavior on opacity {
-                    enabled: !root.inNotchMode
-                    NumberAnimation {
-                        duration: 220
-                        easing.type: Easing.BezierSpline
-                        easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
-                    }
-                }
-
-                Binding {
-                    target: mediaDownloaderPanelLoader.item
-                    property: "searchQuery"
-                    value: StringUtils.cleanOnePrefix(root.searchingText, [Config.options.search.prefix.mediaDownloader])
-                    when: mediaDownloaderPanelLoader.status === Loader.Ready
-                }
-            }
-
-            Loader {
-                id: materialSymbolsPanelLoader
-                active: false
-                visible: opacity > 0.01
-                Layout.preferredWidth: 380
-                Layout.alignment: Qt.AlignHCenter
-                Layout.preferredHeight: (root.isMaterialSymbolsMode || opacity > 0.01) ? (item ? item.implicitHeight : 520) : 0
-                height: Layout.preferredHeight
-                source: "MaterialSymbolsPanel.qml"
-                Layout.row: root.overviewPosition == "bottom" ? 0 : 1
-
-                opacity: root.isMaterialSymbolsMode ? 1.0 : 0.0
-                transform: Translate {
-                    y: (1.0 - materialSymbolsPanelLoader.opacity) * 16
-                }
-                layer.enabled: opacity > 0.001 && opacity < 0.999
-                layer.effect: MultiEffect {
-                    blurEnabled: (1.0 - parent.opacity) > 0.001
-                    blurMax: 32.0
-                    blur: (1.0 - parent.opacity) * 0.5
-                }
-                Behavior on opacity {
-                    enabled: !root.inNotchMode
-                    NumberAnimation {
-                        duration: 220
-                        easing.type: Easing.BezierSpline
-                        easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
-                    }
-                }
-
-                Binding {
-                    target: materialSymbolsPanelLoader.item
-                    property: "searchQuery"
-                    value: StringUtils.cleanOnePrefix(root.searchingText, [Config.options.search.prefix.materialSymbols])
-                    when: materialSymbolsPanelLoader.status === Loader.Ready
-                }
-            }
-
-            Loader {
-                id: legacyAiPanelLoader
-                active: false
-                visible: opacity > 0.01
-                Layout.fillWidth: true
-                Layout.leftMargin: 8
-                Layout.rightMargin: 8
-                Layout.topMargin: 8
-                Layout.bottomMargin: 8
-                Layout.preferredHeight: (root.isAiMode || opacity > 0.01) ? (item ? item.implicitHeight : 520) : 0
-                height: Layout.preferredHeight
-                source: "AiChatPanel.qml"
-                Layout.row: root.overviewPosition == "bottom" ? 0 : 1
-
-                opacity: root.isAiMode ? 1.0 : 0.0
-                transform: Translate {
-                    y: (1.0 - legacyAiPanelLoader.opacity) * 16
-                }
-                layer.enabled: opacity > 0.001 && opacity < 0.999
-                layer.effect: MultiEffect {
-                    blurEnabled: (1.0 - parent.opacity) > 0.001
-                    blurMax: 32.0
-                    blur: (1.0 - parent.opacity) * 0.5
-                }
-                Behavior on opacity {
-                    enabled: !root.inNotchMode
-                    NumberAnimation {
-                        duration: 220
-                        easing.type: Easing.BezierSpline
-                        easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
-                    }
-                }
-
-                Connections {
-                    target: legacyAiPanelLoader.item
-                    ignoreUnknownSignals: true
-                    function onRequestBackToSearch() {
-                        root.exitAiMode();
-                    }
-                    function onRequestFocusComposer() {
-                        if (legacyAiPanelLoader.item && typeof legacyAiPanelLoader.item.focusComposer === "function")
-                            legacyAiPanelLoader.item.focusComposer();
-                    }
-                    function onRequestSendMessage(text) {
-                        root.sendAiMessage(text);
-                    }
-                    function onRequestContinueInSidebar() {
-                        root.continueInSidebar();
-                    }
-                }
-
-                Binding {
-                    target: legacyAiPanelLoader.item
-                    property: "activeSurface"
-                    value: root.isAiMode
-                    when: legacyAiPanelLoader.status === Loader.Ready
-                }
-
-                // The panel remains reusable on its own, but when hosted by
-                // Search it can leave through this direct, synchronous route.
-                // This avoids a Loader signal being the only path back to the
-                // normal search surface.
-                Binding {
-                    target: legacyAiPanelLoader.item
-                    property: "searchHost"
-                    value: root
-                    when: legacyAiPanelLoader.status === Loader.Ready
-                }
-            }
-
-            Loader {
-                id: legacySuggestionsPanelLoader
-                active: false
-                visible: opacity > 0.01
-                Layout.fillWidth: true
-                Layout.preferredHeight: (root.showSuggestionsPanel || opacity > 0.01) ? (item ? item.implicitHeight : (Config.options.search.baseHeight ?? 500)) : 0
-                height: Layout.preferredHeight
-                source: "SuggestionsPanel.qml"
-                Layout.row: root.overviewPosition == "bottom" ? 0 : 1
-
-                opacity: root.showSuggestionsPanel ? 1.0 : 0.0
-                transform: Translate {
-                    y: (1.0 - legacySuggestionsPanelLoader.opacity) * -16
-                }
-                layer.enabled: opacity > 0.001 && opacity < 0.999
-                layer.effect: MultiEffect {
-                    blurEnabled: (1.0 - parent.opacity) > 0.001
-                    blurMax: 32.0
-                    blur: (1.0 - parent.opacity) * 0.5
-                }
-
-                Behavior on opacity {
-                    enabled: !root.inNotchMode
-                    NumberAnimation {
-                        duration: 220
-                        easing.type: Easing.BezierSpline
-                        easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
-                    }
-                }
-            }
-
             }
 
             // Service lifecycle: activate/deactivate with mode

@@ -100,8 +100,11 @@ RippleButton {
     property int buttonHorizontalPadding: 10
     property int buttonVerticalPadding: 8
     property bool keyboardDown: false
-    property real entryOpacity: 0.0
-    property real entryTranslateY: -Appearance.sizes.elevationMargin
+    // Hosts that already animate their rows (the launcher list animates the
+    // delegate) turn this off rather than stacking a second fade underneath.
+    property bool animateEntrance: true
+    property real entryOpacity: root.animateEntrance ? 0.0 : 1.0
+    property real entryTranslateY: root.animateEntrance ? -Appearance.sizes.elevationMargin : 0
 
     opacity: entryOpacity
     transform: Translate {
@@ -1083,6 +1086,7 @@ RippleButton {
     }
 
     Component.onCompleted: {
-        entryAnim.start();
+        if (root.animateEntrance)
+            entryAnim.start();
     }
 }
