@@ -1,0 +1,4 @@
+module qs.modules.settings.configs.network
+
+WifiNetworkRow 1.0 WifiNetworkRow.qml
+WifiTab 1.0 WifiTab.qml
