@@ -229,14 +229,78 @@ MouseArea {
         popupRadius: Appearance.rounding.large
 
         contentItem: ColumnLayout {
+            id: popupLayout
             spacing: 10
             // HeroCard elides rather than wraps, and its mic takes 64px off the
             // left before the text column starts, so the width has to come from
             // the longest subtitle rather than from the card's own default.
             implicitWidth: 360
 
+            // The cards fly in once the surface itself has mostly unfolded, the
+            // same staggered entrance every other bar popup uses.
+            readonly property bool startAnim: detailsPopup.opened && detailsPopup.popupOpenProgress > 0.6
+
+            function resetCards() {
+                heroCard.opacity = 0.0;
+                heroCard.scale = 0.85;
+                heroCardTransform.y = 25;
+
+                targetCard.opacity = 0.0;
+                targetCard.scale = 0.85;
+                targetCardTransform.y = 25;
+
+                actionsRow.opacity = 0.0;
+                actionsRow.scale = 0.85;
+                actionsRowTransform.y = 25;
+            }
+
+            onStartAnimChanged: {
+                if (!popupLayout.startAnim)
+                    return;
+                popupLayout.resetCards();
+                Qt.callLater(function () {
+                    heroCardAnim.start();
+                    targetCardAnim.start();
+                    actionsRowAnim.start();
+                });
+            }
+
+            Connections {
+                target: detailsPopup
+                // Only once the surface has fully collapsed. Resetting at the
+                // start of the close would empty the popup before it shrinks.
+                function onPopupOpenProgressChanged() {
+                    if (detailsPopup.popupOpenProgress !== 0.0)
+                        return;
+                    heroCardAnim.stop();
+                    targetCardAnim.stop();
+                    actionsRowAnim.stop();
+                    popupLayout.resetCards();
+                }
+            }
+
             HeroCard {
+                id: heroCard
                 Layout.fillWidth: true
+                startAnim: popupLayout.startAnim
+
+                opacity: 0.0
+                scale: 0.85
+                transform: Translate {
+                    id: heroCardTransform
+                    y: 25
+                }
+
+                SequentialAnimation {
+                    id: heroCardAnim
+                    PauseAnimation { duration: 40 }
+                    ParallelAnimation {
+                        NumberAnimation { target: heroCard; property: "opacity"; to: 1.0; duration: 300 }
+                        NumberAnimation { target: heroCard; property: "scale"; to: 1.0; duration: 380; easing.type: Easing.OutBack }
+                        NumberAnimation { target: heroCardTransform; property: "y"; to: 0; duration: 380; easing.type: Easing.OutCubic }
+                    }
+                }
+
                 compactMode: true
                 implicitWidth: 360
                 implicitHeight: 125
@@ -277,10 +341,28 @@ MouseArea {
             // by definition, and the wrong one being focused is the mistake
             // worth catching before pressing stop rather than after.
             Rectangle {
+                id: targetCard
                 Layout.fillWidth: true
                 implicitHeight: targetRow.implicitHeight + 18
                 radius: Appearance.rounding.normal
                 color: Appearance.colors.colLayer1
+
+                opacity: 0.0
+                scale: 0.85
+                transform: Translate {
+                    id: targetCardTransform
+                    y: 25
+                }
+
+                SequentialAnimation {
+                    id: targetCardAnim
+                    PauseAnimation { duration: 100 }
+                    ParallelAnimation {
+                        NumberAnimation { target: targetCard; property: "opacity"; to: 1.0; duration: 300 }
+                        NumberAnimation { target: targetCard; property: "scale"; to: 1.0; duration: 380; easing.type: Easing.OutBack }
+                        NumberAnimation { target: targetCardTransform; property: "y"; to: 0; duration: 380; easing.type: Easing.OutCubic }
+                    }
+                }
 
                 RowLayout {
                     id: targetRow
@@ -315,8 +397,26 @@ MouseArea {
             }
 
             RowLayout {
+                id: actionsRow
                 Layout.fillWidth: true
                 spacing: 8
+
+                opacity: 0.0
+                scale: 0.85
+                transform: Translate {
+                    id: actionsRowTransform
+                    y: 25
+                }
+
+                SequentialAnimation {
+                    id: actionsRowAnim
+                    PauseAnimation { duration: 160 }
+                    ParallelAnimation {
+                        NumberAnimation { target: actionsRow; property: "opacity"; to: 1.0; duration: 300 }
+                        NumberAnimation { target: actionsRow; property: "scale"; to: 1.0; duration: 380; easing.type: Easing.OutBack }
+                        NumberAnimation { target: actionsRowTransform; property: "y"; to: 0; duration: 380; easing.type: Easing.OutCubic }
+                    }
+                }
 
                 RippleButtonWithIcon {
                     Layout.fillWidth: true
