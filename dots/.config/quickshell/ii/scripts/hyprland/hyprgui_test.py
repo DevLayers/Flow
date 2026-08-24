@@ -153,6 +153,80 @@ rc10, out10, _ = run(["write", "--file", fresh, "--json", "-", "--custom-dir", c
                      json.dumps({"version": 1, "entries": []}))
 check("empty document removes the region", "quickshell:managed" not in open(fresh).read())
 
+# ---------------------------------------------------------------- per-key lines
+HAND2 = '''hl.config({
+    input = {
+        kb_layout = "fr",
+        scroll_factor = 0.10,
+        touchpad = {
+            natural_scroll = true
+        }
+    },
+    misc = {
+        vrr = 1
+    },
+    decoration = {
+        shadow = { color = "rgba" .. "(" .. "00000027)" }
+    }
+})
+'''
+multi = os.path.join(custom, "multi.lua")
+open(multi, "w").write(HAND2)
+back10 = json.loads(run(["read", "--file", multi])[1])
+hand = {e["key"]: e for e in back10["unmanaged"] if e.get("kind") == "config"}
+check("each key reports its own line",
+      hand["input:kb_layout"]["line"] == 3 and hand["input:scroll_factor"]["line"] == 4
+      and hand["misc:vrr"]["line"] == 10,
+      {k: v.get("line") for k, v in hand.items()})
+check("each key reports a span into the file",
+      HAND2[slice(*hand["input:kb_layout"]["span"])] == 'kb_layout = "fr"',
+      HAND2[slice(*hand["input:kb_layout"]["span"])])
+check("a concatenated string stays raw instead of truncating",
+      hand["decoration:shadow:color"]["value"] == {"__raw": '"rgba" .. "(" .. "00000027)"'},
+      hand["decoration:shadow:color"]["value"])
+
+# ---------------------------------------------------------------- drop-key
+run(["write", "--file", multi, "--json", "-", "--custom-dir", custom],
+    json.dumps({"version": 1, "entries": [DOC["entries"][0]]}))
+region_before = json.loads(run(["read", "--file", multi])[1])["regionText"]
+before_text = open(multi).read()
+rc11, out11, _ = run(["drop-key", "--file", multi, "--key", "input:kb_layout",
+                      "--custom-dir", custom, "--dry-run"])
+r11 = json.loads(out11)
+check("drop-key dry run returns a diff", r11.get("ok") and '-        kb_layout = "fr"' in r11.get("diff", ""),
+      out11[:200])
+check("drop-key dry run leaves the file alone", open(multi).read() == before_text)
+
+rc12, out12, _ = run(["drop-key", "--file", multi, "--key", "input:kb_layout", "--custom-dir", custom])
+r12 = json.loads(out12)
+after_text = open(multi).read()
+check("drop-key removes exactly one line",
+      r12.get("ok") and after_text == before_text.replace('        kb_layout = "fr",\n', "", 1),
+      r12.get("error"))
+check("drop-key backs the file up first", bool(r12.get("backup")))
+check("drop-key leaves the managed region byte for byte",
+      json.loads(run(["read", "--file", multi])[1])["regionText"] == region_before)
+check("drop-key leaves every other hand-written key alone",
+      {e["key"] for e in json.loads(run(["read", "--file", multi])[1])["unmanaged"]
+       if e.get("kind") == "config"}
+      == {"input:scroll_factor", "input:touchpad:natural_scroll", "misc:vrr",
+          "decoration:shadow:color"},
+      [e.get("key") for e in json.loads(run(["read", "--file", multi])[1])["unmanaged"]])
+
+rc13, out13, _ = run(["drop-key", "--file", multi, "--key", "input:kb_layout", "--custom-dir", custom])
+check("drop-key on a key nobody set by hand fails", rc13 != 0 and json.loads(out13)["ok"] is False, out13)
+rc14, _, err14 = run(["drop-key", "--file", outside, "--key", "input:kb_layout", "--custom-dir", custom])
+check("drop-key refuses to touch a file outside custom/",
+      rc14 != 0 and open(outside).read() == "-- upstream\n", err14)
+
+# Emptying a table is not "changing another setting".
+solo = os.path.join(custom, "solo.lua")
+open(solo, "w").write('hl.config({ input = { kb_layout = "fr" } })\n')
+rc15, out15, _ = run(["drop-key", "--file", solo, "--key", "input:kb_layout", "--custom-dir", custom])
+check("drop-key can empty a table", json.loads(out15).get("ok") is True, out15)
+check("emptied table is still valid Lua", "input = {  }" in open(solo).read() or "input = { }" in open(solo).read(),
+      open(solo).read())
+
 shutil.rmtree(work)
 print()
 print("%d failed" % len(FAIL) if FAIL else "all passed")

@@ -26,12 +26,24 @@ unrecognised, so a newer shell's output is never silently dropped by an older on
 Review dialog shows — and `backup`, the newest saved copy of that file with its mtime, so the page can
 say how old the safety net is without a second process.
 
+Every hand-written key found outside the fence carries its own `line` and a `span` — the exact byte
+range of the assignment that sets it, not of the `hl.config` call it lives in. One call setting thirty
+keys therefore reports thirty different lines, which is what lets the page say *"also set by hand at
+general.lua:59"* and offer to remove that one line.
+
 ```bash
 hyprgui.py read  --file ~/.config/hypr/custom/general.lua      # managed entries + what they override
 hyprgui.py write --file ~/.config/hypr/custom/general.lua --json -   # desired state on stdin
 hyprgui.py write --file ... --json - --dry-run                 # unified diff instead of a write
 hyprgui.py strip --file ~/.config/hypr/custom/general.lua      # remove the block, keep the rest
+hyprgui.py drop-key --file ... --key input:kb_layout           # delete one hand-written line
 ```
+
+`drop-key` is the only command that touches Lua outside the fence, so it is deliberately timid. It
+removes the *last* hand-written assignment of that key — the one Lua actually applies — then re-scans
+the result and refuses to write unless every other setting in the file comes back identical, the
+managed block is byte for byte where it was, and `luac -p` (when installed) still accepts the file.
+`--dry-run` returns the same diff without writing, which is what the confirmation dialog shows.
 
 `hyprgui_test.py` next to it exercises the round trip end to end — hand-written Lua preservation,
 patterns containing `" \\ $ |`, unknown-tag forward compatibility, the no-op write, the path guard, and

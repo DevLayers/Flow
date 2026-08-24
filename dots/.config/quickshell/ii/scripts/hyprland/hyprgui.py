@@ -26,6 +26,8 @@ import difflib
 import json
 import os
 import re
+import shutil
+import subprocess
 import sys
 import tempfile
 import time
@@ -219,6 +221,9 @@ class Parser:
         self.t = tokens
         self.text = text
         self.i = 0
+        # "a:b:c" -> (start, stop) of that assignment in `text`. Only filled for keys, so a
+        # caller can point at the one line that sets a key instead of the whole call.
+        self.spans = {}
 
     def peek(self, offset=0):
         j = self.i + offset
@@ -238,13 +243,13 @@ class Parser:
             raise ValueError("expected %r" % op)
         return self.take()
 
-    def parse_value(self):
+    def parse_value(self, path=()):
         tok = self.peek()
         if tok is None:
             raise ValueError("unexpected end of value")
         if tok.kind == 'op' and tok.value == '{':
-            return self.parse_table()
-        if tok.kind == 'string':
+            return self.parse_table(path)
+        if tok.kind == 'string' and not self._continues_expression(1):
             self.take()
             return tok.value
         if tok.kind == 'number' and not self._continues_expression(1):
@@ -295,7 +300,7 @@ class Parser:
             self.take()
         return {"__raw": self.text[start:end].strip()}
 
-    def parse_table(self):
+    def parse_table(self, path=()):
         self.expect_op('{')
         array = []
         hash_ = {}
@@ -310,6 +315,7 @@ class Parser:
                 self.take()
                 continue
             key = None
+            entry_start = self.peek().start
             if self.at_op('['):
                 self.take()
                 key = self.parse_value()
@@ -321,7 +327,8 @@ class Parser:
                     key = tok.value
                     self.take()
                     self.take()
-            value = self.parse_value()
+            child = path + (str(key),) if key is not None else path
+            value = self.parse_value(child)
             if key is None:
                 array.append(value)
             else:
@@ -329,6 +336,7 @@ class Parser:
                 if key not in hash_:
                     order.append(key)
                 hash_[key] = value
+                self.spans[":".join(child)] = (entry_start, self.t[self.i - 1].end)
         if not hash_:
             return array
         result = {}
@@ -347,8 +355,11 @@ def _lua_number(src):
     return float(src)
 
 
-def parse_args(source):
-    """Parse a Lua argument list (the text between the outer parentheses)."""
+def parse_args(source, spans=None):
+    """Parse a Lua argument list (the text between the outer parentheses).
+
+    Pass a dict as `spans` to also receive "a:b" -> (start, stop) for every key it saw.
+    """
     text = source
     parser = Parser(tokenize(text), text)
     args = []
@@ -357,6 +368,8 @@ def parse_args(source):
             parser.take()
             continue
         args.append(parser.parse_value())
+    if spans is not None:
+        spans.update(parser.spans)
     return args
 
 
@@ -532,7 +545,7 @@ CALL_RE = re.compile(r'(?m)^[ \t]*(pcall\(\s*(hl\.unbind)\s*,|(hl\.[a-z_]+)\s*\(
 
 
 def scan_calls(text):
-    """Yield (fn, args_source, start_offset, end_offset) for every top-level hl.* call."""
+    """Yield (fn, args_source, start, end, args_offset) for every top-level hl.* call."""
     out = []
     for m in CALL_RE.finditer(text):
         if m.group(2):                      # pcall(hl.unbind, "KEY")
@@ -547,7 +560,7 @@ def scan_calls(text):
         args = text[open_paren + 1:close]
         if m.group(2):
             args = args.split(',', 1)[1] if ',' in args else args
-        out.append((fn, args, m.start(), close + 1))
+        out.append((fn, args, m.start(), close + 1, open_paren + 1))
     return out
 
 
@@ -583,13 +596,19 @@ def _unresolved(kind, value, line_number):
     return {"kind": kind, "key": None, "keyRaw": source, "unresolved": True, "line": line_number}
 
 
-def call_to_entries(fn, args_source, line_number):
-    """Turn one parsed hl.* call into zero or more entries."""
+def call_to_entries(fn, args_source, line_number, args_offset=None, locate=None):
+    """Turn one parsed hl.* call into zero or more entries.
+
+    One `hl.config` call can set thirty keys across thirty lines. With `args_offset` and a
+    `locate(offset) -> (line, file_offset)` callback, each key reports its own line and the
+    exact span that sets it, which is what makes "remove that one line" possible.
+    """
     kind = FN_KIND.get(fn)
     if kind is None:
         return []
+    spans = {}
     try:
-        args = parse_args(args_source)
+        args = parse_args(args_source, spans)
     except (ValueError, IndexError):
         return []
     if not args:
@@ -598,8 +617,18 @@ def call_to_entries(fn, args_source, line_number):
         table = args[0]
         if not isinstance(table, dict):
             return []
-        return [{"kind": "config", "key": key, "value": value, "line": line_number}
-                for key, value in flatten_config(table)]
+        out = []
+        for key, value in flatten_config(table):
+            entry = {"kind": "config", "key": key, "value": value, "line": line_number}
+            span = spans.get(key)
+            if span is not None and args_offset is not None and locate is not None:
+                head = locate(args_offset + span[0])
+                tail = locate(args_offset + span[1])
+                if head is not None and tail is not None:
+                    entry["line"] = head[0]
+                    entry["span"] = [head[1], tail[1]]
+            out.append(entry)
+        return out
     if kind == "device":
         spec = args[0]
         if not isinstance(spec, dict):
@@ -671,7 +700,7 @@ def parse_region(lines, begin, end):
         if m and code.strip():
             calls = scan_calls(code)
             if calls:
-                fn, args, _, _ = calls[0]
+                fn, args, _, _, _ = calls[0]
                 parsed = call_to_entries(fn, args, offset + 1)
                 # A tag letter this version does not know about, or one that disagrees with the
                 # call on the line, means a newer shell wrote it. Keep the line, do not reinterpret.
@@ -704,19 +733,27 @@ def scan_unmanaged(lines, begin, end):
     # Map an offset in the joined text back to a source line number.
     joined = []
     running = 0
-    for line, (_, source_line) in zip(kept, offsets):
-        joined.append((running, running + len(line), source_line))
+    for line, (source_offset, source_line) in zip(kept, offsets):
+        joined.append((running, running + len(line), source_line, source_offset))
         running += len(line)
 
-    def line_at(offset):
-        for start, stop, source_line in joined:
+    def locate(offset):
+        """Offset in the fence-less text -> (line number, offset in the real file)."""
+        for start, stop, source_line, source_offset in joined:
             if start <= offset < stop:
-                return source_line
-        return 0
+                return source_line, source_offset + (offset - start)
+        if joined and offset == running:
+            start, stop, source_line, source_offset = joined[-1]
+            return source_line, source_offset + (stop - start)
+        return None
+
+    def line_at(offset):
+        found = locate(offset)
+        return found[0] if found else 0
 
     out = []
-    for fn, args, start, _ in scan_calls(text):
-        out.extend(call_to_entries(fn, args, line_at(start)))
+    for fn, args, start, _, args_offset in scan_calls(text):
+        out.extend(call_to_entries(fn, args, line_at(start), args_offset, locate))
     for entry in out:
         entry["managed"] = False
     return out
@@ -895,6 +932,110 @@ def cmd_strip(args):
     return 0
 
 
+def _config_keys(entries):
+    """The (key, value) pairs a scan found, for comparing a file against itself."""
+    out = []
+    for entry in entries:
+        if entry.get("kind") != "config" or not entry.get("key"):
+            continue
+        value = entry.get("value")
+        # Taking the last key out of a table leaves an empty one behind. It sets nothing,
+        # so it must not read as a changed setting.
+        if isinstance(value, (list, dict)) and len(value) == 0:
+            continue
+        out.append((entry["key"], json.dumps(value, sort_keys=True)))
+    return sorted(out)
+
+
+def _syntax_ok(lines):
+    """Ask a real Lua parser, when there is one. Absence is not a failure."""
+    luac = shutil.which("luac") or shutil.which("luac5.4")
+    if luac is None:
+        return True
+    handle, temp = tempfile.mkstemp(suffix=".lua")
+    try:
+        with os.fdopen(handle, "w", encoding="utf-8", errors="surrogateescape") as out:
+            out.writelines(lines)
+        return subprocess.call([luac, "-p", temp],
+                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL) == 0
+    finally:
+        os.unlink(temp)
+
+
+def cmd_drop(args):
+    """Delete the one hand-written assignment outside the fence that sets --key.
+
+    Only ever removes what it can prove it is removing: the span comes from the same parse
+    the UI showed, the result is re-scanned, and every other setting in the file has to come
+    back identical or nothing is written.
+    """
+    path = guard_path(args.file, args.custom_dir)
+    lines = read_file(path)
+    if lines is None:
+        print(json.dumps({"ok": False, "error": "no such file: %s" % path}))
+        return 1
+    begin, end, _ = find_region(lines)
+    before = scan_unmanaged(lines, begin, end)
+    hits = [entry for entry in before
+            if entry.get("kind") == "config" and entry.get("key") == args.key and entry.get("span")]
+    if not hits:
+        print(json.dumps({"ok": False,
+                          "error": "%s is not set by hand in this file" % args.key}))
+        return 1
+    # Lua applies the last one, so that is the one worth removing.
+    target = hits[-1]
+    text = "".join(lines)
+    start, stop = target["span"]
+    leaf = args.key.split(":")[-1]
+    if leaf not in text[start:stop]:
+        print(json.dumps({"ok": False, "error": "the file changed since it was read"}))
+        return 1
+
+    cut = stop
+    while cut < len(text) and text[cut] in " \t":
+        cut += 1
+    if cut < len(text) and text[cut] in ",;":
+        cut += 1
+        while cut < len(text) and text[cut] in " \t":
+            cut += 1
+    line_start = text.rfind("\n", 0, start) + 1
+    line_end = text.find("\n", cut)
+    line_end = len(text) if line_end < 0 else line_end + 1
+    if text[line_start:start].strip() == "" and text[cut:line_end].strip() == "":
+        updated = text[:line_start] + text[line_end:]   # the line held nothing else
+    else:
+        updated = text[:start] + text[cut:]             # several keys share the line
+    new_lines = updated.splitlines(keepends=True)
+
+    new_begin, new_end, _ = find_region(new_lines)
+    after = scan_unmanaged(new_lines, new_begin, new_end)
+    expected = [entry for entry in before if entry is not target]
+    problem = None
+    if _config_keys(after) != _config_keys(expected):
+        problem = "removing that line would change other settings too"
+    elif ((lines[begin:end] if begin is not None else [])
+          != (new_lines[new_begin:new_end] if new_begin is not None else [])):
+        problem = "the managed block would move"
+    elif not _syntax_ok(new_lines):
+        problem = "the result is not valid Lua"
+    if problem:
+        print(json.dumps({"ok": False, "error": problem}))
+        return 1
+
+    diff = ''.join(difflib.unified_diff(lines, new_lines,
+                                        fromfile=path + " (current)",
+                                        tofile=path + " (proposed)"))
+    if args.dry_run:
+        print(json.dumps({"ok": True, "changed": True, "file": path, "diff": diff,
+                          "line": target.get("line")}))
+        return 0
+    saved = backup(path)
+    write_atomic(path, new_lines)
+    print(json.dumps({"ok": True, "changed": True, "file": path, "backup": saved,
+                      "line": target.get("line"), "diff": diff}))
+    return 0
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     sub = parser.add_subparsers(dest="command", required=True)
@@ -916,6 +1057,13 @@ def main():
     strip.add_argument("--dry-run", action="store_true")
     strip.add_argument("--custom-dir", default=DEFAULT_CUSTOM_DIR)
     strip.set_defaults(func=cmd_strip)
+
+    drop = sub.add_parser("drop-key")
+    drop.add_argument("--file", required=True)
+    drop.add_argument("--key", required=True)
+    drop.add_argument("--dry-run", action="store_true")
+    drop.add_argument("--custom-dir", default=DEFAULT_CUSTOM_DIR)
+    drop.set_defaults(func=cmd_drop)
 
     args = parser.parse_args()
     return args.func(args)

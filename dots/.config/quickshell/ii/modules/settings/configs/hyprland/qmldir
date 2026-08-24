@@ -2,6 +2,16 @@ module qs.modules.settings.configs.hyprland
 
 HyprlandHealthStrip 1.0 HyprlandHealthStrip.qml
 HyprlandTabPlaceholder 1.0 HyprlandTabPlaceholder.qml
+HyprOptionNote 1.0 HyprOptionNote.qml
+HyprNavRow 1.0 HyprNavRow.qml
+HyprSwitch 1.0 HyprSwitch.qml
+HyprSlider 1.0 HyprSlider.qml
+HyprSpinBox 1.0 HyprSpinBox.qml
+HyprSelect 1.0 HyprSelect.qml
+HyprTextField 1.0 HyprTextField.qml
+HyprXkbOptionSwitch 1.0 HyprXkbOptionSwitch.qml
+HyprDeviceCard 1.0 HyprDeviceCard.qml
+HyprKeyboardLayoutPage 1.0 HyprKeyboardLayoutPage.qml
 InputTab 1.0 InputTab.qml
 LayoutTab 1.0 LayoutTab.qml
 ShortcutsTab 1.0 ShortcutsTab.qml

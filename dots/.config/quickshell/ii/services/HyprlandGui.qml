@@ -36,6 +36,9 @@ Singleton {
         keybinds: `${root.customDir}/keybinds.lua`,
         env: `${root.customDir}/env.lua`
     })
+    /// The order hyprland.lua requires these files in. Later wins, so the maps below build in
+    /// this order and let a later file overwrite an earlier one.
+    readonly property var loadOrder: ["env", "general", "rules", "keybinds"]
     readonly property var targetForKind: ({
         config: "general",
         device: "general",
@@ -76,6 +79,47 @@ Singleton {
     /// Hyprland reload only while something is looking at it, instead of forever.
     property int subscribers: 0
 
+    /// key -> value, for every config key this page manages. One pass per change instead of
+    /// one pass per control per change.
+    readonly property var managedConfig: {
+        const map = {};
+        for (const target of root.loadOrder)
+            for (const entry of root._entriesFor(target))
+                if (entry.kind === "config" && entry.key) map[entry.key] = entry.value;
+        return map;
+    }
+
+    /// key -> { value, file, line, target, removable } for the last hand-written line that sets
+    /// it. `removable` is false when the parser could not pin the assignment down, in which case
+    /// the page offers no cleanup for it.
+    readonly property var inheritedConfig: {
+        const map = {};
+        for (const target of root.loadOrder) {
+            const file = root.files[target];
+            if (!file) continue;
+            for (const entry of (file.unmanaged ?? [])) {
+                if (entry.kind !== "config" || !entry.key) continue;
+                map[entry.key] = {
+                    value: entry.value,
+                    line: entry.line ?? 0,
+                    target: target,
+                    file: String(file.file ?? "").split("/").pop(),
+                    removable: (entry.span ?? null) !== null
+                };
+            }
+        }
+        return map;
+    }
+
+    /// device name -> the spec this page wrote for it, for the per-device cards.
+    readonly property var managedDevices: {
+        const map = {};
+        for (const target of root.loadOrder)
+            for (const entry of root._entriesFor(target))
+                if (entry.kind === "device" && entry.spec?.name) map[entry.spec.name] = entry.spec;
+        return map;
+    }
+
     /// What the hub's health strip needs, in one place: how much this page owns, how old the
     /// safety net is, and which of our settings something else overrides after load.
     readonly property var status: {
@@ -84,7 +128,7 @@ Singleton {
         const regionFiles = [];
         let backupAt = 0;
         const shadowedKeys = [];
-        for (const target of Object.keys(root.targetFiles)) {
+        for (const target of root.loadOrder) {
             const file = root.files[target];
             if (file?.hasRegion) regionFiles.push(root.targetFiles[target].split("/").pop());
             const stamp = file?.backup?.mtime ?? 0;
@@ -166,35 +210,35 @@ Singleton {
     }
 
     function managedValue(key: string): var {
-        const entry = root._findManaged("config", key);
-        return entry === undefined ? undefined : entry.value;
+        return root.managedConfig[key];
     }
 
     /// What a hand-written line above the fence, or another custom file, sets this key to.
     function inheritedValue(key: string): var {
-        for (const target of Object.keys(root.targetFiles)) {
-            const file = root.files[target];
-            if (!file) continue;
-            const hits = (file.unmanaged ?? []).filter(entry => entry.kind === "config" && entry.key === key);
-            if (hits.length === 0) continue;
-            const last = hits[hits.length - 1];
-            return { value: last.value, file: file.file, line: last.line };
-        }
-        return null;
+        return root.inheritedConfig[key] ?? null;
     }
 
     /// Everything a control needs to render itself honestly.
     function resolve(key: string): var {
+        const live = root.effective[key];
         return {
             key: key,
-            effective: root.effectiveValue(key),
-            type: root.effective[key]?.type ?? "",
-            managed: root.managedValue(key),
-            isManaged: root._findManaged("config", key) !== undefined,
-            inherited: root.inheritedValue(key),
+            effective: live === undefined ? undefined : live.value,
+            type: live?.type ?? "",
+            known: live !== undefined,
+            managed: root.managedConfig[key],
+            isManaged: root.managedConfig.hasOwnProperty(key),
+            inherited: root.inheritedConfig[key] ?? null,
             shadowedBy: root.shadowed[key] ?? null,
             shellOwnedBy: root.shellOwnedKeys[key] ?? ""
         };
+    }
+
+    /// The value a control should show: what this page set, else what Hyprland reports.
+    function displayValue(key: string, fallback: var): var {
+        if (root.managedConfig.hasOwnProperty(key)) return root.managedConfig[key];
+        const live = root.effective[key];
+        return live === undefined ? fallback : live.value;
     }
 
     /// The managed block of one file exactly as it sits on disk, for the review dialog.
@@ -228,6 +272,11 @@ Singleton {
 
     function resetKey(key: string) {
         root._remove("config", key);
+    }
+
+    /// The override this page wrote for one device, or null when it does not manage it.
+    function deviceSpec(name: string): var {
+        return root.managedDevices[name] ?? null;
     }
 
     function setDevice(id: string, spec: var) {
@@ -266,11 +315,30 @@ Singleton {
     }
 
     /// Push a value straight into the running compositor so a slider feels live. Volatile:
-    /// the next reload drops it unless the region was written too.
+    /// the next reload drops it unless the region was written too. Coalesced, because dragging
+    /// a slider changes its value on every frame and each push is a process.
     function previewKey(key: string, value: var) {
         if (!root._validKey(key)) return;
-        const expression = root._renderTable(root._nest(key, value));
-        Quickshell.execDetached(["hyprctl", "eval", `hl.config(${expression})`]);
+        const pending = Object.assign({}, root._previewPending);
+        pending[key] = value;
+        root._previewPending = pending;
+        previewTimer.restart();
+    }
+
+    /// Delete the hand-written line outside the block that also sets `key`. `callback(result)`
+    /// gets hyprgui.py's answer - `diff` on a dry run, `error` when it refused.
+    function dropInherited(key: string, dryRun: bool, callback: var) {
+        const info = root.inheritedConfig[key];
+        if (!info || !info.removable || !root._validKey(key) || dropProc.running) {
+            if (callback) callback({ ok: false, error: "nothing to remove" });
+            return;
+        }
+        dropProc.callback = callback;
+        dropProc.dryRun = dryRun;
+        dropProc.result = null;
+        dropProc.command = [root.scriptPath, "drop-key", "--file", root.targetFiles[info.target],
+            "--key", key, "--custom-dir", root.customDir].concat(dryRun ? ["--dry-run"] : []);
+        dropProc.running = true;
     }
 
     /// Write every dirty target now instead of waiting out the debounce.
@@ -311,6 +379,7 @@ Singleton {
     property var _optionQueue: []
     property var _writeQueue: []
     property var _diffQueue: []
+    property var _previewPending: ({})
     property bool _awaitingReload: false
     property bool _refreshAgain: false
 
@@ -465,8 +534,11 @@ Singleton {
         for (const object of objects) {
             if (!object.option) continue;
             const type = Object.keys(object).find(name => name !== "option" && name !== "set");
+            let value = type ? object[type] : undefined;
+            // hyprctl spells an unset string option "[[EMPTY]]". Controls want "".
+            if (value === "[[EMPTY]]") value = "";
             updated[object.option] = {
-                value: type ? object[type] : undefined,
+                value: value,
                 type: type ?? "",
                 set: object.set === true
             };
@@ -546,6 +618,19 @@ Singleton {
     }
 
     // Lua rendering, for `hyprctl eval` previews only -----------------------
+
+    /// Merge one colon-separated key into a nested table, so a whole batch of previews renders
+    /// as a single hl.config call.
+    function _mergeKey(table: var, key: string, value: var) {
+        const parts = String(key).split(":");
+        let node = table;
+        for (let i = 0; i < parts.length - 1; i++) {
+            if (node[parts[i]] === undefined || typeof node[parts[i]] !== "object")
+                node[parts[i]] = {};
+            node = node[parts[i]];
+        }
+        node[parts[parts.length - 1]] = value;
+    }
 
     function _nest(key: string, value: var): var {
         const parts = String(key).split(":");
@@ -656,6 +741,46 @@ Singleton {
         }
         // stdout may still be draining; hand the diff over on the next turn so it is in.
         onExited: (code, status) => Qt.callLater(root._finishDiff)
+    }
+
+    Process {
+        id: dropProc
+        property var callback: null
+        property bool dryRun: false
+        property var result: null
+        stdout: StdioCollector {
+            onStreamFinished: {
+                try {
+                    dropProc.result = JSON.parse(text);
+                } catch (e) {
+                    dropProc.result = null;
+                }
+            }
+        }
+        // stdout may still be draining; answer on the next turn so the result is in.
+        onExited: (code, status) => Qt.callLater(() => {
+            const result = dropProc.result ?? { ok: false, error: "hyprgui.py failed" };
+            if (dropProc.callback) dropProc.callback(result);
+            dropProc.callback = null;
+            if (!dropProc.dryRun && result.ok) root.refresh();
+        })
+    }
+
+    Timer {
+        id: previewTimer
+        interval: 40
+        onTriggered: {
+            const pending = root._previewPending;
+            root._previewPending = ({});
+            const merged = {};
+            let any = false;
+            for (const key of Object.keys(pending)) {
+                root._mergeKey(merged, key, pending[key]);
+                any = true;
+            }
+            if (!any) return;
+            Quickshell.execDetached(["hyprctl", "eval", `hl.config(${root._renderTable(merged)})`]);
+        }
     }
 
     /// A write that never produces a reload means Hyprland rejected the file or is not

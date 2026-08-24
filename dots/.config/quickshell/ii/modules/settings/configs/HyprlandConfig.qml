@@ -297,6 +297,81 @@ Item {
         }
     }
 
+    // ── Remove one hand-written line ──────────────────────────────────────────
+    /// Sections ask for this by walking up the parent chain: they are several files deep and a
+    /// confirmation has to live where it can cover the window.
+    property string dropKey: ""
+    property string dropDiff: ""
+    property string dropError: ""
+
+    function requestDropInherited(key: string) {
+        hubRoot.dropKey = key;
+        hubRoot.dropDiff = "";
+        hubRoot.dropError = "";
+        dropDialog.show = true;
+        HyprlandGui.dropInherited(key, true, result => {
+            if (hubRoot.dropKey !== key) return;
+            hubRoot.dropDiff = result.diff ?? "";
+            hubRoot.dropError = result.ok ? "" : (result.error ?? "");
+        });
+    }
+
+    WindowDialog {
+        id: dropDialog
+        parent: hubRoot.parent ?? hubRoot
+        anchors.fill: parent
+        show: false
+        backgroundWidth: 620
+        onDismiss: show = false
+        z: 100000
+
+        WindowDialogTitle {
+            text: Translation.tr("Remove the hand-written line?")
+        }
+
+        WindowDialogParagraph {
+            Layout.fillWidth: true
+            text: Translation.tr("This page already sets %1, and its block loads after that line, so the line has no effect any more. Removing it changes nothing about how Hyprland behaves. The file is backed up first.").arg(hubRoot.dropKey)
+        }
+
+        Rectangle {
+            Layout.fillWidth: true
+            implicitHeight: dropText.implicitHeight + 16
+            radius: Appearance.rounding.small
+            color: Appearance.colors.colSurfaceContainerHigh
+
+            StyledText {
+                id: dropText
+                anchors.fill: parent
+                anchors.margins: 8
+                text: hubRoot.dropError !== "" ? hubRoot.dropError
+                    : (hubRoot.dropDiff === "" ? Translation.tr("Working out what would change…") : hubRoot.dropDiff)
+                font.family: Appearance.font.family.monospace || "monospace"
+                font.pixelSize: Appearance.font.pixelSize.smallest
+                color: hubRoot.dropError !== "" ? Appearance.colors.colError : Appearance.colors.colOnSurface
+                wrapMode: Text.WrapAnywhere
+            }
+        }
+
+        WindowDialogButtonRow {
+            DialogButton {
+                buttonText: Translation.tr("Cancel")
+                onClicked: dropDialog.show = false
+            }
+            DialogButton {
+                buttonText: Translation.tr("Remove the line")
+                enabled: hubRoot.dropDiff !== "" && hubRoot.dropError === ""
+                colText: Appearance.colors.colError
+                onClicked: {
+                    HyprlandGui.dropInherited(hubRoot.dropKey, false, result => {
+                        if (!result.ok) hubRoot.dropError = result.error ?? "";
+                    });
+                    dropDialog.show = false;
+                }
+            }
+        }
+    }
+
     // ── Remove-all confirmation ───────────────────────────────────────────────
     WindowDialog {
         id: removeDialog
