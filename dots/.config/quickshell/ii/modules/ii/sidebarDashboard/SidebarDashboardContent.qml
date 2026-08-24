@@ -350,10 +350,36 @@ Item {
                 }
 
                 Image {
+                    id: bannerImage
                     anchors.fill: parent
-                    source: Config.options.sidebar.useCustomBanner
+                    // A wallpaper-sized banner costs RAM twice - decoded image plus GPU texture - for
+                    // detail this strip cannot show. PreserveAspectCrop makes sourceSize a cover box,
+                    // so the device-pixel size of the strip is all the decoder ever has to produce.
+                    //
+                    // The box only ever grows, and nothing loads before the strip is laid out in a
+                    // window: a source set against a zero-width box decodes at the file's native
+                    // size, and a box that shrinks - the window reports the integer output scale for
+                    // a moment before the fractional one arrives - re-decodes the file for nothing.
+                    readonly property real windowDpr: (QsWindow.window as QsWindow)?.devicePixelRatio ?? 0
+                    property size decodeBox: Qt.size(0, 0)
+                    onWindowDprChanged: bannerImage.growDecodeBox()
+                    onWidthChanged: bannerImage.growDecodeBox()
+                    onHeightChanged: bannerImage.growDecodeBox()
+                    function growDecodeBox() {
+                        if (bannerImage.windowDpr <= 0 || bannerImage.width <= 0 || bannerImage.height <= 0)
+                            return;
+                        const boxWidth = Math.ceil(bannerImage.width * bannerImage.windowDpr);
+                        const boxHeight = Math.ceil(bannerImage.height * bannerImage.windowDpr);
+                        if (boxWidth <= bannerImage.decodeBox.width && boxHeight <= bannerImage.decodeBox.height)
+                            return;
+                        bannerImage.decodeBox = Qt.size(Math.max(boxWidth, bannerImage.decodeBox.width),
+                            Math.max(boxHeight, bannerImage.decodeBox.height));
+                    }
+
+                    source: bannerImage.decodeBox.width <= 0 ? "" : (Config.options.sidebar.useCustomBanner
                         ? Config.options.sidebar.bannerImage
-                        : Config.options.background.wallpaperPath
+                        : Config.options.background.wallpaperPath)
+                    sourceSize: bannerImage.decodeBox
                     fillMode: Image.PreserveAspectCrop
                     cache: false
                     asynchronous: true
