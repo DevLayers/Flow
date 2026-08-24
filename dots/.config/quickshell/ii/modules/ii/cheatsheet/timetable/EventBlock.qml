@@ -51,12 +51,19 @@ Rectangle {
 
     readonly property int eventStartMinutes: H.eventStartMinutes(eventData) ?? 0
     readonly property int eventEndMinutes: H.eventEndMinutes(eventData) ?? eventStartMinutes
+    readonly property bool isAtTop: eventStartMinutes <= startHour * 60 + startMinute
+    readonly property bool isAtBottom: eventEndMinutes >= (startHour + 24) * 60 || eventEndMinutes >= 24 * 60
+    readonly property bool isCompact: eventBlock.height <= 52
 
     // Overlap layout
     width: (parent.width - 10) / totalCols - 2
     x: colIndex * ((parent.width - 10) / totalCols) + 5
     
     radius: Appearance.rounding.normal
+    topLeftRadius: isAtTop && colIndex === 0 ? Math.max(Appearance.rounding.normal, Appearance.rounding.windowRounding - 4) : Appearance.rounding.normal
+    topRightRadius: isAtTop && colIndex === totalCols - 1 ? Math.max(Appearance.rounding.normal, Appearance.rounding.windowRounding - 4) : Appearance.rounding.normal
+    bottomLeftRadius: isAtBottom && colIndex === 0 ? Math.max(Appearance.rounding.normal, Appearance.rounding.windowRounding - 4) : Appearance.rounding.normal
+    bottomRightRadius: isAtBottom && colIndex === totalCols - 1 ? Math.max(Appearance.rounding.normal, Appearance.rounding.windowRounding - 4) : Appearance.rounding.normal
     clip: true
     z: isNextEvent ? 4 : 3
     color: H.eventColorWithProximity(
@@ -68,7 +75,7 @@ Rectangle {
         eventBlock.maxLogicalDistance,
         Appearance.colors
     )
-    y: H.minutesToY(eventStartMinutes, startHour, startMinute, pixelsPerMinute)
+    y: Math.max(isAtTop ? 4 : 0, H.minutesToY(eventStartMinutes, startHour, startMinute, pixelsPerMinute))
     height: H.timedBlockHeight(eventStartMinutes, eventEndMinutes, pixelsPerMinute, eventSpacing)
     opacity: eventBlock.manipulating ? 0.24 : 1
 
@@ -81,7 +88,7 @@ Rectangle {
         font.pixelSize: Math.min(parent.height, parent.width) * 0.8
         color: ColorUtils.getContrastingTextColor(eventBlock.color)
         opacity: 0.15
-        visible: isNextEvent || eventBlock.sportEvent
+        visible: (isNextEvent || eventBlock.sportEvent) && eventBlock.height > 44
         z: 0
         antialiasing: true
     }
@@ -235,13 +242,13 @@ Rectangle {
     RippleButton {
         anchors.right: parent.right
         anchors.top: parent.top
-        anchors.margins: 4
-        implicitWidth: 24
-        implicitHeight: 24
+        anchors.margins: eventBlock.height <= 36 ? 2 : 4
+        implicitWidth: eventBlock.height <= 36 ? 18 : 24
+        implicitHeight: eventBlock.height <= 36 ? 18 : 24
         buttonRadius: Appearance.rounding.full
         buttonColor: H.withOpacity(Appearance.colors.colOnSurface, 0.15)
         opacity: eventHover.hovered ? 1 : 0
-        visible: opacity > 0 && !eventBlock.readOnly
+        visible: opacity > 0 && !eventBlock.readOnly && eventBlock.height >= 20
         z: 15
 
         Behavior on opacity {
@@ -260,7 +267,7 @@ Rectangle {
         contentItem: MaterialSymbol {
             anchors.centerIn: parent
             horizontalAlignment: Text.AlignHCenter
-            font.pixelSize: Appearance.font.pixelSize.smallie
+            font.pixelSize: eventBlock.height <= 36 ? Appearance.font.pixelSize.smallest : Appearance.font.pixelSize.smallie
             text: "close"
             color: ColorUtils.getContrastingTextColor(eventBlock.color)
         }
@@ -296,8 +303,61 @@ Rectangle {
         }
     }
 
-    // Event content
+    // Compact single-line event content (15m - 30m short events)
+    RowLayout {
+        id: compactRow
+        visible: eventBlock.isCompact
+        anchors.fill: parent
+        anchors.leftMargin: 8
+        anchors.rightMargin: (eventHover.hovered && !eventBlock.readOnly && eventBlock.height >= 20) ? 22 : 6
+        anchors.topMargin: 2
+        anchors.bottomMargin: 2
+        spacing: 5
+        z: 1
+
+        Rectangle {
+            visible: eventBlock.isNextEvent
+            Layout.alignment: Qt.AlignVCenter
+            implicitWidth: nextTextCompact.implicitWidth + 8
+            implicitHeight: Math.min(18, Math.max(14, eventBlock.height - 6))
+            color: ColorUtils.getContrastingTextColor(eventBlock.color)
+            radius: Appearance.rounding.full
+
+            StyledText {
+                id: nextTextCompact
+                anchors.centerIn: parent
+                text: "NEXT"
+                font.pixelSize: Appearance.font.pixelSize.smallest
+                font.weight: Font.Bold
+                color: eventBlock.color
+            }
+        }
+
+        StyledText {
+            Layout.fillWidth: true
+            Layout.alignment: Qt.AlignVCenter
+            text: eventData.content ?? Translation.tr("Event")
+            font.weight: Font.DemiBold
+            font.pixelSize: Appearance.font.pixelSize.small
+            elide: Text.ElideRight
+            color: ColorUtils.getContrastingTextColor(eventBlock.color)
+        }
+
+        StyledText {
+            Layout.alignment: Qt.AlignVCenter
+            visible: eventBlock.width >= 180 && eventBlock.height >= 30
+            text: H.minutesToTimeStr(eventBlock.eventStartMinutes, Config.options?.time.format) + " - " + H.minutesToTimeStr(eventBlock.eventEndMinutes, Config.options?.time.format)
+            font.pixelSize: Appearance.font.pixelSize.smallest
+            font.weight: Font.Medium
+            color: ColorUtils.getContrastingTextColor(eventBlock.color)
+            elide: Text.ElideRight
+        }
+    }
+
+    // Standard multi-line event content (for normal height events)
     Column {
+        id: standardColumn
+        visible: !eventBlock.isCompact
         anchors.fill: parent
         anchors.margins: 8
         spacing: 4
@@ -350,7 +410,6 @@ Rectangle {
                 color: ColorUtils.getContrastingTextColor(eventBlock.color)
                 elide: Text.ElideRight
                 anchors.verticalCenter: parent.verticalCenter
-                visible: eventBlock.height > 60 || eventBlock.isNextEvent
             }
         }
     }

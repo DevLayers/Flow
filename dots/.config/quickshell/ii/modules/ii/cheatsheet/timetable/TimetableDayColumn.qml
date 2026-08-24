@@ -117,6 +117,10 @@ Item {
         width: parent.width
         height: Math.max(0, Math.min(parent.height, (dayColumn.sunriseMinutes - dayColumn.gridStartMinutes) * dayColumn.pixelsPerMinute))
         color: H.withOpacity(Appearance.colors.colLayer0, 0.22)
+        topLeftRadius: Appearance.rounding.windowRounding
+        topRightRadius: Appearance.rounding.windowRounding
+        bottomLeftRadius: 0
+        bottomRightRadius: 0
     }
 
     Rectangle {
@@ -128,6 +132,10 @@ Item {
         width: parent.width
         height: Math.max(0, parent.height - y)
         color: H.withOpacity(Appearance.colors.colLayer0, 0.22)
+        topLeftRadius: 0
+        topRightRadius: 0
+        bottomLeftRadius: Appearance.rounding.windowRounding
+        bottomRightRadius: Appearance.rounding.windowRounding
     }
 
     // Read-only desktop context: the sampler stores at most 3600 seconds of
@@ -146,6 +154,10 @@ Item {
             height: Math.max(0, Math.min(dayColumn.height, hourStartY + 60 * dayColumn.pixelsPerMinute) - y)
             visible: intensity > 0 && height > 0
             color: H.withOpacity(Appearance.colors.colTertiary, 0.04 + intensity * 0.14)
+            topLeftRadius: index === 0 ? Appearance.rounding.windowRounding : 0
+            topRightRadius: index === 0 ? Appearance.rounding.windowRounding : 0
+            bottomLeftRadius: index === 23 ? Appearance.rounding.windowRounding : 0
+            bottomRightRadius: index === 23 ? Appearance.rounding.windowRounding : 0
         }
     }
 
@@ -197,6 +209,10 @@ Item {
         width: parent.width - 10
         anchors.horizontalCenter: parent.horizontalCenter
         radius: Appearance.rounding.normal
+        topLeftRadius: y <= 4 ? Math.max(Appearance.rounding.normal, Appearance.rounding.windowRounding - 4) : Appearance.rounding.normal
+        topRightRadius: y <= 4 ? Math.max(Appearance.rounding.normal, Appearance.rounding.windowRounding - 4) : Appearance.rounding.normal
+        bottomLeftRadius: y + height >= parent.height - 4 ? Math.max(Appearance.rounding.normal, Appearance.rounding.windowRounding - 4) : Appearance.rounding.normal
+        bottomRightRadius: y + height >= parent.height - 4 ? Math.max(Appearance.rounding.normal, Appearance.rounding.windowRounding - 4) : Appearance.rounding.normal
         color: H.withOpacity(Appearance.colors.colPrimary, 0.25)
         z: 5
 
@@ -234,6 +250,10 @@ Item {
         width: parent.width - 10
         anchors.horizontalCenter: parent.horizontalCenter
         radius: Appearance.rounding.normal
+        topLeftRadius: y <= 4 ? Math.max(Appearance.rounding.normal, Appearance.rounding.windowRounding - 4) : Appearance.rounding.normal
+        topRightRadius: y <= 4 ? Math.max(Appearance.rounding.normal, Appearance.rounding.windowRounding - 4) : Appearance.rounding.normal
+        bottomLeftRadius: y + height >= parent.height - 4 ? Math.max(Appearance.rounding.normal, Appearance.rounding.windowRounding - 4) : Appearance.rounding.normal
+        bottomRightRadius: y + height >= parent.height - 4 ? Math.max(Appearance.rounding.normal, Appearance.rounding.windowRounding - 4) : Appearance.rounding.normal
         color: Appearance.colors.colPrimary
         z: 8
         y: ghostTopY
