@@ -1,3 +1,4 @@
+import qs.services
 import qs.modules.common
 
 HyprlandTabPlaceholder {

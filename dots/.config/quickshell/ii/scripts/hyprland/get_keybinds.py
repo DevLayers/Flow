@@ -36,11 +36,17 @@ class Section(dict):
         self["name"] = name
 
 
+# X11 modifier masks, which is what Hyprland reports. ALT and CTRL used to be the wrong way
+# round here, so every bind the hyprctl fallback produced named the wrong modifier.
 MODMASKS = {
     1: "SHIFT",
-    4: "ALT",
-    8: "CTRL",
+    2: "CAPS",
+    4: "CTRL",
+    8: "ALT",
+    16: "MOD2",
+    32: "MOD3",
     64: "SUPER",
+    128: "MOD5",
 }
 
 

@@ -16,7 +16,8 @@ RippleButton {
     id: root
 
     property string buttonIcon: ""
-    property string text: ""
+    // `text` is AbstractButton's own and is FINAL, so declaring one here makes the whole type
+    // fail to load. The inherited one is used instead; the row draws it itself.
     /// Shown on the right, before the chevron. The current setting, in words.
     property string value: ""
     property url configPage: ""

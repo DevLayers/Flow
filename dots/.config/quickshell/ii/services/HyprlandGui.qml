@@ -199,7 +199,9 @@ Singleton {
         const wanted = Array.from(keys ?? root.watchedKeys).filter(key => root._validKey(key));
         if (wanted.length === 0) return;
         root._optionQueue = root._optionQueue.concat(wanted);
-        root._drainOptions();
+        // Coalesced: a page has dozens of controls and each one asks for its own key as it is
+        // created, all within the same turn. One batch for the page beats one process per row.
+        optionDebounce.restart();
     }
 
     // ------------------------------------------------------ value resolution
@@ -386,6 +388,7 @@ Singleton {
     property var _writeQueue: []
     property var _diffQueue: []
     property var _previewPending: ({})
+    property bool _optionBusy: false
     property bool _awaitingReload: false
     property bool _refreshAgain: false
 
@@ -494,16 +497,33 @@ Singleton {
 
     // Effective values ----------------------------------------------------
 
+    /**
+     * Ask hyprctl for the queued keys, in batches.
+     *
+     * The queue is emptied here rather than on completion, so the guard has to be a flag this
+     * function sets itself. Trusting `optionProc.running` instead lost whole batches: several
+     * controls watch in the same turn, the process has not reported itself as running yet, and
+     * the second call takes its own chunk off the queue and overwrites the command with it. The
+     * page then showed defaults for everything except the last control that asked.
+     */
     function _drainOptions() {
-        if (optionProc.running || root._optionQueue.length === 0) return;
-        const chunk = root._optionQueue.slice(0, 60);
-        root._optionQueue = root._optionQueue.slice(60);
+        if (root._optionBusy || root._optionQueue.length === 0) return;
+        const seen = {};
+        const queue = root._optionQueue.filter(key => {
+            if (seen[key] === true) return false;
+            seen[key] = true;
+            return true;
+        });
+        const chunk = queue.slice(0, 60);
+        root._optionQueue = queue.slice(60);
+        root._optionBusy = true;
         optionProc.command = ["hyprctl", "-j", "--batch",
             chunk.map(key => `getoption ${key}`).join(" ; ")];
         optionProc.running = true;
     }
 
     function _finishOptions() {
+        root._optionBusy = false;
         if (root._optionQueue.length > 0) {
             root._drainOptions();
             return;
@@ -684,6 +704,12 @@ Singleton {
             }
         }
         onExited: (code, status) => Qt.callLater(root._finishRead)
+    }
+
+    Timer {
+        id: optionDebounce
+        interval: 40
+        onTriggered: root._drainOptions()
     }
 
     Process {
