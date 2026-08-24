@@ -3557,6 +3557,13 @@ Singleton {
                 // dots/.config/hypr onto ~/.config/hypr (passes --hypr/--no-hypr
                 // to setup-ii-p3drovfx.sh). See AboutConfig.qml.
                 property bool replaceHyprConfig: true
+                // How often ShellUpdates probes the fork's remote for new
+                // commits: "disabled" | "hourly" | "daily" | "weekly".
+                property string autoCheckInterval: "daily"
+                // Epoch ms of the last completed automatic check. Persisted so a
+                // daily/weekly period is not restarted from zero on every shell
+                // restart. Written by ShellUpdates, not by the settings UI.
+                property real lastAutoCheck: 0
             }
 
             property JsonObject musicRecognition: JsonObject {

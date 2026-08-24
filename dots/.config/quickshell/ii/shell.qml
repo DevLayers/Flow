@@ -40,6 +40,7 @@ ShellRoot {
         Cliphist.refresh();
         Wallpapers.load();
         Updates.load();
+        ShellUpdates.load(); // Touch singleton: the fork-update probe must run whether or not Settings is open
         DarkModeService.automatic;
         ChangelogService.load();
         SoundService.indexReady; // Instantiate: scans sound themes, plays login sound if enabled

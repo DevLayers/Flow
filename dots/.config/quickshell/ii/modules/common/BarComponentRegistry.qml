@@ -162,6 +162,12 @@ Singleton {
             pageId: "devicesPhone"
         },
         {
+            id: "shell_update_indicator",
+            icon: "deployed_code_update",
+            title: "Shell update indicator",
+            pageId: "about"
+        },
+        {
             id: "mode_indicator",
             icon: "tune",
             title: "Mode indicator",
