@@ -65,17 +65,24 @@ Item {
     property bool _entranceDone: true
 
     property real currentSliderValue: root.sliderValue
+    property int _activeValueAnimDuration: 0
 
     readonly property bool _animationsDisabled: (Config.options?.appearance?.animationMultiplier ?? 1.0) <= 0.25
 
+    onSliderValueChanged: {
+        if (_entranceDone && !sliderDelayTimer.running) {
+            currentSliderValue = root.sliderValue;
+        }
+    }
+
     function resetAndAnimateSlider() {
         if (_animationsDisabled) {
-            quickSlider.valueAnimationDuration = 0;
+            _activeValueAnimDuration = 0;
             currentSliderValue = root.sliderValue;
             return;
         }
         // Step 1: Instant reset to 0 without animation
-        quickSlider.valueAnimationDuration = 0;
+        _activeValueAnimDuration = 0;
         currentSliderValue = 0;
         
         // Step 2: Set animation duration and assign final target value after entrance delay
@@ -87,7 +94,7 @@ Item {
         interval: 180 + Math.min(Math.max(root.buttonIndex, 0), 15) * 40
         repeat: false
         onTriggered: {
-            quickSlider.valueAnimationDuration = _animationsDisabled ? 0 : 650;
+            _activeValueAnimDuration = _animationsDisabled ? 0 : 650;
             currentSliderValue = root.sliderValue;
         }
     }
@@ -98,7 +105,7 @@ Item {
             _entranceOpacity = 1;
             _entranceScale = 1;
             _entranceTranslateY = 0;
-            quickSlider.valueAnimationDuration = 0;
+            _activeValueAnimDuration = 0;
             currentSliderValue = root.sliderValue;
             return;
         }
@@ -108,7 +115,7 @@ Item {
             _entranceOpacity = 1;
             _entranceScale = 1;
             _entranceTranslateY = 0;
-            quickSlider.valueAnimationDuration = 0;
+            _activeValueAnimDuration = 0;
             currentSliderValue = root.sliderValue;
             return;
         }
@@ -127,7 +134,7 @@ Item {
         _entranceOpacity = 1;
         _entranceScale = 1;
         _entranceTranslateY = 0;
-        quickSlider.valueAnimationDuration = 0;
+        _activeValueAnimDuration = 0;
         currentSliderValue = root.sliderValue;
     }
 
@@ -155,6 +162,7 @@ Item {
     // Effective sizes for live preview during resize
     readonly property int effectiveSizeW: root.catalogSize[0]
     readonly property int effectiveSizeH: root.catalogSize[1]
+    readonly property bool isVertical: root.effectiveSizeH > root.effectiveSizeW
 
     property bool hovered: hoverHandler.hovered || (root.editMode && editableItem.containsMouse)
 
@@ -218,14 +226,27 @@ Item {
             animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(visualButton)
         }
 
+        Loader {
+            id: sliderLoader
+            anchors.fill: parent
+            sourceComponent: root.isVertical ? verticalSliderComponent : horizontalSliderComponent
+        }
+
+        Component {
+            id: horizontalSliderComponent
+
             StyledSlider {
-                id: quickSlider
+                id: quickSliderHorizontal
                 anchors.fill: parent
                 configuration: StyledSlider.Configuration.M
                 stopIndicatorValues: []
                 dividerValues: root.secondaryMaterialSymbol.length > 0 ? [secondaryIcon.iconLocation] : []
+                valueAnimationDuration: root._activeValueAnimDuration
                 value: root.currentSliderValue
-                onMoved: root.moved(value)
+                onMoved: {
+                    root._activeValueAnimDuration = 0;
+                    root.moved(value);
+                }
                 
                 // To prevent flickable dragging when using slider
                 MouseArea {
@@ -236,74 +257,113 @@ Item {
                     onClicked: root.openMenu()
                 }
 
-            MaterialShapeWrappedMaterialSymbol {
-                id: icon
-                property bool nearFull: quickSlider.value >= 0.82
-                anchors {
-                    verticalCenter: quickSlider.verticalCenter
-                    right: nearFull ? quickSlider.handle.right : quickSlider.right
-                    rightMargin: nearFull ? 10 : 4
-                }
-                iconSize: 16
-                padding: 4
-                shape: MaterialShape.Shape.Cookie7Sided
-                text: root.materialSymbol
+                MaterialShapeWrappedMaterialSymbol {
+                    id: horizIcon
+                    property bool nearFull: quickSliderHorizontal.value >= 0.82
+                    anchors {
+                        verticalCenter: parent.verticalCenter
+                        right: nearFull ? quickSliderHorizontal.handle.right : parent.right
+                        rightMargin: nearFull ? 10 : 4
+                    }
+                    iconSize: 16
+                    padding: 4
+                    shape: MaterialShape.Shape.Cookie7Sided
+                    text: root.materialSymbol
 
-                rotation: quickSlider.value * 360
+                    color: {
+                        if (quickSliderHorizontal.value > 1.0) {
+                            return Appearance.colors.colErrorContainer;
+                        }
+                        return nearFull ? "transparent" : Appearance.colors.colSecondaryContainer;
+                    }
 
-                Behavior on rotation {
-                    NumberAnimation {
-                        duration: 350
-                        easing.type: Easing.OutBack
-                        easing.overshoot: 1.5
+                    colSymbol: {
+                        if (quickSliderHorizontal.value > 1.0) {
+                            return Appearance.m3colors.m3onErrorContainer;
+                        }
+                        return nearFull ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSecondaryContainer;
+                    }
+
+                    Behavior on color {
+                        animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
+                    }
+                    Behavior on colSymbol {
+                        animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
+                    }
+                    Behavior on anchors.rightMargin {
+                        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
                     }
                 }
 
-                color: {
-                    if (quickSlider.value > 1.0) {
-                        return Appearance.colors.colErrorContainer;
+                MaterialSymbol {
+                    id: secondaryIcon
+                    visible: root.secondaryMaterialSymbol.length > 0
+                    property real iconLocation: 0.3
+                    property bool nearIcon: iconLocation - quickSliderHorizontal.value <= 0.1 && iconLocation - quickSliderHorizontal.value > (quickSliderHorizontal.handleWidth + 8 - 14) / quickSliderHorizontal.effectiveDraggingWidth
+                    anchors {
+                        verticalCenter: parent.verticalCenter
+                        right: nearIcon ? quickSliderHorizontal.handle.right : parent.right
+                        rightMargin: nearIcon ? 14 : (1 - iconLocation) * quickSliderHorizontal.effectiveDraggingWidth + quickSliderHorizontal.rightPadding + 8
                     }
-                    return nearFull ? "transparent" : Appearance.colors.colSecondaryContainer;
-                }
+                    iconSize: 20
+                    color: quickSliderHorizontal.value >= iconLocation - 0.1 ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSecondaryContainer
+                    text: root.secondaryMaterialSymbol
 
-                colSymbol: {
-                    if (quickSlider.value > 1.0) {
-                        return Appearance.m3colors.m3onErrorContainer;
+                    Behavior on color {
+                        animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
                     }
-                    return nearFull ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSecondaryContainer;
-                }
-
-                Behavior on color {
-                    animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
-                }
-                Behavior on colSymbol {
-                    animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
-                }
-                Behavior on anchors.rightMargin {
-                    animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
-                }
-            }
-
-            MaterialSymbol {
-                id: secondaryIcon
-                visible: root.secondaryMaterialSymbol.length > 0
-                property real iconLocation: 0.3
-                property bool nearIcon: iconLocation - quickSlider.value <= 0.1 && iconLocation - quickSlider.value > (quickSlider.handleWidth + 8 - 14) / quickSlider.effectiveDraggingWidth
-                anchors {
-                    verticalCenter: quickSlider.verticalCenter
-                    right: nearIcon ? quickSlider.handle.right : quickSlider.right
-                    rightMargin: nearIcon ? 14 : (1 - iconLocation) * quickSlider.effectiveDraggingWidth + quickSlider.rightPadding + 8
-                }
-                iconSize: 20
-                color: quickSlider.value >= iconLocation - 0.1 ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSecondaryContainer
-                text: root.secondaryMaterialSymbol
-
-                Behavior on color {
-                    animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
                 }
             }
         }
 
+        Component {
+            id: verticalSliderComponent
+
+            StyledVerticalSlider {
+                id: quickSliderVertical
+                anchors.fill: parent
+                configuration: 48
+                showValueLabel: false
+                stopIndicatorValues: []
+                valueAnimationDuration: root._activeValueAnimDuration
+                value: root.currentSliderValue
+                onMoved: {
+                    root._activeValueAnimDuration = 0;
+                    root.moved(value);
+                }
+
+                // To prevent flickable dragging when using slider
+                MouseArea {
+                    anchors.fill: parent
+                    acceptedButtons: Qt.RightButton
+                    cursorShape: Qt.PointingHandCursor
+                    hoverEnabled: true
+                    onClicked: root.openMenu()
+                }
+
+                MaterialSymbol {
+                    id: vertIcon
+                    anchors {
+                        horizontalCenter: parent.horizontalCenter
+                        bottom: parent.bottom
+                        bottomMargin: 8
+                    }
+                    iconSize: 20
+                    text: root.materialSymbol
+
+                    color: {
+                        if (quickSliderVertical.value > 1.0) {
+                            return Appearance.m3colors.m3onErrorContainer;
+                        }
+                        return quickSliderVertical.value > 0.12 ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSecondaryContainer;
+                    }
+
+                    Behavior on color {
+                        animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
+                    }
+                }
+            }
+        }
     }
 
     EditableQuickToggleItem {
