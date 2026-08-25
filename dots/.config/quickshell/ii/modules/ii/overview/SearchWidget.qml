@@ -1543,9 +1543,7 @@ Item {
                             ? emptySearchState.implicitHeight
                             // View margins decorate actual rows; they are not
                             // content and must not grow an empty search surface.
-                            : (appResults.count === 0
-                                ? 0
-                                : Math.min(root.maxResultsHeight, appResults.contentHeight + appResults.topMargin + appResults.bottomMargin))))
+                            : appResults.measuredContentExtent))
 
                 Behavior on opacity {
                     NumberAnimation {
@@ -1584,6 +1582,29 @@ Item {
                     bottomMargin: (GlobalStates.searchConnectActive ? 12 : root.rowSideMargin)
                         + (root.actionFeedbackText.length > 0 ? actionFeedbackBar.height + Appearance.sizes.elevationMargin / 2 : 0)
                     spacing: 2
+                    // contentHeight is calculated by a view whose viewport is
+                    // this surface's height. Binding the surface straight back
+                    // to it creates a circular dependency in Qt. Snapshot the
+                    // extent only when the view reports a real content change.
+                    property real measuredContentExtent: 0
+                    function updateMeasuredContentExtent() {
+                        const nextExtent = appResults.count === 0 || appResults.contentHeight <= 0
+                            ? 0
+                            : Math.min(root.maxResultsHeight,
+                                appResults.contentHeight + appResults.topMargin + appResults.bottomMargin);
+                        if (Math.abs(appResults.measuredContentExtent - nextExtent) > 0.5)
+                            appResults.measuredContentExtent = nextExtent;
+                    }
+                    Timer {
+                        id: resultsExtentSyncTimer
+                        interval: 0
+                        repeat: false
+                        onTriggered: appResults.updateMeasuredContentExtent()
+                    }
+                    onContentHeightChanged: resultsExtentSyncTimer.restart()
+                    onCountChanged: resultsExtentSyncTimer.restart()
+                    onTopMarginChanged: resultsExtentSyncTimer.restart()
+                    onBottomMarginChanged: resultsExtentSyncTimer.restart()
                     KeyNavigation.up: searchBar
                     highlightMoveDuration: 100
                     // The cascade is a reveal gesture for a list that just appeared.

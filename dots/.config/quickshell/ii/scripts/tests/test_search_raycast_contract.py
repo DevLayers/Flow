@@ -573,6 +573,14 @@ class SearchRaycastContractTests(unittest.TestCase):
         # ListView margins are viewport decoration, not content. When the model
         # is empty they must not create a results surface of their own.
         self.assertIn("appResults.count === 0", widget)
+        results_surface_height = widget.split("id: appResultsSurface", 1)[1].split(
+            "Behavior on opacity", 1
+        )[0]
+        self.assertIn("appResults.measuredContentExtent", results_surface_height)
+        self.assertNotIn("appResults.contentHeight", results_surface_height)
+        self.assertIn("function updateMeasuredContentExtent()", widget)
+        self.assertIn("id: resultsExtentSyncTimer", widget)
+        self.assertIn("onContentHeightChanged: resultsExtentSyncTimer.restart()", widget)
         # Opening clears the local ListModel. An already-running MPRIS player
         # must hydrate it again; otherwise resultsActive reserves only the
         # ListView's bottom margin and the collapsed pill grows by 10px.
