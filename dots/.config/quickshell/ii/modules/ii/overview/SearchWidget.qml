@@ -819,7 +819,7 @@ Item {
         { id: "apps", label: Translation.tr("Apps"), icon: "apps", sections: ["apps"] },
         { id: "controls", label: Translation.tr("Controls"), icon: "tune", sections: ["controls"] },
         { id: "tools", label: Translation.tr("Tools"), icon: "widgets", sections: ["tools", "actions"] },
-        { id: "content", label: Translation.tr("Content"), icon: "article", sections: ["content", "files", "sites"] },
+        { id: "content", label: Translation.tr("Content"), icon: "article", sections: ["content", "files", "siteTabs", "siteFavorites", "siteSuggestions"] },
         { id: "media", label: Translation.tr("Media"), icon: "music_note", sections: ["media"] },
         { id: "settings", label: Translation.tr("Settings"), icon: "settings", sections: ["settings"] },
         { id: "other", label: Translation.tr("Other"), icon: "more_horiz", sections: ["other"] }
@@ -897,8 +897,11 @@ Item {
             return "continue";
         if (key.startsWith("app:") || item?.type === Translation.tr("App Alias"))
             return "apps";
-        if (key.startsWith("site:"))
-            return "sites";
+        if (key.startsWith("site:")) {
+            if (item?.siteSource === "open")
+                return "siteTabs";
+            return item?.siteSource === "favorite" ? "siteFavorites" : "siteSuggestions";
+        }
         // The idle now-playing bubble is the only media row, and it used to land
         // in "More results" — a caption that says nothing about it.
         if (key.startsWith("mpris:"))
