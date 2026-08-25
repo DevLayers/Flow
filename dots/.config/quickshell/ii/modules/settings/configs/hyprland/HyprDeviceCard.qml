@@ -43,10 +43,40 @@ ContentSubsection {
         HyprlandGui.setDevice(card.deviceName, next);
     }
 
+    /**
+     * The global setting each field falls back to.
+     *
+     * A device override only covers what it names; everything else follows the global input
+     * settings. Showing a constant instead meant the card opened claiming a repeat rate the
+     * keyboard did not have, and the first thing you touched wrote that constant in for all
+     * the fields you had not looked at.
+     */
+    readonly property var globalFor: {
+        const pointerScroll = HyprlandDevices.isTouchpad(card.device)
+            ? "input:touchpad:natural_scroll" : "input:natural_scroll";
+        return {
+            "sensitivity": "input:sensitivity",
+            "accel_profile": "input:accel_profile",
+            "natural_scroll": pointerScroll,
+            "left_handed": "input:left_handed",
+            "kb_layout": "input:kb_layout",
+            "kb_variant": "input:kb_variant",
+            "repeat_rate": "input:repeat_rate",
+            "repeat_delay": "input:repeat_delay"
+        };
+    }
+
     function setting(key: string, fallback: var): var {
         const spec = card.spec;
-        return spec && spec[key] !== undefined ? spec[key] : fallback;
+        if (spec && spec[key] !== undefined) return spec[key];
+        const global = card.globalFor[key];
+        if (global === undefined) return fallback;
+        const value = HyprlandGui.displayValue(global, undefined);
+        return value === undefined ? fallback : value;
     }
+
+    Component.onCompleted: HyprlandGui.watch(
+        Object.keys(card.globalFor).map(key => card.globalFor[key]))
 
     HyprToggle {
         buttonIcon: "tune"
