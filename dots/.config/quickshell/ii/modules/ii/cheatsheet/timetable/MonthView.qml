@@ -67,7 +67,6 @@ Item {
     readonly property date viewAnchorDate: new Date(root.viewYear, root.viewMonth, 1)
 
     signal weekViewRequested
-    signal importsRequested
 
     function filteredEvents(events) {
         if (!root.categoryFilter)
@@ -702,7 +701,7 @@ Item {
                     colBackground: Appearance.colors.colLayer2
                     colBackgroundHover: Appearance.colors.colLayer2Hover
                     colBackgroundActive: Appearance.colors.colLayer2Active
-                    onClicked: root.importsRequested()
+                    onClicked: eventSidebar.showSources()
 
                     contentItem: MaterialSymbol {
                         anchors.centerIn: parent

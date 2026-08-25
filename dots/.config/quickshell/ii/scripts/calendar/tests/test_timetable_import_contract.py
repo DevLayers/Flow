@@ -18,19 +18,19 @@ class TimetableImportContractTests(unittest.TestCase):
         host = (ROOT / "modules" / "ii" / "cheatsheet" / "CheatsheetTimetable.qml").read_text(encoding="utf-8")
         week = (TIMETABLE / "WeekView.qml").read_text(encoding="utf-8")
         month = (TIMETABLE / "MonthView.qml").read_text(encoding="utf-8")
-        panel = (TIMETABLE / "TimetableImportPanel.qml").read_text(encoding="utf-8")
+        sidebar = (TIMETABLE / "EventSidebar.qml").read_text(encoding="utf-8")
 
         self.assertIn("property bool enable: false", config)
         self.assertIn("property JsonObject imports: JsonObject", config)
         self.assertIn("readonly property bool importsEnabled", subscriptions)
         self.assertIn("effectiveSubscriptionUrls", subscriptions)
-        self.assertIn("TimetableImportPanel", host)
-        self.assertIn("signal importsRequested", week)
-        self.assertIn("signal importsRequested", month)
-        self.assertIn("onImportsRequested: importPanel.open()", host)
-        self.assertIn("FileDialog", panel)
-        self.assertIn("CalendarService.importFromIcs", panel)
-        self.assertIn("CalendarSubscriptions.addSubscription", panel)
+        self.assertNotIn("TimetableImportPanel", host)
+        self.assertIn("eventSidebar.showSources()", week)
+        self.assertIn("eventSidebar.showSources()", month)
+        self.assertIn('root.setMode("sources")', sidebar)
+        self.assertIn("FileDialog", sidebar)
+        self.assertIn("CalendarService.importFromIcs", sidebar)
+        self.assertIn("CalendarSubscriptions.addSubscription", sidebar)
 
 
 if __name__ == "__main__":

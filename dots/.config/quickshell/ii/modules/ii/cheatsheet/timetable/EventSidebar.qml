@@ -3,6 +3,7 @@ import qs.modules.common.widgets
 import qs.modules.common.functions
 import qs.services
 import QtQuick
+import QtQuick.Dialogs
 import QtQuick.Layouts
 import Quickshell
 import "TimetableHelpers.js" as H
@@ -23,7 +24,7 @@ import "TimetableHelpers.js" as H
 Item {
     id: root
 
-    /** "" (closed) | "day" | "details" | "edit" | "create" */
+    /** "" (closed) | "day" | "details" | "edit" | "create" | "sources" */
     property string mode: ""
     property var event: null
     property date day: new Date()
@@ -68,6 +69,9 @@ Item {
         && GoogleCalendarService.knowsEvent(root.event?.uid ?? "")
     readonly property string googleColorId: GoogleCalendarService.colorIdForUid(root.event?.uid ?? "")
     property bool showCalendarSelector: false
+    property string sourceUrlDraft: ""
+    property string sourcesStatusText: ""
+    readonly property bool calendarSourcesEnabled: Config.options.calendar.timetable.imports.enable
 
     readonly property bool rangeValid: root.formAllDay || root.formEndMinutes > root.formStartMinutes
     readonly property bool canSave: root.formTitle.trim().length > 0 && root.rangeValid
@@ -99,6 +103,40 @@ Item {
 
     function showSportsDay(date) {
         root.showDay(date);
+    }
+
+    function showSources() {
+        if (root.sportsEvent)
+            SportsService.clearFocusedGame(root.event?.id);
+        root.event = null;
+        root.sourcesStatusText = "";
+        root.setMode("sources");
+    }
+
+    function importSourceFile(path) {
+        if (!root.calendarSourcesEnabled)
+            return;
+        root.sourcesStatusText = Translation.tr("Importing calendar…");
+        CalendarService.importFromIcs(path, false, "", reply => {
+            if (!reply?.ok) {
+                root.sourcesStatusText = String(reply?.error ?? Translation.tr("Could not import the calendar."));
+                return;
+            }
+            const imported = Number(reply.imported ?? 0);
+            const skipped = Number(reply.skipped ?? 0);
+            root.sourcesStatusText = skipped > 0
+                ? Translation.tr("Imported %1 event(s), skipped %2 duplicate(s).").arg(String(imported)).arg(String(skipped))
+                : Translation.tr("Imported %1 event(s).").arg(String(imported));
+        });
+    }
+
+    function addSourceSubscription() {
+        if (!root.calendarSourcesEnabled)
+            return;
+        if (CalendarSubscriptions.addSubscription(root.sourceUrlDraft)) {
+            root.sourceUrlDraft = "";
+            sourceSubscriptionInput.textField.clear();
+        }
     }
 
     function showEvent(eventData) {
@@ -550,6 +588,8 @@ Item {
             if (root.pendingAction === "move") return Translation.tr("Move recurring event");
             if (root.pendingAction === "resize") return Translation.tr("Resize recurring event");
             return Translation.tr("Edit recurring event");
+        case "sources":
+            return Translation.tr("Calendar sources");
         default:
             return root.sportsListOnly ? Translation.tr("Sports") : Qt.formatDate(root.day, "MMMM yyyy");
         }
@@ -1029,6 +1069,162 @@ Item {
                             label: Translation.tr("New task")
                             symbol: "add_task"
                             onTriggered: root.startCreateTask(root.day)
+                        }
+                    }
+                }
+
+                // ══ Calendar sources ══
+                Item {
+                    anchors.fill: parent
+                    visible: root.mode === "sources"
+
+                    StyledFlickable {
+                        anchors.fill: parent
+                        clip: true
+                        contentWidth: width
+                        contentHeight: sourcesColumn.implicitHeight
+
+                        ColumnLayout {
+                            id: sourcesColumn
+                            width: parent.width
+                            spacing: 12
+
+                            StyledText {
+                                Layout.fillWidth: true
+                                text: Translation.tr("Import local files or add read-only ICS links.")
+                                font.pixelSize: Appearance.font.pixelSize.small
+                                color: Appearance.colors.colOnSurfaceVariant
+                                wrapMode: Text.Wrap
+                            }
+
+                            ConfigSwitch {
+                                Layout.fillWidth: true
+                                buttonIcon: "calendar_add_on"
+                                text: Translation.tr("Enable calendar sources")
+                                checked: Config.options.calendar.timetable.imports.enable
+                                onCheckedChanged: Config.options.calendar.timetable.imports.enable = checked
+                            }
+
+                            StyledText {
+                                Layout.fillWidth: true
+                                text: Translation.tr("When disabled, saved links are disconnected and local imports cannot modify your calendar.")
+                                font.pixelSize: Appearance.font.pixelSize.small
+                                color: Appearance.colors.colOnSurfaceVariant
+                                opacity: root.calendarSourcesEnabled ? 1 : 0.7
+                                wrapMode: Text.Wrap
+                            }
+
+                            RippleButtonWithIcon {
+                                Layout.fillWidth: true
+                                implicitHeight: 44
+                                centerContent: true
+                                materialIcon: "upload_file"
+                                mainText: Translation.tr("Import ICS file")
+                                enabled: root.calendarSourcesEnabled && CalendarService.khalAvailable
+                                colText: Appearance.colors.colOnPrimaryContainer
+                                colBackground: Appearance.colors.colPrimaryContainer
+                                colBackgroundHover: Appearance.colors.colPrimaryContainerHover
+                                colRipple: Appearance.colors.colPrimaryContainerActive
+                                onClicked: sourceIcsFileDialog.open()
+                            }
+
+                            ConfigTextField {
+                                id: sourceSubscriptionInput
+                                Layout.fillWidth: true
+                                enabled: root.calendarSourcesEnabled
+                                icon: "link"
+                                text: Translation.tr("Calendar ICS URL")
+                                placeholderText: "https://…/calendar.ics"
+                                inputText: root.sourceUrlDraft
+                                textField.onTextChanged: root.sourceUrlDraft = textField.text
+                                textField.onAccepted: root.addSourceSubscription()
+                            }
+
+                            RippleButtonWithIcon {
+                                Layout.alignment: Qt.AlignRight
+                                implicitHeight: 40
+                                centerContent: true
+                                materialIcon: "add"
+                                mainText: Translation.tr("Add URL")
+                                enabled: root.calendarSourcesEnabled && !CalendarSubscriptions.applying && root.sourceUrlDraft.trim().length > 0
+                                colText: Appearance.colors.colOnPrimaryContainer
+                                colBackground: Appearance.colors.colPrimaryContainer
+                                colBackgroundHover: Appearance.colors.colPrimaryContainerHover
+                                colRipple: Appearance.colors.colPrimaryContainerActive
+                                onClicked: root.addSourceSubscription()
+                            }
+
+                            StyledText {
+                                Layout.fillWidth: true
+                                visible: root.sourcesStatusText.length > 0 || CalendarSubscriptions.lastError.length > 0
+                                text: CalendarSubscriptions.lastError.length > 0 ? CalendarSubscriptions.lastError : root.sourcesStatusText
+                                font.pixelSize: Appearance.font.pixelSize.small
+                                color: CalendarSubscriptions.lastError.length > 0 ? Appearance.colors.colError : Appearance.colors.colOnSurfaceVariant
+                                wrapMode: Text.Wrap
+                            }
+
+                            StyledText {
+                                Layout.fillWidth: true
+                                text: CalendarSubscriptions.applying
+                                    ? Translation.tr("Updating calendar configuration…")
+                                    : (CalendarSubscriptions.syncInProgress
+                                        ? Translation.tr("Synchronizing subscribed calendars…")
+                                        : Translation.tr("Links are always read-only."))
+                                font.pixelSize: Appearance.font.pixelSize.small
+                                color: Appearance.colors.colOnSurfaceVariant
+                                wrapMode: Text.Wrap
+                            }
+
+                            Repeater {
+                                model: Config.options.calendar.timetable.subscriptions
+
+                                delegate: Rectangle {
+                                    required property string modelData
+                                    Layout.fillWidth: true
+                                    implicitHeight: 44
+                                    radius: Appearance.rounding.normal
+                                    color: Appearance.colors.colLayer2
+
+                                    RowLayout {
+                                        anchors.fill: parent
+                                        anchors.leftMargin: 12
+                                        anchors.rightMargin: 6
+                                        spacing: 8
+
+                                        MaterialSymbol {
+                                            text: "cloud_download"
+                                            iconSize: Appearance.font.pixelSize.large
+                                            color: Appearance.colors.colPrimary
+                                        }
+
+                                        StyledText {
+                                            Layout.fillWidth: true
+                                            text: modelData
+                                            elide: Text.ElideMiddle
+                                            maximumLineCount: 1
+                                            font.pixelSize: Appearance.font.pixelSize.small
+                                            color: Appearance.colors.colOnLayer2
+                                        }
+
+                                        RippleButton {
+                                            id: removeSourceSubscriptionButton
+                                            implicitWidth: 36
+                                            implicitHeight: 36
+                                            buttonRadius: Appearance.rounding.full
+                                            colBackground: "transparent"
+                                            colBackgroundHover: Appearance.colors.colErrorContainer
+                                            onClicked: CalendarSubscriptions.removeSubscription(modelData)
+
+                                            contentItem: MaterialSymbol {
+                                                anchors.centerIn: parent
+                                                text: "close"
+                                                iconSize: Appearance.font.pixelSize.normal
+                                                color: removeSourceSubscriptionButton.hovered ? Appearance.colors.colOnErrorContainer : Appearance.colors.colOnLayer2
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -1891,6 +2087,15 @@ Item {
                     root.formCalendar = String(result);
             }
         }
+    }
+
+    FileDialog {
+        id: sourceIcsFileDialog
+        title: Translation.tr("Choose an ICS calendar file")
+        currentFolder: "file://" + Quickshell.env("HOME")
+        fileMode: FileDialog.OpenFile
+        nameFilters: [Translation.tr("Calendar files (*.ics *.ical)"), Translation.tr("All files (*)")]
+        onAccepted: root.importSourceFile(decodeURIComponent(selectedFile.toString().replace(/^file:\/\//, "")))
     }
 
     // ─── Local pieces ───

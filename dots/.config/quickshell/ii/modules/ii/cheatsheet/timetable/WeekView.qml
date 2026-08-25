@@ -16,7 +16,6 @@ Item {
     property string viewMode: "week"
 
     readonly property bool eventPopupVisible: eventSidebar.open
-    signal importsRequested
 
     property int startHour: 0
     property int startMinute: 0
@@ -905,7 +904,7 @@ Item {
                 colBackground: Appearance.colors.colLayer2
                 colBackgroundHover: Appearance.colors.colLayer2Hover
                 colBackgroundActive: Appearance.colors.colLayer2Active
-                onClicked: root.importsRequested()
+                onClicked: eventSidebar.showSources()
 
                 contentItem: MaterialSymbol {
                     anchors.centerIn: parent

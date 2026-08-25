@@ -239,7 +239,6 @@ Item {
                 maxContentWidth: root.maxContentWidth
                 sportsEnabled: root.sportsReady
                 viewMode: root.activeMode
-                onImportsRequested: importPanel.open()
             }
         }
 
@@ -252,13 +251,7 @@ Item {
             sourceComponent: MonthView {
                 showUpcoming: Persistent.states.cheatsheet.timetableShowUpcoming
                 sportsEnabled: root.sportsReady
-                onImportsRequested: importPanel.open()
             }
         }
-    }
-
-    TimetableImportPanel {
-        id: importPanel
-        anchors.fill: parent
     }
 }
