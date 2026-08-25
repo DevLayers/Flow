@@ -9,8 +9,12 @@ import qs.modules.common.widgets
 import qs.modules.settings.configs.network
 
 /**
- * Bluetooth tab of the Network page: the radio, the pairing conversation, and
- * every device the adapter knows about or can currently see.
+ * Bluetooth tab of the Network page: the radio and every device the adapter
+ * knows about or can currently see.
+ *
+ * Pairing questions are never asked here. They arrive whether or not this page
+ * is open, so they are always put to the user in the shell-wide prompt instead
+ * of appearing halfway down a settings page they may not be looking at.
  *
  * Scanning runs only while this tab is on screen. Discovery keeps the radio
  * busy and drains battery, so it starts when the tab loads and stops when it
@@ -20,21 +24,8 @@ ContentPage {
     id: root
     forceWidth: false
 
-    readonly property var pairingRequest: BluetoothAgent.request
-    readonly property var pairingDisplay: BluetoothAgent.display
-    readonly property bool showPairing: root.pairingRequest !== null || root.pairingDisplay !== null
-
-    // Wording and formatting live on the agent because the shell-wide prompt
-    // asks the same questions with the same words when this page is not open.
-    Component.onCompleted: {
-        BluetoothStatus.startDiscovery();
-        BluetoothAgent.claimInline();
-    }
-
-    Component.onDestruction: {
-        BluetoothStatus.stopDiscovery();
-        BluetoothAgent.releaseInline();
-    }
+    Component.onCompleted: BluetoothStatus.startDiscovery()
+    Component.onDestruction: BluetoothStatus.stopDiscovery()
 
     // The adapter may still have been powering on when the tab appeared, in
     // which case the scan above was refused and has to be started again.
@@ -94,14 +85,14 @@ ContentPage {
             Layout.fillWidth: true
             visible: BluetoothStatus.available && BluetoothAgent.lastError.length > 0
             materialIcon: "key_off"
-            text: Translation.tr("The pairing helper could not start, so devices that ask for a code cannot be paired here. %1").arg(BluetoothAgent.lastError)
+            text: Translation.tr("The pairing helper could not start, so devices that ask for a code cannot be paired from here. %1").arg(BluetoothAgent.lastError)
         }
 
         NoticeBox {
             Layout.fillWidth: true
             visible: BluetoothAgent.ready && !BluetoothAgent.isDefaultAgent
             materialIcon: "info"
-            text: Translation.tr("Another program is already handling pairing requests. Codes may be asked for there instead of here.")
+            text: Translation.tr("Another program is already handling pairing requests. Codes may be asked for there instead of by the shell.")
         }
 
         ConfigSwitch {
@@ -148,138 +139,6 @@ ContentPage {
         InfoRow {
             label: Translation.tr("Hardware address")
             value: BluetoothStatus.adapterAddress
-        }
-    }
-
-    ContentSection {
-        icon: "key"
-        title: Translation.tr("Pairing")
-        visible: root.showPairing
-
-        ColumnLayout {
-            Layout.fillWidth: true
-            visible: root.pairingRequest !== null
-            spacing: 8
-
-            StyledText {
-                Layout.fillWidth: true
-                wrapMode: Text.Wrap
-                text: BluetoothAgent.requestTitle(root.pairingRequest)
-                font.pixelSize: Appearance.font.pixelSize.normal
-                font.weight: Font.DemiBold
-                color: Appearance.colors.colOnLayer1
-            }
-
-            StyledText {
-                Layout.fillWidth: true
-                visible: (root.pairingRequest?.address ?? "").length > 0
-                text: root.pairingRequest?.address ?? ""
-                font.pixelSize: Appearance.font.pixelSize.smaller
-                color: Appearance.colors.colSubtext
-            }
-
-            StyledText {
-                Layout.fillWidth: true
-                visible: root.pairingRequest?.type === "confirm"
-                horizontalAlignment: Text.AlignHCenter
-                text: BluetoothAgent.formatPasskey(root.pairingRequest?.passkey)
-                font.pixelSize: Appearance.font.pixelSize.huge
-                font.weight: Font.Bold
-                font.family: Appearance.font.family.monospace
-                color: Appearance.colors.colPrimary
-            }
-
-            StyledText {
-                Layout.fillWidth: true
-                visible: (root.pairingRequest?.uuid ?? "").length > 0
-                wrapMode: Text.Wrap
-                text: Translation.tr("Service %1").arg(root.pairingRequest?.uuid ?? "")
-                font.pixelSize: Appearance.font.pixelSize.smaller
-                color: Appearance.colors.colSubtext
-            }
-
-            MaterialTextField {
-                id: secretField
-                Layout.fillWidth: true
-                visible: BluetoothAgent.needsValue
-                placeholderText: root.pairingRequest?.type === "pincode"
-                    ? Translation.tr("PIN") : Translation.tr("Passkey")
-                onAccepted: BluetoothAgent.accept(secretField.text)
-            }
-
-            RowLayout {
-                Layout.fillWidth: true
-                spacing: 8
-
-                RippleButtonWithIcon {
-                    materialIcon: "check"
-                    mainText: BluetoothAgent.needsValue ? Translation.tr("Send")
-                        : Translation.tr("Accept")
-                    colBackground: Appearance.colors.colPrimary
-                    colText: Appearance.colors.colOnPrimary
-                    onClicked: {
-                        if (BluetoothAgent.needsValue)
-                            BluetoothAgent.accept(secretField.text);
-                        else
-                            BluetoothAgent.accept();
-                        secretField.text = "";
-                    }
-                }
-
-                RippleButtonWithIcon {
-                    materialIcon: "close"
-                    mainText: Translation.tr("Reject")
-                    onClicked: {
-                        BluetoothAgent.reject();
-                        secretField.text = "";
-                    }
-                }
-
-                Item {
-                    Layout.fillWidth: true
-                }
-            }
-        }
-
-        ColumnLayout {
-            Layout.fillWidth: true
-            visible: root.pairingDisplay !== null
-            spacing: 8
-
-            StyledText {
-                Layout.fillWidth: true
-                wrapMode: Text.Wrap
-                text: Translation.tr("Enter this code on %1").arg(BluetoothAgent.requestName(root.pairingDisplay))
-                font.pixelSize: Appearance.font.pixelSize.normal
-                font.weight: Font.DemiBold
-                color: Appearance.colors.colOnLayer1
-            }
-
-            StyledText {
-                Layout.fillWidth: true
-                horizontalAlignment: Text.AlignHCenter
-                text: root.pairingDisplay?.type === "pincode" ? (root.pairingDisplay?.pin ?? "")
-                    : BluetoothAgent.formatPasskey(root.pairingDisplay?.passkey)
-                font.pixelSize: Appearance.font.pixelSize.huge
-                font.weight: Font.Bold
-                font.family: Appearance.font.family.monospace
-                color: Appearance.colors.colPrimary
-            }
-
-            RowLayout {
-                Layout.fillWidth: true
-                spacing: 8
-
-                RippleButtonWithIcon {
-                    materialIcon: "done"
-                    mainText: Translation.tr("Dismiss")
-                    onClicked: BluetoothAgent.dismissDisplay()
-                }
-
-                Item {
-                    Layout.fillWidth: true
-                }
-            }
         }
     }
 

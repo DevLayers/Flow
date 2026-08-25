@@ -10,13 +10,13 @@ import Quickshell.Wayland
 import Quickshell.Hyprland
 
 /**
- * The pairing prompt for every pairing that does not start on the settings page.
+ * The pairing prompt, for every pairing, wherever it started.
  *
  * BlueZ asks its registered agent, not whichever window happens to be open, so a
  * pairing begun from the sidebar, from `bluetoothctl`, or by the other device
- * reaching out first has nowhere to answer without this. The Bluetooth tab in
- * settings answers in place while it is on screen and says so on the agent, and
- * this stays out of its way for as long as that holds.
+ * reaching out first has nowhere to answer without this. It is the only place
+ * the question is ever put: a prompt that only sometimes appears is one the user
+ * has to go looking for.
  *
  * Nothing is shown over a locked session: the lock surface draws above every
  * layer shell, so the card would be invisible while still taking keyboard focus.
@@ -25,9 +25,8 @@ import Quickshell.Hyprland
 Scope {
     id: root
 
-    readonly property bool answeredInSettings: BluetoothAgent.handledInline && GlobalStates.settingsOpen
     readonly property bool shouldShow: (BluetoothAgent.hasRequest || BluetoothAgent.display !== null)
-        && !root.answeredInSettings && !GlobalStates.screenLocked
+        && !GlobalStates.screenLocked
 
     // The card animates out, so the window has to outlive the answer by the
     // length of that animation or the whole thing vanishes mid-fade.

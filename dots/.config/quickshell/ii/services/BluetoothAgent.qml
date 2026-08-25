@@ -46,21 +46,6 @@ Singleton {
     readonly property bool needsValue: root.hasRequest
         && root.typedRequestKinds.indexOf(root.request.type) !== -1
 
-    /** How many surfaces are already showing this conversation in place. */
-    property int inlineHosts: 0
-    readonly property bool handledInline: root.inlineHosts > 0
-
-    // The Bluetooth settings tab answers a request where it stands, and says so
-    // here, so the shell-wide prompt does not stack a second copy of the same
-    // question on top of the page the user is already reading it on.
-    function claimInline(): void {
-        root.inlineHosts += 1;
-    }
-
-    function releaseInline(): void {
-        root.inlineHosts = Math.max(0, root.inlineHosts - 1);
-    }
-
     // A passkey is six digits and is compared against another screen, so the
     // leading zeros BlueZ drops on the way through an integer have to come back.
     function formatPasskey(value): string {
