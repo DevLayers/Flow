@@ -75,6 +75,7 @@ Item {
     readonly property bool calendarSourcesEnabled: Config.options.calendar.timetable.imports.enable
     readonly property bool gmailIcsEnabled: Config.options.calendar.timetable.imports.gmailIcs.enable
     readonly property bool outlookEnabled: Config.options.calendar.timetable.imports.outlook.enable
+    readonly property bool outlookIcsEnabled: Config.options.calendar.timetable.imports.outlook.icsAttachments.enable
 
     readonly property bool rangeValid: root.formAllDay || root.formEndMinutes > root.formStartMinutes
     readonly property bool canSave: root.formTitle.trim().length > 0 && root.rangeValid
@@ -1351,6 +1352,50 @@ Item {
                                 color: OutlookService.lastError.length > 0 || OutlookCalendarImport.lastError.length > 0
                                     ? Appearance.colors.colError
                                     : Appearance.colors.colOnSurfaceVariant
+                                wrapMode: Text.Wrap
+                            }
+
+                            ConfigSwitch {
+                                Layout.fillWidth: true
+                                visible: root.outlookEnabled
+                                enabled: root.calendarSourcesEnabled
+                                buttonIcon: "attach_email"
+                                text: Translation.tr("Import ICS attachments from Outlook")
+                                checked: Config.options.calendar.timetable.imports.outlook.icsAttachments.enable
+                                onCheckedChanged: Config.options.calendar.timetable.imports.outlook.icsAttachments.enable = checked
+                            }
+
+                            StyledText {
+                                Layout.fillWidth: true
+                                visible: root.outlookEnabled
+                                text: Translation.tr("Checks only bounded .ics and calendar attachments in the connected Outlook mailbox, then remembers each successful import.")
+                                font.pixelSize: Appearance.font.pixelSize.small
+                                color: Appearance.colors.colOnSurfaceVariant
+                                opacity: root.outlookIcsEnabled ? 1 : 0.7
+                                wrapMode: Text.Wrap
+                            }
+
+                            RippleButtonWithIcon {
+                                Layout.alignment: Qt.AlignRight
+                                implicitHeight: 40
+                                visible: root.outlookEnabled && OutlookService.authenticated
+                                centerContent: true
+                                materialIcon: OutlookIcsImport.scanning ? "sync" : "refresh"
+                                mainText: OutlookIcsImport.scanning ? Translation.tr("Checking Outlook…") : Translation.tr("Check Outlook attachments")
+                                enabled: root.calendarSourcesEnabled && root.outlookIcsEnabled && !OutlookIcsImport.scanning
+                                colText: Appearance.colors.colOnSecondaryContainer
+                                colBackground: Appearance.colors.colSecondaryContainer
+                                colBackgroundHover: Appearance.colors.colSecondaryContainerHover
+                                colRipple: Appearance.colors.colSecondaryContainerActive
+                                onClicked: OutlookIcsImport.scanNow()
+                            }
+
+                            StyledText {
+                                Layout.fillWidth: true
+                                visible: root.outlookEnabled && (OutlookIcsImport.lastStatus.length > 0 || OutlookIcsImport.lastError.length > 0)
+                                text: OutlookIcsImport.lastError.length > 0 ? OutlookIcsImport.lastError : OutlookIcsImport.lastStatus
+                                font.pixelSize: Appearance.font.pixelSize.small
+                                color: OutlookIcsImport.lastError.length > 0 ? Appearance.colors.colError : Appearance.colors.colOnSurfaceVariant
                                 wrapMode: Text.Wrap
                             }
 

@@ -15,6 +15,8 @@ class OutlookTimetableContractTests(unittest.TestCase):
         config = (ROOT / "modules/common/Config.qml").read_text(encoding="utf-8")
         subscriptions = (ROOT / "services/CalendarSubscriptions.qml").read_text(encoding="utf-8")
         service = (ROOT / "services/OutlookCalendarImport.qml").read_text(encoding="utf-8")
+        attachment_service = (ROOT / "services/OutlookIcsImport.qml").read_text(encoding="utf-8")
+        persistent = (ROOT / "modules/common/Persistent.qml").read_text(encoding="utf-8")
         sidebar = (ROOT / "modules/ii/cheatsheet/timetable/EventSidebar.qml").read_text(encoding="utf-8")
         shell = (ROOT / "shell.qml").read_text(encoding="utf-8")
 
@@ -27,7 +29,14 @@ class OutlookTimetableContractTests(unittest.TestCase):
         self.assertIn("CalendarService.loadCalendarList()", service)
         self.assertIn('text: Translation.tr("Sync Outlook calendar")', sidebar)
         self.assertIn("OutlookCalendarImport.syncNow()", sidebar)
+        self.assertIn("property JsonObject icsAttachments: JsonObject", config)
+        self.assertIn("property bool enable: false", config)
+        self.assertIn("timetableOutlookIcsImports", persistent)
+        self.assertIn("CalendarService.importIcsBase64", attachment_service)
+        self.assertIn("Import ICS attachments from Outlook", sidebar)
+        self.assertIn("OutlookIcsImport.scanNow()", sidebar)
         self.assertIn("OutlookCalendarImport.enabled", shell)
+        self.assertIn("OutlookIcsImport.enabled", shell)
 
 
 if __name__ == "__main__":

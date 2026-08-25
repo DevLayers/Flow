@@ -3166,6 +3166,13 @@ Singleton {
                             // registered as a local read-only khal collection.
                             property bool enable: false
                             property int syncIntervalMinutes: 60
+                            property JsonObject icsAttachments: JsonObject {
+                                // Mail.Read is used only to locate bounded
+                                // .ics/text-calendar files, never mail bodies.
+                                property bool enable: false
+                                property int maxMessages: 25
+                                property int scanIntervalMinutes: 60
+                            }
                         }
                     }
                     // ESPN games stay outside khal and are displayed only when

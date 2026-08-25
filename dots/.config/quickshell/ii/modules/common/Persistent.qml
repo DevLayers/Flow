@@ -327,6 +327,9 @@ Singleton {
                 // Gmail account + attachment identity for calendar files the
                 // user opted into importing. Keeps periodic scans idempotent.
                 property list<string> timetableGmailIcsImports: []
+                // The Outlook equivalent. Each entry includes the account,
+                // message attachment identity and a content digest.
+                property list<string> timetableOutlookIcsImports: []
             }
 
             property JsonObject clipboard: JsonObject {

@@ -50,6 +50,7 @@ ShellRoot {
         CalendarSubscriptions.enabled; // Touch singleton: keeps managed read-only ICS subscriptions reconciled
         GmailCalendarImport.enabled; // Touch singleton: imports opted-in Gmail ICS attachments idempotently
         OutlookCalendarImport.enabled; // Touch singleton: mirrors opted-in Outlook events into a read-only calendar
+        OutlookIcsImport.enabled; // Touch singleton: imports opted-in Outlook ICS attachments idempotently
         BirthdaysService.enabled; // Touch singleton: projects contact birthdays into timetable items
         GoogleDriveService.configured; // Touch singleton: keeps scheduled backups independent of Settings
         AppStats.stateDir; // Instantiate: starts the usage sampler, which must collect whether or not the overlay is open
