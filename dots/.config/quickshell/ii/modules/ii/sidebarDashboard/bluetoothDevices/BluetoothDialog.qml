@@ -441,7 +441,7 @@ WindowDialog {
                 Behavior on color { ColorAnimation { duration: 150 } }
             }
             onClicked: {
-                Quickshell.execDetached(["bash", "-c", `${Config.options.apps.bluetooth}`]);
+                GlobalStates.openSettingsPage("network", "", "Bluetooth");
                 root.detailsRequested();
                 if (root.closeOwningSidebarOnDetails)
                     GlobalStates.sidebarRightOpen = false;
