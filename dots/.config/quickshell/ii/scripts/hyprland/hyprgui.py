@@ -935,14 +935,15 @@ def write_atomic(path, lines):
 # Commands
 # ---------------------------------------------------------------------------
 
-def cmd_read(args):
-    path = os.path.realpath(os.path.expanduser(args.file))
+def read_one(path, want_unmanaged=True):
+    """Everything the GUI knows about one file. Split out of cmd_read so a whole
+    round of reads can be answered by a single interpreter start."""
+    path = os.path.realpath(os.path.expanduser(path))
     lines = read_file(path)
     result = {"version": REGION_VERSION, "file": path, "exists": lines is not None,
               "hasRegion": False, "regionVersion": None, "entries": [], "unmanaged": []}
     if lines is None:
-        print(json.dumps(result))
-        return 0
+        return result
     begin, end, version = find_region(lines)
     if begin is not None:
         result["hasRegion"] = True
@@ -951,10 +952,20 @@ def cmd_read(args):
         result["regionEnd"] = end
         result["entries"] = parse_region(lines, begin, end)
         result["regionText"] = "".join(lines[begin:end])
-    if not args.no_unmanaged:
+    if want_unmanaged:
         result["unmanaged"] = scan_unmanaged(lines, begin, end)
     result["backup"] = latest_backup(path)
-    print(json.dumps(result))
+    return result
+
+
+def cmd_read(args):
+    """One --file prints that file's result; several print {"files": [...]} in the
+    order asked. Python takes ~13 ms to start and ~25 ms to do the work, so reading
+    the five custom files one process at a time spent more time starting up than
+    reading."""
+    want = not args.no_unmanaged
+    results = [read_one(path, want) for path in args.file]
+    print(json.dumps(results[0] if len(results) == 1 else {"files": results}))
     return 0
 
 
@@ -993,8 +1004,16 @@ def cmd_write(args):
         return 0
     saved = backup(path) if existed else None
     write_atomic(path, new_lines)
+    # The entries as they now sit in the file, so the caller can update its own copy
+    # instead of reading the file back. Re-reading opened a window in which the file
+    # on disk and the caller's idea of it disagreed, and edits made in that window
+    # were built on the older one.
+    begin, end, _ = find_region(new_lines)
+    written = parse_region(new_lines, begin, end) if begin is not None else []
     print(json.dumps({"ok": True, "changed": True, "file": path, "backup": saved,
-                      "created": not existed}))
+                      "created": not existed, "entries": written,
+                      "regionText": "".join(new_lines[begin:end]) if begin is not None else "",
+                      "hasRegion": begin is not None}))
     return 0
 
 
@@ -1130,7 +1149,7 @@ def main():
     sub = parser.add_subparsers(dest="command", required=True)
 
     read = sub.add_parser("read")
-    read.add_argument("--file", required=True)
+    read.add_argument("--file", required=True, action="append")
     read.add_argument("--no-unmanaged", action="store_true")
     read.set_defaults(func=cmd_read)
 
