@@ -3,7 +3,6 @@ import qs.modules.common.widgets
 import qs.modules.common.functions
 import qs.services
 import QtQuick
-import QtQuick.Dialogs
 import QtQuick.Layouts
 import Quickshell
 import "TimetableHelpers.js" as H
@@ -126,18 +125,7 @@ Item {
     function importSourceFile(path) {
         if (!root.calendarSourcesEnabled)
             return;
-        root.sourcesStatusText = Translation.tr("Importing calendar…");
-        CalendarService.importFromIcs(path, false, "", reply => {
-            if (!reply?.ok) {
-                root.sourcesStatusText = String(reply?.error ?? Translation.tr("Could not import the calendar."));
-                return;
-            }
-            const imported = Number(reply.imported ?? 0);
-            const skipped = Number(reply.skipped ?? 0);
-            root.sourcesStatusText = skipped > 0
-                ? Translation.tr("Imported %1 event(s), skipped %2 duplicate(s).").arg(String(imported)).arg(String(skipped))
-                : Translation.tr("Imported %1 event(s).").arg(String(imported));
-        });
+        CalendarIcsFileImport.importSourceFile(path);
     }
 
     function addSourceSubscription() {
@@ -1135,7 +1123,7 @@ Item {
                                 colBackground: Appearance.colors.colPrimaryContainer
                                 colBackgroundHover: Appearance.colors.colPrimaryContainerHover
                                 colRipple: Appearance.colors.colPrimaryContainerActive
-                                onClicked: sourceIcsFileDialog.open()
+                                onClicked: CalendarIcsFileImport.open()
                             }
 
                             ConfigTextField {
@@ -1166,8 +1154,10 @@ Item {
 
                             StyledText {
                                 Layout.fillWidth: true
-                                visible: root.sourcesStatusText.length > 0 || CalendarSubscriptions.lastError.length > 0
-                                text: CalendarSubscriptions.lastError.length > 0 ? CalendarSubscriptions.lastError : root.sourcesStatusText
+                                visible: root.sourcesStatusText.length > 0 || CalendarSubscriptions.lastError.length > 0 || CalendarIcsFileImport.lastStatus.length > 0
+                                text: CalendarSubscriptions.lastError.length > 0
+                                    ? CalendarSubscriptions.lastError
+                                    : (CalendarIcsFileImport.lastStatus.length > 0 ? CalendarIcsFileImport.lastStatus : root.sourcesStatusText)
                                 font.pixelSize: Appearance.font.pixelSize.small
                                 color: CalendarSubscriptions.lastError.length > 0 ? Appearance.colors.colError : Appearance.colors.colOnSurfaceVariant
                                 wrapMode: Text.Wrap
@@ -2313,14 +2303,6 @@ Item {
         }
     }
 
-    FileDialog {
-        id: sourceIcsFileDialog
-        title: Translation.tr("Choose an ICS calendar file")
-        currentFolder: "file://" + Quickshell.env("HOME")
-        fileMode: FileDialog.OpenFile
-        nameFilters: [Translation.tr("Calendar files (*.ics *.ical)"), Translation.tr("All files (*)")]
-        onAccepted: root.importSourceFile(decodeURIComponent(selectedFile.toString().replace(/^file:\/\//, "")))
-    }
 
     // ─── Local pieces ───
     // Both actions ride on RippleButtonWithIcon rather than setting their own

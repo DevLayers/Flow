@@ -19,6 +19,7 @@ class TimetableImportContractTests(unittest.TestCase):
         week = (TIMETABLE / "WeekView.qml").read_text(encoding="utf-8")
         month = (TIMETABLE / "MonthView.qml").read_text(encoding="utf-8")
         sidebar = (TIMETABLE / "EventSidebar.qml").read_text(encoding="utf-8")
+        file_import = (ROOT / "services" / "CalendarIcsFileImport.qml").read_text(encoding="utf-8")
 
         self.assertIn("property bool enable: false", config)
         self.assertIn("property JsonObject imports: JsonObject", config)
@@ -28,8 +29,13 @@ class TimetableImportContractTests(unittest.TestCase):
         self.assertIn("eventSidebar.showSources()", week)
         self.assertIn("eventSidebar.showSources()", month)
         self.assertIn('root.setMode("sources")', sidebar)
-        self.assertIn("FileDialog", sidebar)
-        self.assertIn("CalendarService.importFromIcs", sidebar)
+        self.assertNotIn("FileDialog", sidebar)
+        self.assertIn("CalendarIcsFileImport.open()", sidebar)
+        self.assertIn("CalendarIcsFileImport.lastStatus", sidebar)
+        self.assertIn("Singleton", file_import)
+        self.assertIn("FileDialog", file_import)
+        self.assertIn("parentWindow: null", file_import)
+        self.assertIn("CalendarService.importFromIcs", file_import)
         self.assertIn("CalendarSubscriptions.addSubscription", sidebar)
 
 
