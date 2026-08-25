@@ -325,8 +325,8 @@ Singleton {
             "name": "User Profile",
             "icon": "account_circle",
             "component": "modules/settings/configs/UserProfileConfig.qml",
-            "subPages": [],
-            "aliases": ["Sidebar header"],
+            "subPages": ["widgets/BannerImageConfig.qml"],
+            "aliases": ["Profile", "Avatar Appearance", "Sidebar header", "Right Sidebar Banner"],
             "hidden": true
         },
         {

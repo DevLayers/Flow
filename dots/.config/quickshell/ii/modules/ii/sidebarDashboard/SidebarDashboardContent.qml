@@ -153,6 +153,18 @@ Item {
                 blur: sidebarRightBackground.dialogBlurProgress
             }
 
+            // SIDEBAR BANNER
+            SidebarBanner {
+                Layout.fillWidth: true
+                Layout.preferredHeight: 220
+                visible: Config.options.sidebar.enableBanner
+                enabled: visible
+                entranceTrigger: root.entranceTrigger
+                editMode: root.editMode
+                onEditModeToggled: (newEditMode) => root.editMode = newEditMode
+            }
+
+            // DEFAULT
             SystemButtonRow {
                 id: headerRow
                 Layout.fillHeight: false
@@ -160,6 +172,8 @@ Item {
                 // Layout.margins: 10
                 Layout.topMargin: 5
                 Layout.bottomMargin: 0
+                visible: !Config.options.sidebar.enableBanner
+                enabled: visible
                 entranceTrigger: root.entranceTrigger
                 editMode: root.editMode
                 onEditModeToggled: (newEditMode) => root.editMode = newEditMode
@@ -303,6 +317,407 @@ Item {
     ToggleDialog {
         shownPropertyString: "showModesDialog"
         dialog: ModesDialog {}
+    }
+
+    component SidebarBanner: Item {
+        id: headerRoot
+        property int entranceTrigger: -1
+        property bool editMode: false
+        signal editModeToggled(bool newEditMode)
+        implicitHeight: 220
+
+        Rectangle {
+            id: bannerBackground
+            anchors.fill: parent
+            radius: 15
+            color: Appearance.colors.colLayer1
+
+            // wallpaper section (top 70%)
+            Item {
+                id: wallpaperArea
+                anchors {
+                    top: parent.top
+                    left: parent.left
+                    right: parent.right
+                }
+                height: parent.height * 0.7
+                
+                Rectangle {
+                    id: imageMask
+                    anchors.fill: parent
+                    radius: 15
+                    visible: false
+                }
+
+                Image {
+                    id: bannerImage
+                    anchors.fill: parent
+                    // A wallpaper-sized banner costs RAM twice - decoded image plus GPU texture - for
+                    // detail this strip cannot show. PreserveAspectCrop makes sourceSize a cover box,
+                    // so the device-pixel size of the strip is all the decoder ever has to produce.
+                    //
+                    // The box only ever grows, and nothing loads before the strip is laid out in a
+                    // window: a source set against a zero-width box decodes at the file's native
+                    // size, and a box that shrinks - the window reports the integer output scale for
+                    // a moment before the fractional one arrives - re-decodes the file for nothing.
+                    readonly property real windowDpr: (QsWindow.window as QsWindow)?.devicePixelRatio ?? 0
+                    property size decodeBox: Qt.size(0, 0)
+                    onWindowDprChanged: bannerImage.growDecodeBox()
+                    onWidthChanged: bannerImage.growDecodeBox()
+                    onHeightChanged: bannerImage.growDecodeBox()
+                    function growDecodeBox() {
+                        if (bannerImage.windowDpr <= 0 || bannerImage.width <= 0 || bannerImage.height <= 0)
+                            return;
+                        const boxWidth = Math.ceil(bannerImage.width * bannerImage.windowDpr);
+                        const boxHeight = Math.ceil(bannerImage.height * bannerImage.windowDpr);
+                        if (boxWidth <= bannerImage.decodeBox.width && boxHeight <= bannerImage.decodeBox.height)
+                            return;
+                        bannerImage.decodeBox = Qt.size(Math.max(boxWidth, bannerImage.decodeBox.width),
+                            Math.max(boxHeight, bannerImage.decodeBox.height));
+                    }
+
+                    source: bannerImage.decodeBox.width <= 0 ? "" : (Config.options.sidebar.useCustomBanner
+                        ? (Config.options.sidebar.bannerImage || `${Directories.assetsPath}/images/default_wallpaper.png`)
+                        : Config.options.background.wallpaperPath)
+                    sourceSize: bannerImage.decodeBox
+                    fillMode: Image.PreserveAspectCrop
+                    cache: false
+                    asynchronous: true
+                    layer.enabled: true
+                    layer.effect: OpacityMask {
+                        maskSource: imageMask
+                    }
+                }
+            }
+
+            // Button section
+            Rectangle {
+                id: buttonArea
+
+                anchors {
+                    left: parent.left
+                    right: parent.right
+                    bottom: parent.bottom
+                }
+
+                height: parent.height * 0.3
+                color: Appearance.colors.colLayer1
+                bottomLeftRadius: bannerBackground.bottomLeftRadius
+                bottomRightRadius: bannerBackground.bottomRightRadius
+            }
+
+            // pfp overlaps both sections
+            Item {
+                id: profilePicContainer
+
+                anchors {
+                    left: parent.left
+                    bottom: buttonArea.bottom
+
+                    leftMargin: 16
+                    bottomMargin: 55
+                }
+
+                width: 70
+                height: 70
+                visible: Config.options.sidebar.dashboardHeader.profileImageType !== "none"
+
+                property real outerRadius: 15
+                property real borderWidth: 4
+                readonly property string _style: Config.options.userProfile.imageStyle
+
+                // DISTRO ICON
+                Loader {
+                    anchors.fill: parent
+                    active: Config.options.sidebar.dashboardHeader.profileImageType === "distro"
+                    sourceComponent: CustomIcon {
+                        anchors.centerIn: parent
+                        width: parent.width - profilePicContainer.borderWidth * 2
+                        height: parent.height - profilePicContainer.borderWidth * 2
+                        source: SystemInfo.distroIcon
+                        colorize: true
+                        color: Appearance.colors.colOnLayer1
+                    }
+                }
+
+                // USER PROFILE
+                Item {
+                    anchors.fill: parent
+                    visible: Config.options.sidebar.dashboardHeader.profileImageType === "user_profile"
+
+                    // Custom
+                    Image {
+                        id: hardcodedProfilePicture
+                        anchors {
+                            fill: parent
+                            margins: profilePicContainer.borderWidth
+                        }
+                        visible: profilePicContainer._style === "custom"
+
+                        source: parent.visible ? Config.options.userProfile.imagePath : ""
+                        fillMode: Image.PreserveAspectCrop
+                        sourceSize.width: width
+                        sourceSize.height: height
+
+                        layer.enabled: true
+                        layer.effect: OpacityMask {
+                            maskSource: Rectangle {
+                                width: hardcodedProfilePicture.width
+                                height: hardcodedProfilePicture.height
+                                radius: profilePicContainer.outerRadius - profilePicContainer.borderWidth
+                            }
+                        }
+                    }
+
+                    // Initial
+                    Rectangle {
+                        id: initialAvatarBg
+                        anchors {
+                            fill: parent
+                            margins: profilePicContainer.borderWidth
+                        }
+                        radius: profilePicContainer.outerRadius - profilePicContainer.borderWidth
+                        color: Appearance.colors.colPrimary
+                        visible: profilePicContainer._style === "initial" || profilePicContainer._style === "default"
+
+                        Image {
+                            id: initialAvatarSource
+                            anchors.fill: parent
+                            source: parent.visible ? Directories.userAvatarPathAccountsService : ""
+                            sourceSize.width: width
+                            sourceSize.height: height
+                            fillMode: Image.PreserveAspectCrop
+                            visible: status === Image.Ready
+
+                            layer.enabled: true
+                            layer.effect: OpacityMask {
+                                maskSource: Rectangle {
+                                    width: initialAvatarSource.width
+                                    height: initialAvatarSource.height
+                                    radius: initialAvatarBg.radius
+                                }
+                            }
+                        }
+
+                        StyledText {
+                            anchors.centerIn: parent
+                            visible: initialAvatarSource.status !== Image.Ready
+                            text: SystemInfo.username.charAt(0).toUpperCase()
+                            color: Appearance.colors.colOnPrimary
+                            font.pixelSize: Appearance.font.pixelSize.larger
+                            font.weight: Font.DemiBold
+                        }
+                    }
+
+                    // Expressive
+                    MaterialShape {
+                        id: expressiveShape
+                        anchors {
+                            fill: parent
+                            margins: profilePicContainer.borderWidth
+                        }
+                        visible: profilePicContainer._style === "expressive"
+
+                        function resolveShapeInner(s) {
+                            switch (s) {
+                            case "Cookie9Sided":
+                                return MaterialShape.Shape.Cookie9Sided;
+                            case "Cookie12Sided":
+                                return MaterialShape.Shape.Cookie12Sided;
+                            case "Circle":
+                                return MaterialShape.Shape.Circle;
+                            case "Clover4Leaf":
+                                return MaterialShape.Shape.Clover4Leaf;
+                            case "Burst":
+                                return MaterialShape.Shape.Burst;
+                            case "Heart":
+                                return MaterialShape.Shape.Heart;
+                            case "Bun":
+                                return MaterialShape.Shape.Bun;
+                            default:
+                                return MaterialShape.Shape.Cookie9Sided;
+                            }
+                        }
+                        shape: resolveShapeInner(Config.options.userProfile.avatarShape)
+
+                        property color resolvedColor: {
+                            switch (Config.options.userProfile.avatarColor) {
+                            case "primary":
+                                return Appearance.colors.colPrimary;
+                            case "secondary":
+                                return Appearance.colors.colSecondary;
+                            case "tertiary":
+                                return Appearance.colors.colTertiary;
+                            case "error":
+                                return Appearance.colors.colError;
+                            default:
+                                return Appearance.colors.colPrimary;
+                            }
+                        }
+                        property color resolvedOnColor: {
+                            switch (Config.options.userProfile.avatarColor) {
+                            case "primary":
+                                return Appearance.colors.colOnPrimary;
+                            case "secondary":
+                                return Appearance.colors.colOnSecondary;
+                            case "tertiary":
+                                return Appearance.colors.colOnTertiary;
+                            case "error":
+                                return Appearance.colors.colOnError;
+                            default:
+                                return Appearance.colors.colOnPrimary;
+                            }
+                        }
+
+                        color: resolvedColor
+
+                        StyledText {
+                            anchors.centerIn: parent
+                            text: {
+                                let n = Config.options.userProfile.customName || SystemInfo.username;
+                                return n.charAt(0).toUpperCase();
+                            }
+                            color: expressiveShape.resolvedOnColor
+                            font.pixelSize: Appearance.font.pixelSize.larger
+                            font.family: Appearance.font.family.expressive
+                            font.weight: Font.DemiBold
+                        }
+                    }
+                }
+
+                // PFP border
+                Rectangle {
+                    anchors.fill: parent
+                    color: "transparent"
+                    radius: profilePicContainer.outerRadius
+                    border.width: profilePicContainer.borderWidth
+                    border.color: Appearance.colors.colLayer1
+                    visible: Config.options.sidebar.dashboardHeader.profileImageType !== "distro"
+                             && !(Config.options.sidebar.dashboardHeader.profileImageType === "user_profile"
+                                  && profilePicContainer._style === "expressive")
+                }
+            }
+
+            // sidebar banner text
+            Column {
+                id: greetingTextColumn
+                anchors {
+                    left: parent.left
+                    leftMargin: 20   // matches systemButtonsRow's rightMargin
+                    verticalCenter: buttonArea.verticalCenter
+                }
+                spacing: 2
+
+                // greeting text
+                Text {
+                    id: greetingText
+                    color: Appearance.colors.colOnLayer0
+                    font.pixelSize: 14
+                    font.weight: Font.Normal
+                    horizontalAlignment: Text.AlignLeft
+                    width: 210
+                    elide: Text.ElideRight
+
+                    text: {
+                        const mode = Config.options.sidebar.dashboardHeader.textMode;
+                        const hour = new Date().getHours();
+                        const timeGreeting = hour < 5 ? Translation.tr("Good Night,")
+                            : hour < 12 ? Translation.tr("Good Morning,")
+                                : hour < 18 ? Translation.tr("Good Afternoon,")
+                                    : hour < 22 ? Translation.tr("Good Evening,")
+                                        : Translation.tr("Good Night,");
+                        return mode === "username"
+                            ? (Config.options.userProfile.customGreeting !== "" ? Config.options.userProfile.customGreeting : timeGreeting) + " " + (Config.options.userProfile.customName !== "" ? Config.options.userProfile.customName : SystemInfo.username.charAt(0).toUpperCase() + SystemInfo.username.slice(1))
+                            : mode === "uptime"
+                                ? Translation.tr("Uptime") + ": " + DateTime.uptime
+                                : mode === "custom"
+                                    ? Config.options.sidebar.dashboardHeader.customText
+                                    : "";
+                    }
+                }
+
+                // subtext under greeting
+                Text {
+                    id: greetingSubtextText
+                    color: "#888888"
+                    font.pixelSize: 12
+                    font.weight: Font.Normal
+                    horizontalAlignment: Text.AlignLeft
+                    width: 220
+                    elide: Text.ElideRight
+
+                    visible: Config.options.sidebar.dashboardSubHeader.greetingSubtextMode !== "none"
+                    text: {
+                        const mode = Config.options.sidebar.dashboardSubHeader.greetingSubtextMode;
+                        return mode === "uptime"
+                            ? Translation.tr("Up • ") + DateTime.uptime
+                            : mode === "custom"
+                                ? Config.options.sidebar.dashboardSubHeader.customText
+                                : "";
+                    }
+                }
+            }
+        }
+
+        // sidebar banner buttons
+        Item {
+            anchors {
+                left: parent.left
+                right: parent.right
+                bottom: parent.bottom
+                bottomMargin: 10
+            }
+
+            height: systemButtonsRow.implicitHeight
+
+            ButtonGroup {
+                id: systemButtonsRow
+                anchors {
+                    right: parent.right
+                    rightMargin: 10
+                    verticalCenter: buttonArea.verticalCenter
+                }
+                color: Appearance.colors.colLayer1
+                padding: 4
+
+                QuickToggleButton {
+                    id: editButton
+                    toggled: headerRoot.editMode
+
+                    visible:
+                        Config.options.sidebar.quickToggles.style === "android"
+
+                    buttonIcon: "edit"
+                    onClicked: {
+                        headerRoot.editMode = !headerRoot.editMode
+                        headerRoot.editModeToggled(headerRoot.editMode)
+                    }
+                }
+
+                QuickToggleButton {
+                    buttonIcon: "restart_alt"
+                    onClicked: {
+                        Quickshell.execDetached(["hyprctl", "reload"])
+                        Quickshell.reload(true)
+                    }
+                }
+
+                QuickToggleButton {
+                    buttonIcon: "settings"
+                    onClicked: {
+                        GlobalStates.sidebarRightOpen = false
+                        GlobalStates.toggleSettings()
+                    }
+                }
+
+                QuickToggleButton {
+                    buttonIcon: "power_settings_new"
+                    onClicked: {
+                        GlobalStates.sessionOpen = true
+                    }
+                }
+            }
+        }
     }
 
     component ToggleDialog: Loader {
