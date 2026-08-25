@@ -377,7 +377,7 @@ Item {
                     }
 
                     source: bannerImage.decodeBox.width <= 0 ? "" : (Config.options.sidebar.useCustomBanner
-                        ? Config.options.sidebar.bannerImage
+                        ? (Config.options.sidebar.bannerImage || `${Directories.assetsPath}/images/default_wallpaper.png`)
                         : Config.options.background.wallpaperPath)
                     sourceSize: bannerImage.decodeBox
                     fillMode: Image.PreserveAspectCrop
