@@ -370,7 +370,7 @@ AbstractWidget {
         animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
     }
     readonly property real lockScaleFactor: lockBehavior === "center" ? 1.0 : (GlobalStates.lockAnimationActive ? 0.85 : 1.0)
-    scale: ((draggable && containsPress) ? 1.05 : 1.0) * (Config.options.background.widgets.widgetsScale ?? 1.0) * lockScaleFactor
+    scale: (Config.options.background.widgets.widgetsScale ?? 1.0) * lockScaleFactor
     Behavior on scale {
         animation: Appearance.animation.elementResize.numberAnimation.createObject(this)
     }
