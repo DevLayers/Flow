@@ -78,142 +78,135 @@ Singleton {
     property var shadowed: ({})
     /// Keys whose effective value the hub asks hyprctl about. Tabs add to this as they load.
     property var watchedKeys: []
+    /// The same keys as an object, so watch() does not walk the list once per control.
+    property var _watchedSet: ({})
     property bool dirty: false
     property string lastError: ""
+    /// Hyprland's own log, kept beside the one-line message rather than inside it.
+    property string lastLog: ""
     /// Pages hold a subscription while they are on screen. The service re-reads after every
     /// Hyprland reload only while something is looking at it, instead of forever.
     property int subscribers: 0
+    /// True while the hub is on screen. The other Hyprland services read this so that closing
+    /// Settings really does stop the work: they each re-read on every reload, and a reload
+    /// happens for all sorts of reasons that have nothing to do with this page.
+    readonly property bool watching: root.subscribers > 0
 
-    /// key -> value, for every config key this page manages. One pass per change instead of
-    /// one pass per control per change.
-    readonly property var managedConfig: {
-        const map = {};
-        for (const target of root.loadOrder)
-            for (const entry of root._entriesFor(target))
-                if (entry.kind === "config" && entry.key) map[entry.key] = entry.value;
-        return map;
-    }
-
-    /// key -> { value, file, line, target, removable } for the last hand-written line that sets
-    /// it. `removable` is false when the parser could not pin the assignment down, in which case
-    /// the page offers no cleanup for it.
-    readonly property var inheritedConfig: {
-        const map = {};
-        for (const target of root.loadOrder) {
-            const file = root.files[target];
-            if (!file) continue;
-            for (const entry of (file.unmanaged ?? [])) {
-                if (entry.kind !== "config" || !entry.key) continue;
-                map[entry.key] = {
-                    value: entry.value,
-                    line: entry.line ?? 0,
-                    target: target,
-                    file: String(file.file ?? "").split("/").pop(),
-                    removable: (entry.span ?? null) !== null
-                };
-            }
-        }
-        return map;
-    }
-
-    /// global name -> the value this page wrote for it.
-    readonly property var managedGlobals: {
-        const map = {};
-        for (const target of root.loadOrder)
-            for (const entry of root._entriesFor(target))
-                if (entry.kind === "global" && entry.name) map[entry.name] = entry.value;
-        return map;
-    }
-
-    /// global name -> { value, file, line } for the last hand-written assignment of it.
-    readonly property var inheritedGlobals: {
-        const map = {};
-        for (const target of root.loadOrder) {
-            const file = root.files[target];
-            if (!file) continue;
-            for (const entry of (file.unmanaged ?? [])) {
-                if (entry.kind !== "global" || !entry.name) continue;
-                map[entry.name] = {
-                    value: entry.value,
-                    line: entry.line ?? 0,
-                    target: target,
-                    file: String(file.file ?? "").split("/").pop()
-                };
-            }
-        }
-        return map;
-    }
-
-    /// env name -> the value this page wrote for it.
-    readonly property var managedEnv: {
-        const map = {};
-        for (const target of root.loadOrder)
-            for (const entry of root._entriesFor(target))
-                if (entry.kind === "env" && entry.name) map[entry.name] = entry.value;
-        return map;
-    }
-
-    /// env name -> { value, file, line } for the last hand-written hl.env above the region.
-    /// Only custom/env.lua is read here; what hyprland/env.lua sets before it, and what
-    /// hyprland/variables.lua sets after it, are the Environment tab's own business.
-    readonly property var inheritedEnv: {
-        const map = {};
-        for (const target of root.loadOrder) {
-            const file = root.files[target];
-            if (!file) continue;
-            for (const entry of (file.unmanaged ?? [])) {
-                if (entry.kind !== "env" || !entry.name) continue;
-                map[entry.name] = {
-                    value: entry.value,
-                    line: entry.line ?? 0,
-                    target: target,
-                    file: String(file.file ?? "").split("/").pop()
-                };
-            }
-        }
-        return map;
-    }
-
-    /// device name -> the spec this page wrote for it, for the per-device cards.
-    readonly property var managedDevices: {
-        const map = {};
-        for (const target of root.loadOrder)
-            for (const entry of root._entriesFor(target))
-                if (entry.kind === "device" && entry.spec?.name) map[entry.spec.name] = entry.spec;
-        return map;
-    }
-
-    /// What the hub's health strip needs, in one place: how much this page owns, how old the
-    /// safety net is, and which of our settings something else overrides after load.
-    readonly property var status: {
+    /**
+     * Every map the page reads, built in one pass.
+     *
+     * There were ten of these and each one walked all five files on its own, so a single edit
+     * walked the entries forty-five times over before one control had redrawn - which, on a
+     * slider, is forty-five times per frame. They are one pass now, and the properties below
+     * are lookups into it.
+     */
+    readonly property var _index: {
+        const managedConfig = {};
+        const managedGlobals = {};
+        const managedEnv = {};
+        const managedDevices = {};
+        const inheritedConfig = {};
+        const inheritedGlobals = {};
+        const inheritedEnv = {};
+        const regionFiles = [];
+        const shadowedKeys = [];
         let managed = 0;
         let unrecognised = 0;
-        const regionFiles = [];
         let backupAt = 0;
-        const shadowedKeys = [];
+
         for (const target of root.loadOrder) {
-            const file = root.files[target];
-            if (file?.hasRegion) regionFiles.push(root.targetFiles[target].split("/").pop());
-            const stamp = file?.backup?.mtime ?? 0;
-            if (stamp > backupAt) backupAt = stamp;
             for (const entry of root._entriesFor(target)) {
                 if (entry.kind === "raw") {
                     unrecognised += 1;
                     continue;
                 }
                 managed += 1;
-                if (entry.kind === "config" && root.shadowed[entry.key] !== undefined)
-                    shadowedKeys.push(entry.key);
+                if (entry.kind === "config" && entry.key) {
+                    managedConfig[entry.key] = entry.value;
+                    if (root.shadowed[entry.key] !== undefined) shadowedKeys.push(entry.key);
+                } else if (entry.kind === "global" && entry.name) {
+                    managedGlobals[entry.name] = entry.value;
+                } else if (entry.kind === "env" && entry.name) {
+                    managedEnv[entry.name] = entry.value;
+                } else if (entry.kind === "device" && entry.spec?.name) {
+                    managedDevices[entry.spec.name] = entry.spec;
+                }
+            }
+
+            const file = root.files[target];
+            if (!file) continue;
+            if (file.hasRegion) regionFiles.push(root.targetFiles[target].split("/").pop());
+            const stamp = file.backup?.mtime ?? 0;
+            if (stamp > backupAt) backupAt = stamp;
+
+            const name = String(file.file ?? "").split("/").pop();
+            for (const entry of (file.unmanaged ?? [])) {
+                if (entry.kind === "config" && entry.key) {
+                    inheritedConfig[entry.key] = {
+                        value: entry.value,
+                        line: entry.line ?? 0,
+                        target: target,
+                        file: name,
+                        removable: (entry.span ?? null) !== null
+                    };
+                } else if (entry.kind === "global" && entry.name) {
+                    inheritedGlobals[entry.name] = {
+                        value: entry.value, line: entry.line ?? 0, target: target, file: name
+                    };
+                } else if (entry.kind === "env" && entry.name) {
+                    inheritedEnv[entry.name] = {
+                        value: entry.value, line: entry.line ?? 0, target: target, file: name
+                    };
+                }
             }
         }
+
         return {
-            managed: managed,
-            unrecognised: unrecognised,
-            files: regionFiles,
-            backupAt: backupAt,
-            shadowed: shadowedKeys
+            managedConfig: managedConfig,
+            managedGlobals: managedGlobals,
+            managedEnv: managedEnv,
+            managedDevices: managedDevices,
+            inheritedConfig: inheritedConfig,
+            inheritedGlobals: inheritedGlobals,
+            inheritedEnv: inheritedEnv,
+            status: {
+                managed: managed,
+                unrecognised: unrecognised,
+                files: regionFiles,
+                backupAt: backupAt,
+                shadowed: shadowedKeys
+            }
         };
     }
+
+    /// key -> value, for every config key this page manages.
+    readonly property var managedConfig: root._index.managedConfig
+
+    /// key -> { value, file, line, target, removable } for the last hand-written line that sets
+    /// it. `removable` is false when the parser could not pin the assignment down, in which case
+    /// the page offers no cleanup for it.
+    readonly property var inheritedConfig: root._index.inheritedConfig
+
+    /// global name -> the value this page wrote for it.
+    readonly property var managedGlobals: root._index.managedGlobals
+
+    /// global name -> { value, file, line } for the last hand-written assignment of it.
+    readonly property var inheritedGlobals: root._index.inheritedGlobals
+
+    /// env name -> the value this page wrote for it.
+    readonly property var managedEnv: root._index.managedEnv
+
+    /// env name -> { value, file, line } for the last hand-written hl.env above the region.
+    /// Only custom/env.lua is read here; what hyprland/env.lua sets before it, and what
+    /// hyprland/variables.lua sets after it, are the Environment tab's own business.
+    readonly property var inheritedEnv: root._index.inheritedEnv
+
+    /// device name -> the spec this page wrote for it, for the per-device cards.
+    readonly property var managedDevices: root._index.managedDevices
+
+    /// What the hub's health strip needs, in one place: how much this page owns, how old the
+    /// safety net is, and which of our settings something else overrides after load.
+    readonly property var status: root._index.status
 
     signal changed
     signal wrote(string target)
@@ -261,28 +254,44 @@ Singleton {
         if (root.subscribers === 0) root._diffQueue = [];
     }
 
+    /**
+     * Re-read every file the page owns, in one process.
+     *
+     * This used to walk the five custom files and shellOverrides one interpreter start at a
+     * time - six processes and about 230 ms for a job the parser itself does in 25 ms. One
+     * `read` with six `--file`s answers in 60 ms.
+     */
     function refresh() {
-        if (root._readQueue.length > 0) {
+        if (readProc.running) {
             root._refreshAgain = true;
             return;
         }
-        root._readQueue = Object.keys(root.targetFiles).concat(["_shellOverrides"]);
-        root._drainReads();
+        root.busy = true;
+        root._readTargets = Object.keys(root.targetFiles).concat(["_shellOverrides"]);
+        const command = [root.scriptPath, "read"];
+        for (const target of root._readTargets) {
+            command.push("--file");
+            command.push(target === "_shellOverrides" ? root.shellOverridesPath
+                : root.targetFiles[target]);
+        }
+        readProc.command = command;
+        readProc.running = true;
     }
 
     /// Merge `keys` into the watched set and fetch their effective values.
     function watch(keys: var) {
         const wanted = Array.from(keys ?? []).filter(key => root._validKey(key));
-        const merged = Array.from(root.watchedKeys);
-        let added = false;
+        const fresh = [];
         for (const key of wanted) {
-            if (merged.includes(key)) continue;
-            merged.push(key);
-            added = true;
+            if (root._watchedSet[key] === true) continue;
+            root._watchedSet[key] = true;
+            fresh.push(key);
         }
-        if (!added) return;
-        root.watchedKeys = merged;
-        root.refreshEffective(wanted);
+        if (fresh.length === 0) return;
+        // A page has dozens of controls and every one of them calls this as it is built, so
+        // the membership test is a lookup rather than a walk of the list so far.
+        root.watchedKeys = root.watchedKeys.concat(fresh);
+        root.refreshEffective(fresh);
     }
 
     function refreshEffective(keys: var) {
@@ -364,6 +373,11 @@ Singleton {
 
     function resetKey(key: string) {
         root._remove("config", key);
+        // Putting a key back is an edit like any other, so it has to look like one. What it
+        // goes back to is whatever a hand-written line above the block says; with no such
+        // line there is nothing to push and the reload restores the compositor's own default.
+        const inherited = root.inheritedConfig[key];
+        if (inherited !== undefined) root.previewKey(key, inherited.value);
     }
 
     /// The override this page wrote for one device, or null when it does not manage it.
@@ -373,6 +387,23 @@ Singleton {
 
     function setDevice(id: string, spec: var) {
         root._upsert({ kind: "device", id: id, spec: spec });
+        root.previewDevice(spec);
+    }
+
+    /**
+     * Push one device override into the running compositor so the card answers at once.
+     *
+     * Same deal as previewKey: volatile, and replaced by the file on the next reload. Safe to
+     * repeat because hl.device replaces the whole override for that name rather than adding
+     * to it - which is also why removing one cannot be previewed, and waits for the reload.
+     */
+    function previewDevice(spec: var) {
+        const name = String(spec?.name ?? "").trim();
+        if (name === "" || !root._validKey(name)) return;
+        const pending = Object.assign({}, root._devicePending);
+        pending[name] = spec;
+        root._devicePending = pending;
+        previewTimer.restart();
     }
     function removeDevice(id: string) {
         root._remove("device", id);
@@ -399,6 +430,20 @@ Singleton {
     function entriesFor(target: string): var {
         return root._entriesFor(target);
     }
+
+    /**
+     * One property per file, for the services that only care about their own.
+     *
+     * These re-evaluate whenever anything changes, but they hand back the very same array when
+     * their own file did not - and QML does not notify a var property that resolves to the same
+     * object. So editing a keyboard setting no longer rebuilds the whole shortcut list, and the
+     * page's lists stop flickering on every unrelated change.
+     */
+    readonly property var generalEntries: root._entriesFor("general")
+    readonly property var rulesEntries: root._entriesFor("rules")
+    readonly property var keybindEntries: root._entriesFor("keybinds")
+    readonly property var envEntries: root._entriesFor("env")
+    readonly property var variableEntries: root._entriesFor("variables")
 
     function setRule(kind: string, id: string, spec: var) {
         root._upsert({ kind: kind, id: id, spec: spec });
@@ -470,7 +515,8 @@ Singleton {
         writeDebounce.stop();
         root._desired = ({});
         root.dirty = false;
-        root._writeQueue = Object.keys(root.targetFiles).map(target => ({ target: target, strip: true }));
+        root._writeQueue = Object.keys(root.targetFiles).map(
+            target => ({ target: target, strip: true, sent: null, reloadTick: 0 }));
         root._drainWrites();
     }
 
@@ -485,29 +531,63 @@ Singleton {
 
     /// target -> array of entries, present only once that target has an unwritten edit
     property var _desired: ({})
-    property var _readQueue: []
+    /// target -> the entries on disk, cleaned once when the read lands
+    property var _stored: ({})
+    property var _readTargets: []
     property var _optionQueue: []
     property var _writeQueue: []
     property var _diffQueue: []
     property var _previewPending: ({})
+    property var _devicePending: ({})
     property bool _optionBusy: false
     property bool _awaitingReload: false
     property bool _refreshAgain: false
+    property bool _rereadAfterWrite: false
+    /// Bumped on every reload Hyprland reports, so a write can tell whether the reload it was
+    /// waiting for has already been and gone.
+    property int _reloadTick: 0
 
     function _validKey(key: string): bool {
         return /^[A-Za-z0-9_.:-]+$/.test(String(key ?? ""));
     }
 
+    /**
+     * The entries one file would be written with: the pending edit if there is one, else what
+     * is on disk.
+     *
+     * The stored side is cleaned once, when the read lands, and handed out by reference
+     * afterwards. It used to be deep-copied through JSON on every call, and with ten derived
+     * maps asking five files each that came to forty-five copies of every entry per edit -
+     * three milliseconds a frame while a slider was moving. Sharing is safe because nothing
+     * mutates an entry in place: `_upsert` and `_remove` both build a new array and replace
+     * whole entries.
+     */
     function _entriesFor(target: string): var {
         if (root._desired[target] !== undefined) return root._desired[target];
-        const stored = root.files[target]?.entries ?? [];
-        return stored.map(entry => {
-            const copy = JSON.parse(JSON.stringify(entry));
+        return root._stored[target] ?? [];
+    }
+
+    /// The parser's entries with the bookkeeping it adds for the review dialog taken off, so
+    /// what goes back out is exactly what would be written.
+    function _cleanEntries(entries: var): var {
+        return Array.from(entries ?? []).map(entry => {
+            const copy = Object.assign({}, entry);
             delete copy.line;
             delete copy.managed;
             delete copy.unrecognised;
             return copy;
         });
+    }
+
+    /// The same, but handing back the array already held when nothing in the file changed. One
+    /// write reloads every file; without this, all five would look new to everything reading
+    /// them even though four of them were not touched.
+    function _cleanEntriesInto(target: string, entries: var): var {
+        const cleaned = root._cleanEntries(entries);
+        const current = root._stored[target];
+        if (current !== undefined && JSON.stringify(current) === JSON.stringify(cleaned))
+            return current;
+        return cleaned;
     }
 
     function _findManaged(kind: string, id: string): var {
@@ -550,30 +630,18 @@ Singleton {
     }
 
     function _flush() {
-        const targets = Object.keys(root._desired);
+        const queued = {};
+        for (const job of root._writeQueue) queued[job.target] = true;
+        const targets = Object.keys(root._desired).filter(target => queued[target] !== true);
         if (targets.length === 0) return;
-        root._writeQueue = root._writeQueue.concat(targets.map(target => ({ target: target, strip: false })));
+        root._writeQueue = root._writeQueue.concat(
+            targets.map(target => ({ target: target, strip: false, sent: null, reloadTick: 0 })));
         root._drainWrites();
     }
 
     // Reading -------------------------------------------------------------
 
-    function _drainReads() {
-        if (readProc.running || root._readQueue.length === 0) return;
-        root.busy = true;
-        const next = root._readQueue[0];
-        readProc.target = next;
-        const path = next === "_shellOverrides" ? root.shellOverridesPath : root.targetFiles[next];
-        readProc.command = [root.scriptPath, "read", "--file", path];
-        readProc.running = true;
-    }
-
     function _finishRead() {
-        root._readQueue = root._readQueue.slice(1);
-        if (root._readQueue.length > 0) {
-            root._drainReads();
-            return;
-        }
         root.busy = false;
         root.ready = true;
         root.changed();
@@ -582,19 +650,29 @@ Singleton {
         root.refresh();
     }
 
-    function _applyRead(target: string, result: var) {
-        if (target === "_shellOverrides") {
-            const map = {};
-            for (const entry of (result.unmanaged ?? [])) {
-                if (entry.kind !== "config") continue;
-                map[entry.key] = { value: entry.value, line: entry.line };
+    /// Every file in one answer. Applied together, so no map is ever built from a mix of the
+    /// file as it was and the file as it is.
+    function _applyReadAll(results: var) {
+        const files = Object.assign({}, root.files);
+        const stored = Object.assign({}, root._stored);
+        for (let i = 0; i < root._readTargets.length; i++) {
+            const target = root._readTargets[i];
+            const result = results[i];
+            if (!result) continue;
+            if (target === "_shellOverrides") {
+                const map = {};
+                for (const entry of (result.unmanaged ?? [])) {
+                    if (entry.kind !== "config") continue;
+                    map[entry.key] = { value: entry.value, line: entry.line };
+                }
+                root.shadowed = map;
+                continue;
             }
-            root.shadowed = map;
-            return;
+            files[target] = result;
+            stored[target] = root._cleanEntriesInto(target, result.entries);
         }
-        const updated = Object.assign({}, root.files);
-        updated[target] = result;
-        root.files = updated;
+        root._stored = stored;
+        root.files = files;
     }
 
     // Effective values ----------------------------------------------------
@@ -701,13 +779,19 @@ Singleton {
         const job = root._writeQueue[0];
         writeProc.job = job;
         writeProc.result = null;
+        root.lastError = "";
+        job.reloadTick = root._reloadTick;
         if (job.strip) {
+            job.sent = null;
             writeProc.payload = "";
             writeProc.command = [root.scriptPath, "strip", "--file", root.targetFiles[job.target],
                 "--custom-dir", root.customDir];
             writeProc.stdinEnabled = false;
         } else {
-            writeProc.payload = JSON.stringify({ version: 1, entries: root._entriesFor(job.target) });
+            // Held by reference: every edit replaces the whole array, so if what is staged is
+            // still this same array when the write comes back, nothing was edited meanwhile.
+            job.sent = root._entriesFor(job.target);
+            writeProc.payload = JSON.stringify({ version: 1, entries: job.sent });
             writeProc.command = [root.scriptPath, "write", "--file", root.targetFiles[job.target],
                 "--json", "-", "--custom-dir", root.customDir];
             writeProc.stdinEnabled = true;
@@ -723,23 +807,60 @@ Singleton {
             return;
         }
         root.busy = false;
-        root.refresh();
+        // No re-read here. The write hands back what it wrote, and the reload it causes brings
+        // a full one along a moment later; reading in between only meant every change was read
+        // three times over.
+        if (root._rereadAfterWrite) {
+            root._rereadAfterWrite = false;
+            root.refresh();
+        }
     }
 
     function _afterWrite(job: var, result: var) {
         if (!result || result.ok !== true) {
-            root.lastError = result?.error ?? "hyprgui.py failed";
+            root.lastError = result?.error ?? writeProc.stderrText ?? "";
+            if (root.lastError === "") root.lastError = "hyprgui.py failed";
             root.writeFailed(job.target, root.lastError);
+            root._rereadAfterWrite = true;
             return;
         }
+
+        // What the file now holds, from the write itself. Reading it back instead left a gap in
+        // which this side still believed the old contents, and an edit made during that gap was
+        // built on them - which silently threw away the change that had just been written.
+        if (result.entries !== undefined) {
+            const stored = Object.assign({}, root._stored);
+            stored[job.target] = root._cleanEntriesInto(job.target, result.entries);
+            root._stored = stored;
+            const files = Object.assign({}, root.files);
+            files[job.target] = Object.assign({}, files[job.target] ?? {}, {
+                entries: result.entries,
+                hasRegion: result.hasRegion === true,
+                regionText: result.regionText ?? ""
+            });
+            root.files = files;
+        } else {
+            root._rereadAfterWrite = true;
+        }
+
         const staged = Object.assign({}, root._desired);
-        delete staged[job.target];
+        // Only drop the pending edit if it is still the one that was written. Anything staged
+        // while the write was in flight is a newer edit and has to go out in its own write.
+        const superseded = job.sent !== null && staged[job.target] !== job.sent;
+        if (!superseded) delete staged[job.target];
         root._desired = staged;
         root.dirty = Object.keys(staged).length > 0;
+        if (superseded) writeDebounce.restart();
+
         root.wrote(job.target);
         if (!result.changed) return;
         // A file Hyprland was not watching yet only loads after an explicit reload.
         if (result.created) Quickshell.execDetached(["hyprctl", "reload"]);
+        // Hyprland watches the file, so it can be done reloading before this side has finished
+        // tidying up after the write that caused it. Waiting for a reload that already happened
+        // is how the page came to announce that Hyprland had not reloaded, two seconds after it
+        // had - and the banner then stayed up.
+        if (root._reloadTick !== job.reloadTick) return;
         root._awaitingReload = true;
         canaryTimer.target = job.target;
         canaryTimer.restart();
@@ -795,13 +916,12 @@ Singleton {
 
     Process {
         id: readProc
-        property string target: ""
         stdout: StdioCollector {
             onStreamFinished: {
                 try {
-                    root._applyRead(readProc.target, JSON.parse(text));
+                    root._applyReadAll(JSON.parse(text).files ?? []);
                 } catch (e) {
-                    console.error("[HyprlandGui] cannot parse read of", readProc.target, e);
+                    console.error("[HyprlandGui] cannot parse the read:", e);
                 }
             }
         }
@@ -827,6 +947,7 @@ Singleton {
         property var job: null
         property string payload: ""
         property var result: null
+        property string stderrText: ""
         property int exitCode: 0
         stdout: StdioCollector {
             onStreamFinished: {
@@ -838,9 +959,10 @@ Singleton {
             }
         }
         stderr: StdioCollector {
-            onStreamFinished: {
-                if (text.trim() !== "") root.lastError = text.trim();
-            }
+            // Kept aside rather than reported. Anything at all on stderr - a deprecation
+            // warning from the interpreter, say - used to turn the page's banner red and
+            // leave it red, because nothing ever put it back.
+            onStreamFinished: writeProc.stderrText = text.trim()
         }
         onRunningChanged: {
             if (!writeProc.running || !writeProc.stdinEnabled) return;
@@ -905,15 +1027,21 @@ Singleton {
         interval: 40
         onTriggered: {
             const pending = root._previewPending;
+            const devices = root._devicePending;
             root._previewPending = ({});
+            root._devicePending = ({});
+            const parts = [];
             const merged = {};
-            let any = false;
+            let anyKey = false;
             for (const key of Object.keys(pending)) {
                 root._mergeKey(merged, key, pending[key]);
-                any = true;
+                anyKey = true;
             }
-            if (!any) return;
-            Quickshell.execDetached(["hyprctl", "eval", `hl.config(${root._renderTable(merged)})`]);
+            if (anyKey) parts.push(`hl.config(${root._renderTable(merged)})`);
+            for (const name of Object.keys(devices))
+                parts.push(`hl.device(${root._renderTable(devices[name])})`);
+            if (parts.length === 0) return;
+            Quickshell.execDetached(["hyprctl", "eval", parts.join(" ")]);
         }
     }
 
@@ -938,17 +1066,19 @@ Singleton {
         command: ["hyprctl", "rollinglog", "--num", "30"]
         stdout: StdioCollector {
             onStreamFinished: {
-                root.lastError = text.trim();
-                root.writeFailed(logProc.target, "Hyprland did not reload after the write.\n" + text.trim());
+                root.lastError = "Hyprland did not reload after the write.";
+                root.lastLog = text.trim();
+                root.writeFailed(logProc.target, root.lastError + "\n" + root.lastLog);
             }
         }
     }
 
     Timer {
         id: writeDebounce
-        // Long enough that a slider drag is one write, and that the write and the reload it
-        // causes do not race a second write on top of it.
-        interval: 400
+        // Long enough to gather a run of clicks into one write, short enough that a single
+        // click feels answered. Sliders no longer write while they are moving, so this does
+        // not have to cover a drag any more.
+        interval: 180
         onTriggered: root._flush()
     }
 
@@ -956,8 +1086,13 @@ Singleton {
         target: Hyprland
         function onRawEvent(event) {
             if (event.name !== "configreloaded") return;
+            root._reloadTick += 1;
             root._awaitingReload = false;
             canaryTimer.stop();
+            // The reload is the proof the last write took: whatever the previous one said,
+            // it is no longer true.
+            root.lastError = "";
+            root.lastLog = "";
             reloadDebounce.restart();
         }
     }
