@@ -291,11 +291,9 @@ PanelWindow {
     readonly property real defaultRatio: zoomInStyle ? zoomLevels.in.default : zoomLevels.out.default
     readonly property real zoomedRatio: zoomInStyle ? zoomLevels.in.zoomed : zoomLevels.out.zoomed
 
-    // overviewOpen also flips true for the plain search bar (searchOnlyMode, or when the
-    // window-thumbnail grid is disabled/replaced by config); only suppress the blur when
-    // the grid of window thumbnails is actually what's covering the background.
-    readonly property bool overviewGridVisible: overviewOpen && Config.options.overview.enable && !GlobalStates.searchOnlyMode && !Config.options.search.alwaysListApps
-    readonly property bool windowBlurActive: !videoEffectsDisabled && Config.options.background.blurWhenWindowsOpen && hasWindowsInActiveWorkspace && !GlobalStates.screenLocked && !overviewGridVisible
+    // The window blur stays on through the launcher and the overview - the overview composes its
+    // own dim on top of the blurred wallpaper rather than replacing it.
+    readonly property bool windowBlurActive: !videoEffectsDisabled && Config.options.background.blurWhenWindowsOpen && hasWindowsInActiveWorkspace && !GlobalStates.screenLocked
 
     Item {
         id: transformContainer

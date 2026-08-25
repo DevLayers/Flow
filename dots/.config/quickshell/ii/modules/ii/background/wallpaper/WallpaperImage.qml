@@ -480,6 +480,17 @@ Item {
                     }
                 }
 
+                // Sits directly above the wallpaper and below every dim layer, so the overview's
+                // dim and the widget-drag dim still compose on top of the blurred wallpaper
+                // instead of being hidden underneath it.
+                WindowBlur {
+                    id: windowBlur
+                    anchors.fill: parent
+                    sourceItem: wallpaperVisualContainer
+                    sourceReady: wallpaperImageRoot.wallpaperSourceReady
+                    hasWindowsInActiveWorkspace: wallpaperImageRoot.hasWindowsInActiveWorkspace
+                }
+
                 Rectangle {
                     id: overviewDimLayer
                     anchors.fill: parent
@@ -538,18 +549,6 @@ Item {
                     sourceItem: wallpaperVisualContainer
                     baseScale: wallpaperImageRoot.baseWallpaperScale
                     lockAnimationActive: wallpaperImageRoot.lockAnimationActive
-                }
-
-                WindowBlur {
-                    id: windowBlur
-                    anchors.fill: parent
-                    sourceItem: wallpaperVisualContainer
-                    sourceReady: wallpaperImageRoot.wallpaperSourceReady
-                    hasWindowsInActiveWorkspace: wallpaperImageRoot.hasWindowsInActiveWorkspace
-                    overviewOpen: wallpaperImageRoot.overviewOpen
-                    overviewProgress: wallpaperImageRoot.isGnomeLikeOverview
-                        ? 0.0
-                        : (wallpaperImageRoot.overviewController ? wallpaperImageRoot.overviewController.progress : 0.0)
                 }
             }
         }
