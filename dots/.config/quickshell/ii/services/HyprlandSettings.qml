@@ -5,7 +5,6 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import Quickshell.Hyprland
-import qs
 
 /**
  * The animation specs the shell pushes into Hyprland, and one thing it needs to read back.
