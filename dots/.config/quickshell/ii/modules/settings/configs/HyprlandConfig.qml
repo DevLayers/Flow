@@ -29,8 +29,10 @@ Item {
     /// The settings window pushes a restored scroll position onto whatever page it loaded.
     /// Hand it to the tab that is actually showing.
     property real contentY: 0
-    onContentYChanged: {
-        const page = swipeView.currentItem?.item ?? null;
+    onContentYChanged: hubRoot.pushContentY()
+
+    function pushContentY() {
+        const page = swipeView.currentItem?.pageItem ?? null;
         if (page && page.contentY !== undefined)
             page.contentY = hubRoot.contentY;
     }
@@ -53,6 +55,22 @@ Item {
     /// A tab keeps its component tree once it has been opened, so switching back is instant and
     /// the slide animates between two real pages instead of one and a hole.
     property var visited: [true, false, false, false, false, false]
+
+    /**
+     * False only for the moment the page is being built.
+     *
+     * The tab the page opens on is built there and then, because incubating it means looking
+     * at an empty page for as long as the incubator takes - which is longer than just building
+     * it. Every tab after that is incubated, because by then there is a page on screen and the
+     * window has to keep answering while it arrives.
+     */
+    property bool settled: false
+
+    Timer {
+        interval: 1
+        running: true
+        onTriggered: hubRoot.settled = true
+    }
 
     function markVisited(index: int) {
         if (index < 0 || index >= hubRoot.tabs.length || hubRoot.visited[index])
@@ -187,17 +205,53 @@ Item {
             // to whatever control is under the finger, not to the tab strip.
             interactive: false
 
-            onCurrentIndexChanged: hubRoot.markVisited(swipeView.currentIndex)
+            onCurrentIndexChanged: {
+                hubRoot.markVisited(swipeView.currentIndex);
+                // The tab that is arriving is still incubating, so the restored scroll
+                // position has nothing to land on yet; it is pushed again below when it does.
+                hubRoot.pushContentY();
+            }
+
+            onCurrentItemChanged: hubRoot.pushContentY()
 
             Repeater {
                 model: hubRoot.tabs
 
-                delegate: Loader {
+                // Built off the main thread. A tab is several hundred controls deep, and
+                // building one where the user could see it froze the window for as long as it
+                // took. The placeholder holds the tab's shape for the frames in between, so
+                // the switch animates either way.
+                //
+                // The two are wrapped rather than nested, because a Loader's default property
+                // is its sourceComponent: a placeholder written inside one is not a sibling of
+                // the page, it is a candidate for being the page.
+                delegate: Item {
+                    id: tabHost
+
                     required property var modelData
                     required property int index
 
-                    active: hubRoot.visited[index] ?? false
-                    source: Qt.resolvedUrl(modelData.file)
+                    readonly property var pageItem: tabLoader.item
+
+                    Loader {
+                        id: tabLoader
+                        anchors.fill: parent
+
+                        active: hubRoot.visited[tabHost.index] ?? false
+                        asynchronous: hubRoot.settled || !tabHost.SwipeView.isCurrentItem
+                        source: Qt.resolvedUrl(tabHost.modelData.file)
+
+                        onLoaded: {
+                            if (tabHost.SwipeView.isCurrentItem) hubRoot.pushContentY();
+                        }
+                    }
+
+                    HyprlandTabPlaceholder {
+                        visible: tabLoader.status !== Loader.Ready
+                        icon: tabHost.modelData.icon
+                        title: Translation.tr(tabHost.modelData.name)
+                        description: Translation.tr("Just a moment…")
+                    }
                 }
             }
         }
