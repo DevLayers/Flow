@@ -30,6 +30,10 @@ ColumnLayout {
     /// when the form is unfolded and not before.
     readonly property var boundRow: HyprlandBinds.boundToGlobal(form.globalName)
 
+    // The shortcut service stops following config reloads while the hub is closed, so ask it to
+    // catch up before reading which key this routine is on.
+    Component.onCompleted: HyprlandBinds.ensureFresh()
+
     readonly property string boundLabel: form.boundRow
         ? HyprlandBinds.comboLabel(form.boundRow.mods, form.boundRow.key) : ""
 

@@ -53,8 +53,24 @@ Singleton {
     }
 
     function refresh() {
+        root.stale = false;
         if (devicesProc.running) return;
         devicesProc.running = true;
+    }
+
+    /// Nothing outside Settings -> Hyprland reads this list, so it is only kept current while
+    /// that page is on screen. What happened while it was closed is caught up on the way back.
+    property bool stale: false
+
+    function ensureFresh() {
+        if (root.stale || !root.ready) root.refresh();
+    }
+
+    Connections {
+        target: HyprlandGui
+        function onWatchingChanged() {
+            if (HyprlandGui.watching) root.ensureFresh();
+        }
     }
 
     Process {
@@ -85,7 +101,8 @@ Singleton {
             // Plugging a mouse in does not reload the config, so the list has to follow the
             // compositor's own device events instead.
             if (event.name !== "configreloaded" && event.name !== "activelayout") return;
-            rescan.restart();
+            root.stale = true;
+            if (HyprlandGui.watching) rescan.restart();
         }
     }
 

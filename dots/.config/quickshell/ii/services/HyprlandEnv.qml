@@ -445,20 +445,41 @@ Singleton {
     // ------------------------------------------------------------------------------ reading
 
     function refresh() {
+        root.stale = false;
         if (!upstreamProc.running) upstreamProc.running = true;
         if (!lateProc.running) lateProc.running = true;
         if (!themeProc.running) themeProc.running = true;
         if (!probeProc.running) probeProc.running = true;
     }
 
+    /**
+     * Only the Environment tab reads any of this, and one of the four reads walks every cursor
+     * theme directory on the machine. Doing that after every reload for the rest of the session
+     * - and a reload happens whenever Modes, Game Mode or the theme changes anything - was work
+     * nobody was waiting for.
+     */
+    property bool stale: false
+
+    function ensureFresh() {
+        if (root.stale || !root.ready) root.refresh();
+    }
+
     Component.onCompleted: root.refresh()
+
+    Connections {
+        target: HyprlandGui
+        function onWatchingChanged() {
+            if (HyprlandGui.watching) root.ensureFresh();
+        }
+    }
 
     Connections {
         target: Hyprland
 
         function onRawEvent(event) {
             if (event.name !== "configreloaded") return;
-            reloadDebounce.restart();
+            root.stale = true;
+            if (HyprlandGui.watching) reloadDebounce.restart();
         }
     }
 

@@ -284,7 +284,7 @@ Singleton {
     /// an unsaved edit is on screen immediately.
     readonly property var managedRows: {
         const out = [];
-        for (const entry of HyprlandGui.entriesFor("keybinds")) {
+        for (const entry of HyprlandGui.keybindEntries) {
             if (entry.kind !== "bind" && entry.kind !== "unbind") continue;
             const parts = root.splitCombo(entry.key ?? "");
             const action = (entry.dispatcher && typeof entry.dispatcher === "object")
@@ -811,20 +811,40 @@ Singleton {
     // ------------------------------------------------------------------------ reading
 
     function refresh() {
+        root.stale = false;
         if (!parseProc.running) parseProc.running = true;
         if (!liveProc.running) liveProc.running = true;
         if (!globalsProc.running) globalsProc.running = true;
         if (!stockProc.running) stockProc.running = true;
     }
 
+    /**
+     * Re-parsing costs four processes, so it happens when someone is reading rather than on
+     * every reload for the rest of the session. The Shortcuts tab holds the page open; a
+     * routine's trigger form asks for itself with ensureFresh().
+     */
+    property bool stale: false
+
+    function ensureFresh() {
+        if (root.stale || !root.ready) root.refresh();
+    }
+
     Component.onCompleted: root.refresh()
+
+    Connections {
+        target: HyprlandGui
+        function onWatchingChanged() {
+            if (HyprlandGui.watching) root.ensureFresh();
+        }
+    }
 
     Connections {
         target: Hyprland
 
         function onRawEvent(event) {
             if (event.name !== "configreloaded") return;
-            reloadDebounce.restart();
+            root.stale = true;
+            if (HyprlandGui.watching) reloadDebounce.restart();
         }
     }
 
