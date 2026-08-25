@@ -82,6 +82,23 @@ ContentPage {
         }
 
         ConfigSwitch {
+            buttonIcon: "sports_score"
+            text: Translation.tr("Show sports events")
+            checked: Config.options.calendar.timetable.sportsEvents
+            onCheckedChanged: {
+                Config.options.calendar.timetable.sportsEvents = checked;
+            }
+        }
+
+        StyledText {
+            Layout.fillWidth: true
+            text: Translation.tr("Shows read-only ESPN games in the Timetable.")
+            font.pixelSize: Appearance.font.pixelSize.small
+            color: Appearance.colors.colOnSurfaceVariant
+            wrapMode: Text.Wrap
+        }
+
+        ConfigSwitch {
             buttonIcon: "nightlight"
             text: Translation.tr("Moon phases in month view")
             checked: Config.options.calendar.timetable.moonPhases.enable

@@ -46,6 +46,7 @@ Item {
 
     property bool sportsSubscriberAcquired: false
     property bool sportsReady: false
+    readonly property bool sportsRequested: Config.options.calendar.timetable.sportsEvents
     readonly property var activeViewItem: root.activeMode === "month" ? monthViewLoader.item : weekViewLoader.item
     readonly property bool activeViewReady: root.activeViewItem?.initialLoadComplete ?? false
 
@@ -79,9 +80,33 @@ Item {
         }
     }
 
-    onActiveViewReadyChanged: {
+    function syncSportsSubscription() {
+        if (!root.sportsRequested) {
+            sportsActivationTimer.stop();
+            if (root.sportsSubscriberAcquired) {
+                SportsService.releaseTimetableSubscriber();
+                root.sportsSubscriberAcquired = false;
+            }
+            root.sportsReady = false;
+            return;
+        }
+
         if (root.activeViewReady && !root.sportsSubscriberAcquired)
             sportsActivationTimer.restart();
+    }
+
+    onActiveViewReadyChanged: {
+        if (!root.activeViewReady)
+            return;
+        // Google colours are cached on disk, so this only reaches the network
+        // once the cache is older than the configured window. It is independent
+        // from the optional ESPN projection below.
+        GoogleCalendarService.refreshColors();
+        root.syncSportsSubscription();
+    }
+
+    onSportsRequestedChanged: {
+        root.syncSportsSubscription();
     }
 
     Timer {
@@ -89,14 +114,11 @@ Item {
         interval: 0
         repeat: false
         onTriggered: {
-            if (!root.activeViewReady || root.sportsSubscriberAcquired)
+            if (!root.sportsRequested || !root.activeViewReady || root.sportsSubscriberAcquired)
                 return;
             SportsService.acquireTimetableSubscriber();
             root.sportsSubscriberAcquired = true;
             root.sportsReady = true;
-            // Google colours are cached on disk, so this only reaches the
-            // network once the cache is older than the configured window.
-            GoogleCalendarService.refreshColors();
         }
     }
 

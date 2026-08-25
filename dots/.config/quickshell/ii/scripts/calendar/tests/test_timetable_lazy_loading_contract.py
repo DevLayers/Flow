@@ -29,6 +29,18 @@ class TimetableLazyLoadingContractTests(unittest.TestCase):
         self.assertIn("SportsService.acquireTimetableSubscriber()", host)
         self.assertNotIn("Component.onCompleted: SportsService.acquireTimetableSubscriber()", host)
 
+    def test_timetable_sports_are_explicitly_opt_in(self) -> None:
+        config = (ROOT / "modules" / "common" / "Config.qml").read_text(encoding="utf-8")
+        settings = (ROOT / "modules" / "settings" / "configs" / "widgets" / "TimetableConfig.qml").read_text(encoding="utf-8")
+        host = (CHEATSHEET / "CheatsheetTimetable.qml").read_text(encoding="utf-8")
+
+        self.assertIn("property bool sportsEvents: false", config)
+        self.assertIn('text: Translation.tr("Show sports events")', settings)
+        self.assertIn("checked: Config.options.calendar.timetable.sportsEvents", settings)
+        self.assertIn("readonly property bool sportsRequested: Config.options.calendar.timetable.sportsEvents", host)
+        self.assertIn("if (!root.sportsRequested)", host)
+        self.assertIn("SportsService.releaseTimetableSubscriber()", host)
+
     def test_month_cells_are_materialized_progressively(self) -> None:
         month = (TIMETABLE / "MonthView.qml").read_text(encoding="utf-8")
         cell = (TIMETABLE / "MonthDayCell.qml").read_text(encoding="utf-8")

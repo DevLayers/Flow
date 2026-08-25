@@ -3149,6 +3149,9 @@ Singleton {
                 }
                 property JsonObject timetable: JsonObject {
                     property list<string> subscriptions: []
+                    // ESPN games stay outside khal and are displayed only when
+                    // explicitly requested in the Timetable.
+                    property bool sportsEvents: false
                     // Number of dates summarized by the month view's agenda rail.
                     property int upcomingHorizonDays: 14
                     // Opt-in: timeline views may replace calendar colours with
