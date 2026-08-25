@@ -229,7 +229,7 @@ Singleton {
     /// them - `app:`, `win:`, `layer:`, `ws:` - so four lists can share one file and one kind.
     function managedOfKind(kind: string, prefix: string): var {
         const out = [];
-        for (const entry of HyprlandGui.entriesFor("rules")) {
+        for (const entry of HyprlandGui.rulesEntries) {
             if (entry.kind !== kind || typeof entry.id !== "string") continue;
             if (!entry.id.startsWith(prefix)) continue;
             out.push({ "id": entry.id, "name": entry.id.slice(prefix.length), "spec": entry.spec ?? {} });
@@ -253,7 +253,7 @@ Singleton {
     }
 
     function find(kind: string, id: string): var {
-        const entry = HyprlandGui.entriesFor("rules")
+        const entry = HyprlandGui.rulesEntries
             .find(candidate => candidate.kind === kind && candidate.id === id);
         return entry ? (entry.spec ?? {}) : null;
     }

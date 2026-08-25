@@ -11,7 +11,16 @@ ConfigSpinBox {
     required property string optionKey
     property int defaultValue: 0
 
-    readonly property var optionState: HyprlandGui.resolve(root.optionKey)
+    /**
+     * What the row needs, split by what it depends on.
+     *
+     * `resolve()` bundles all five layers into one object, so a control bound to it was rebuilt
+     * whenever anything anywhere in the config changed - and with six tabs open that is every
+     * control on the page, on every edit. Ownership never changes at all, and "has Hyprland
+     * answered yet" changes once; only the value really moves.
+     */
+    readonly property bool locked: HyprlandGui.shellOwned(root.optionKey) !== ""
+    readonly property bool known: HyprlandGui.effective[root.optionKey] !== undefined
     readonly property int optionValue: {
         const value = Number(HyprlandGui.displayValue(root.optionKey, root.defaultValue));
         return isNaN(value) ? root.defaultValue : Math.round(value);
@@ -21,7 +30,7 @@ ConfigSpinBox {
     property bool armed: false
     property real reported: NaN
 
-    enabled: root.optionState.shellOwnedBy === ""
+    enabled: !root.locked
     value: root.optionValue
 
     function clamped(value: real): real {
@@ -29,7 +38,7 @@ ConfigSpinBox {
     }
 
     onValueChanged: {
-        if (!root.armed || !root.optionState.known) return;
+        if (!root.armed || !root.known) return;
         if (root.value === root.optionValue) return;
         if (isFinite(root.reported) && root.value === root.clamped(root.reported)) return;
         HyprlandGui.setKey(root.optionKey, root.value);
@@ -41,14 +50,14 @@ ConfigSpinBox {
 
     Component.onCompleted: {
         HyprlandGui.watch([root.optionKey]);
-        if (root.optionState.known) {
+        if (root.known) {
             root.reported = root.optionValue;
             Qt.callLater(() => root.armed = true);
         }
     }
 
-    onOptionStateChanged: {
-        if (root.armed || !root.optionState.known) return;
+    onKnownChanged: {
+        if (root.armed || !root.known) return;
         root.reported = root.optionValue;
         Qt.callLater(() => root.armed = true);
     }

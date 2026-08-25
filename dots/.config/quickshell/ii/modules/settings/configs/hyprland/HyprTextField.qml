@@ -11,10 +11,18 @@ ConfigTextField {
     required property string optionKey
     property string defaultValue: ""
 
-    readonly property var optionState: HyprlandGui.resolve(root.optionKey)
+    /**
+     * What the row needs, split by what it depends on.
+     *
+     * `resolve()` bundles all five layers into one object, so a control bound to it was rebuilt
+     * whenever anything anywhere in the config changed - and with six tabs open that is every
+     * control on the page, on every edit. Ownership never changes at all, and "has Hyprland
+     * answered yet" changes once; only the value really moves.
+     */
+    readonly property bool locked: HyprlandGui.shellOwned(root.optionKey) !== ""
     readonly property string optionValue: String(HyprlandGui.displayValue(root.optionKey, root.defaultValue) ?? "")
 
-    enabled: root.optionState.shellOwnedBy === ""
+    enabled: !root.locked
 
     function push() {
         if (root.inputText === root.optionValue) return;

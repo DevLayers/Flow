@@ -22,8 +22,16 @@ ContentSubsection {
 
     signal selected(var newValue)
 
-    readonly property var optionState: root.optionKey === ""
-        ? null : HyprlandGui.resolve(root.optionKey)
+    /**
+     * What the row needs, split by what it depends on.
+     *
+     * `resolve()` bundles all five layers into one object, so a control bound to it was rebuilt
+     * whenever anything anywhere in the config changed - and with six tabs open that is every
+     * control on the page, on every edit. Ownership never changes at all, and "has Hyprland
+     * answered yet" changes once; only the value really moves.
+     */
+    readonly property bool locked: root.optionKey !== ""
+        && HyprlandGui.shellOwned(root.optionKey) !== ""
     readonly property var optionValue: root.optionKey === ""
         ? root.currentOverride : HyprlandGui.displayValue(root.optionKey, root.defaultValue)
 
@@ -31,7 +39,7 @@ ContentSubsection {
 
     ConfigSelectionArray {
         id: choices
-        enabled: root.optionState === null || root.optionState.shellOwnedBy === ""
+        enabled: !root.locked
         currentValue: root.optionValue
         onSelected: newValue => {
             if (root.optionKey !== "") HyprlandGui.setKey(root.optionKey, newValue);
