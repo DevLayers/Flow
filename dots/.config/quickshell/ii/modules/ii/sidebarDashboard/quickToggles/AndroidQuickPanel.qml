@@ -37,6 +37,12 @@ AbstractQuickPanel {
         }
     }
 
+    Component.onCompleted: {
+        if (GlobalStates.sidebarRightOpen) {
+            root.triggerContentEntrance();
+        }
+    }
+
     onEditModeChanged: {
         if (!root.editMode && editController.active)
             editController.cancel();
@@ -380,61 +386,51 @@ AbstractQuickPanel {
                             property bool isCurrent: root.currentPage === index
                             property list<var> pageToggles: root.positionedPages[index] || []
 
-                            Loader {
-                                id: pageContentLoader
+                            Item {
+                                id: pageContentCanvas
                                 anchors {
                                     left: parent.left
                                     right: parent.right
                                     top: parent.top
                                 }
-                                active: pageContainer.isCurrent || root.editMode
-                                asynchronous: true
-                                sourceComponent: Item {
-                                    id: pageContentCanvas
-                                    anchors {
-                                        left: parent.left
-                                        right: parent.right
-                                        top: parent.top
-                                    }
-                                    implicitHeight: root.pageHeight(pageContainer.index)
-                                    height: implicitHeight
-                                    objectName: "pageContent_" + pageContainer.index
+                                implicitHeight: root.pageHeight(pageContainer.index)
+                                height: implicitHeight
+                                objectName: "pageContent_" + pageContainer.index
 
-                                    StableQuickToggleModel {
-                                        id: pageToggleModel
-                                        sourceValues: pageContainer.pageToggles
-                                    }
+                                StableQuickToggleModel {
+                                    id: pageToggleModel
+                                    sourceValues: pageContainer.pageToggles
+                                }
 
-                                    Repeater {
-                                        id: gridRepeater
-                                        model: pageToggleModel
-                                        delegate: AndroidToggleDelegateChooser {
+                                Repeater {
+                                    id: gridRepeater
+                                    model: pageToggleModel
+                                    delegate: AndroidToggleDelegateChooser {
 
-                                            editMode: root.editMode
-                                            baseCellWidth: root.baseCellWidth
-                                            baseCellHeight: root.baseCellHeight
-                                            spacing: root.spacing
-                                            isUnused: false
-                                            pageIndex: pageContainer.index
-                                            gridColumns: root.columns
-                                            panel: root
-                                            gridRef: pageContentCanvas
-                                            entranceTrigger: root.entranceTrigger
+                                        editMode: root.editMode
+                                        baseCellWidth: root.baseCellWidth
+                                        baseCellHeight: root.baseCellHeight
+                                        spacing: root.spacing
+                                        isUnused: false
+                                        pageIndex: pageContainer.index
+                                        gridColumns: root.columns
+                                        panel: root
+                                        gridRef: pageContentCanvas
+                                        entranceTrigger: root.entranceTrigger
 
-                                            onOpenAudioOutputDialog: root.openAudioOutputDialog()
-                                            onOpenAudioInputDialog: root.openAudioInputDialog()
-                                            onOpenBluetoothDialog: root.openBluetoothDialog()
-                                            onOpenNightLightDialog: root.openNightLightDialog()
-                                            onOpenWifiDialog: root.openWifiDialog()
-                                            onOpenDarkModeDialog: root.openDarkModeDialog()
-                                            onOpenLocalSendDialog: root.openLocalSendDialog()
-                                            onOpenVpnDialog: root.openVpnDialog()
-                                            onOpenTailscaleDialog: root.openTailscaleDialog()
-                                            onOpenDnsOverTlsDialog: root.openDnsOverTlsDialog()
-                                            onOpenIdleInhibitorDialog: root.openIdleInhibitorDialog()
-                                            onOpenScreenShaderDialog: root.openScreenShaderDialog()
-                                            onOpenModesDialog: root.openModesDialog()
-                                        }
+                                        onOpenAudioOutputDialog: root.openAudioOutputDialog()
+                                        onOpenAudioInputDialog: root.openAudioInputDialog()
+                                        onOpenBluetoothDialog: root.openBluetoothDialog()
+                                        onOpenNightLightDialog: root.openNightLightDialog()
+                                        onOpenWifiDialog: root.openWifiDialog()
+                                        onOpenDarkModeDialog: root.openDarkModeDialog()
+                                        onOpenLocalSendDialog: root.openLocalSendDialog()
+                                        onOpenVpnDialog: root.openVpnDialog()
+                                        onOpenTailscaleDialog: root.openTailscaleDialog()
+                                        onOpenDnsOverTlsDialog: root.openDnsOverTlsDialog()
+                                        onOpenIdleInhibitorDialog: root.openIdleInhibitorDialog()
+                                        onOpenScreenShaderDialog: root.openScreenShaderDialog()
+                                        onOpenModesDialog: root.openModesDialog()
                                     }
                                 }
                             }

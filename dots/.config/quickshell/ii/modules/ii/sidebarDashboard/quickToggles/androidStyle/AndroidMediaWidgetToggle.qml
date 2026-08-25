@@ -62,12 +62,28 @@ Item {
     }
 
     property int entranceTrigger: -1
-    property real _entranceOpacity: 0
-    property real _entranceScale: 0.85
-    property real _entranceTranslateY: 20
-    property bool _entranceDone: false
+    property real _entranceOpacity: 1.0
+    property real _entranceScale: 1.0
+    property real _entranceTranslateY: 0
+    property bool _entranceDone: true
+    readonly property bool _animationsDisabled: (Config.options?.appearance?.animationMultiplier ?? 1.0) <= 0.25
 
     onEntranceTriggerChanged: {
+        if (_animationsDisabled) {
+            _entranceDone = true;
+            _entranceOpacity = 1;
+            _entranceScale = 1;
+            _entranceTranslateY = 0;
+            return;
+        }
+        // Only animate when the sidebar is opening on the current page (or for fixed sliders)
+        if (root.pageIndex !== -1 && root.panel && root.panel.currentPage !== root.pageIndex) {
+            _entranceDone = true;
+            _entranceOpacity = 1;
+            _entranceScale = 1;
+            _entranceTranslateY = 0;
+            return;
+        }
         _entranceDone = false;
         _entranceOpacity = 0;
         _entranceScale = 0.85;
@@ -78,13 +94,10 @@ Item {
     }
 
     Component.onCompleted: {
-        _entranceDone = false;
-        _entranceOpacity = 0;
-        _entranceScale = 0.85;
-        _entranceTranslateY = 20;
-        Qt.callLater(function() {
-            entranceAnim.start();
-        });
+        _entranceDone = true;
+        _entranceOpacity = 1;
+        _entranceScale = 1.0;
+        _entranceTranslateY = 0;
     }
 
     SequentialAnimation {

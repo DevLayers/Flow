@@ -15,13 +15,13 @@ Item {
 
     // Entrance animation
     property int entranceTrigger: -1
-    property real _entranceOpacity: 0
-    property real _entranceScale: 0.85
-    property real _entranceTranslateY: 20
-    property bool _entranceDone: false
-    property real _knobEntranceTranslateX: -50
-    property real _knobEntranceScale: 0.7
-    property real _knobEntranceRotation: -20
+    property real _entranceOpacity: 1.0
+    property real _entranceScale: 1.0
+    property real _entranceTranslateY: 0
+    property bool _entranceDone: true
+    property real _knobEntranceTranslateX: 0
+    property real _knobEntranceScale: 1.0
+    property real _knobEntranceRotation: 0
 
     onEntranceTriggerChanged: {
         _entranceDone = false;
@@ -37,16 +37,13 @@ Item {
     }
 
     Component.onCompleted: {
-        _entranceDone = false;
-        _entranceOpacity = 0;
-        _entranceScale = 0.85;
-        _entranceTranslateY = 20;
-        _knobEntranceTranslateX = -50;
-        _knobEntranceScale = 0.7;
-        _knobEntranceRotation = -20;
-        Qt.callLater(function() {
-            entranceAnim.start();
-        });
+        _entranceDone = true;
+        _entranceOpacity = 1.0;
+        _entranceScale = 1.0;
+        _entranceTranslateY = 0;
+        _knobEntranceTranslateX = 0;
+        _knobEntranceScale = 1.0;
+        _knobEntranceRotation = 0;
     }
 
     SequentialAnimation {

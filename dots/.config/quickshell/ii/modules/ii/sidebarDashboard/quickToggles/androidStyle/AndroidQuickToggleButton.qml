@@ -101,15 +101,24 @@ Item {
 
     // Entrance animation (Reorder animation effect - tuned delay & full opacity fade)
     property int entranceTrigger: -1
-    property real _entranceOpacity: 0
-    property real _entranceScale: 0.92
-    property real _entranceOffsetX: ((buttonIndex % 3 === 0) ? -18 : (buttonIndex % 3 === 1) ? 0 : 18)
-    property real _entranceOffsetY: ((buttonIndex % 2 === 0) ? -12 : 12)
-    property bool _entranceDone: false
+    property real _entranceOpacity: 1.0
+    property real _entranceScale: 1.0
+    property real _entranceOffsetX: 0
+    property real _entranceOffsetY: 0
+    property bool _entranceDone: true
     readonly property bool _animationsDisabled: (Config.options?.appearance?.animationMultiplier ?? 1.0) <= 0.25
 
     onEntranceTriggerChanged: {
         if (_animationsDisabled) {
+            _entranceDone = true;
+            _entranceOpacity = 1;
+            _entranceScale = 1;
+            _entranceOffsetX = 0;
+            _entranceOffsetY = 0;
+            return;
+        }
+        // Only animate when the sidebar is opening on the current page (or for fixed sliders)
+        if (root.pageIndex !== -1 && root.panel && root.panel.currentPage !== root.pageIndex) {
             _entranceDone = true;
             _entranceOpacity = 1;
             _entranceScale = 1;
@@ -128,22 +137,11 @@ Item {
     }
 
     Component.onCompleted: {
-        if (_animationsDisabled) {
-            _entranceDone = true;
-            _entranceOpacity = 1;
-            _entranceScale = 1;
-            _entranceOffsetX = 0;
-            _entranceOffsetY = 0;
-            return;
-        }
-        _entranceDone = false;
-        _entranceOpacity = 0;
-        _entranceScale = 0.92;
-        _entranceOffsetX = ((buttonIndex % 3 === 0) ? -18 : (buttonIndex % 3 === 1) ? 0 : 18);
-        _entranceOffsetY = ((buttonIndex % 2 === 0) ? -12 : 12);
-        Qt.callLater(function() {
-            entranceAnim.start();
-        });
+        _entranceDone = true;
+        _entranceOpacity = 1;
+        _entranceScale = 1;
+        _entranceOffsetX = 0;
+        _entranceOffsetY = 0;
     }
 
     SequentialAnimation {
@@ -156,29 +154,6 @@ Item {
             NumberAnimation { target: root; property: "_entranceOffsetY"; from: ((root.buttonIndex % 2 === 0) ? -12 : 12); to: 0; duration: 340; easing.type: Easing.OutBack; easing.overshoot: 1.1 }
         }
         PropertyAction { target: root; property: "_entranceDone"; value: true }
-    }
-
-    property real pageScale: 1.0
-
-    Connections {
-        target: root.panel
-        function onCurrentPageChanged() {
-            if (root.panel && root.panel.currentPage === root.pageIndex && root.pageIndex !== -1) {
-                pageEntranceAnimation.restart();
-            }
-        }
-    }
-
-    SequentialAnimation {
-        id: pageEntranceAnimation
-        NumberAnimation {
-            target: root
-            property: "pageScale"
-            from: 0.96
-            to: 1.0
-            duration: 350
-            easing.type: Easing.OutQuint
-        }
     }
 
     // Sizing shenanigans - use effective sizes for live resize preview
@@ -215,7 +190,7 @@ Item {
         width: root.width
         height: root.height
 
-        scale: (root.isDragging ? 1.05 : 1.0) * root.pageScale * (root._entranceDone ? 1.0 : root._entranceScale)
+        scale: (root.isDragging ? 1.05 : 1.0) * (root._entranceDone ? 1.0 : root._entranceScale)
         opacity: {
             if (!root._entranceDone) return root._entranceOpacity;
             if (root.isUnused) return 0.5;
@@ -231,7 +206,7 @@ Item {
         }
         
         Behavior on scale {
-            enabled: !root.isDragging && !pageEntranceAnimation.running && !entranceAnim.running
+            enabled: !root.isDragging && !entranceAnim.running
             animation: Appearance.animation.clickBounce.numberAnimation.createObject(visualButton)
         }
         Behavior on opacity {
