@@ -3,6 +3,7 @@ import Quickshell
 import Quickshell.Io
 import qs
 import qs.modules.common
+import qs.modules.common.widgets
 import qs.modules.common.functions
 import qs.modules.common.widgets.widgetCanvas
 import qs.modules.ii.background.widgets
@@ -297,6 +298,214 @@ AbstractWidget {
         }
     }
 
+    // ── Android-style corner scale handle ────────────────────────────────────
+    // Dragging the bottom-right grip resizes a widget from its centre. Widgets
+    // whose config section declares `widgetSize` follow that same value their
+    // settings slider edits (implicit-size growth with x/y compensated); every
+    // other widget falls back to a per-instance multiplier persisted on the
+    // activeWidgets entry and applied as a visual Item scale around the centre.
+    readonly property bool _positionsLocked: Config.options.background.widgets.lockWidgetPositions ?? false
+    readonly property var _scaleSection: Config.options.background.widgets[configEntryName] ?? null
+    readonly property bool _scaleHandleAvailable: !isPreview && draggable && !_positionsLocked && widgetInstance !== null
+    // Path selection is consumer-based, not declaration-based: sections like
+    // clock_nothing declare `widgetSize` while their layout ignores it, and
+    // writing it there changes nothing (the widget "snaps back"). Only widgets
+    // whose contentScale actually derives from the key follow the slider path;
+    // everyone else uses the per-instance Item scale.
+    readonly property var _widgetSizeConsumers: ({
+        "android_search_bar": true, "at_a_glance": true,
+        "circle_pointer_clock": true, "clock_expressive_card": true, "clock_flex": true,
+        "clock_hori": true, "compact_media": true, "concentric_clock": true,
+        "grid_card_clock": true, "media_cd": true, "month_clock": true,
+        "photo_1x1": true, "resource_cpu_pill": true, "resource_disk_pill": true,
+        "resource_fill_cards": true, "resource_nothing_cpu": true,
+        "resource_nothing_disk": true, "resource_nothing_ram": true,
+        "resource_ram_pill": true, "scallop_dot_clock": true,
+        "scallop_number_clock": true, "search_pill": true,
+        "triple_ring_clock": true, "wearos_arc_clock": true, "wearos_clock": true
+    })
+    readonly property bool _usesWidgetSizeKey: _scaleSection !== null && _scaleSection.widgetSize !== undefined && _widgetSizeConsumers[configEntryName] === true
+    property real _liveScaleOverride: 0 // >0 only while a fallback resize gesture runs
+    readonly property real _effectiveInstanceScale: _liveScaleOverride > 0 ? _liveScaleOverride : _persistedInstanceScale
+    // Authoritative source is the config list, not the ListModel role: roles
+    // freeze at first append, so models created before `scale` existed read
+    // back undefined and visually revert the widget on the next resync.
+    readonly property real _persistedInstanceScale: {
+        const id = widgetInstance !== null ? widgetInstance.id : "";
+        const list = Config.options.background.activeWidgets || [];
+        let result = 1.0;
+        for (let i = 0; i < list.length; i++) {
+            if (list[i].id === id) {
+                result = list[i].scale ?? 1.0;
+                break;
+            }
+        }
+        return result;
+    }
+    Connections {
+        target: root._resizeDebugInstance
+        function onScaleChanged() {
+            console.warn("[ResizeDebug]", root.widgetInstance !== null ? root.widgetInstance.id : "?", "role scale ->", root.widgetInstance.scale);
+        }
+    }
+    readonly property QtObject _resizeDebugInstance: widgetInstance
+
+
+    property bool _resizeActive: false
+    property real _resizeStartSize: 100 // widgetSize % at gesture start
+    property real _resizeStartDist: 1   // pointer→centre distance at press
+    property bool _resizeUsesGlobal: false
+    property point _resizeStartGlobal: Qt.point(0, 0) // screen-space pointer at press
+    property point _resizeCentreGlobal: Qt.point(0, 0) // screen-space widget centre at press
+    property real _resizeMaxSize: 200   // slider cap, tightened by monitor size
+    property real _resizeStartX: 0
+    property real _resizeStartY: 0
+    property real _resizeStartW: 0
+    property real _resizeStartH: 0
+    property bool _resizeGestureMoved: false // true once the pointer radial-travels
+
+    function beginResizeGesture(mouse) {
+        const canvas = findCanvas(root.parent);
+        const frame = canvas ?? root;
+        const p = resizeHandle.mapToItem(frame, mouse.x, mouse.y);
+        const centre = frame === root ? Qt.point(width / 2, height / 2) : root.mapToItem(frame, width / 2, height / 2);
+        // Measure the pointer against the widget centre in SCREEN space: both
+        // are frozen at press (the physical centre is invariant under the
+        // centre-origin scale animation), so no live geometry or animation
+        // state can feed back into the ratio. Screen offset for the centre is
+        // derived from the press event itself, keeping multi-monitor safe.
+        const hasGlobal = mouse.globalPosition !== undefined;
+        _resizeUsesGlobal = hasGlobal;
+        if (hasGlobal) {
+            const gp = mouse.globalPosition;
+            _resizeStartGlobal = Qt.point(gp.x, gp.y);
+            _resizeCentreGlobal = Qt.point(centre.x + (gp.x - p.x), centre.y + (gp.y - p.y));
+        } else {
+            _resizeStartGlobal = Qt.point(p.x, p.y);
+            _resizeCentreGlobal = Qt.point(centre.x, centre.y);
+        }
+        _resizeStartDist = Math.max(1, Math.hypot(p.x - centre.x, p.y - centre.y));
+        if (_usesWidgetSizeKey) {
+            _resizeStartSize = (_scaleSection.widgetSize ?? 100);
+            // Never let the widget outgrow its monitor.
+            const maxByWidth = (scaledScreenWidth / Math.max(1, width)) * _resizeStartSize;
+            const maxByHeight = (scaledScreenHeight / Math.max(1, height)) * _resizeStartSize;
+            _resizeMaxSize = Math.max(50, Math.min(200, maxByWidth, maxByHeight));
+            _resizeStartX = x;
+            _resizeStartY = y;
+            _resizeStartW = width;
+            _resizeStartH = height;
+        } else {
+            // Fallback: percent of the unscaled instance size; Item scale only.
+            // Authoritative value, not the live binding: mid-flight Behavior
+            // animation would be sampled here on rapid successive gestures,
+            // ratcheting the scale downwards on every double-click.
+            _resizeStartSize = _persistedInstanceScale * 100;
+            _resizeMaxSize = 200;
+        }
+        _resizeActive = true;
+        _resizeGestureMoved = false;
+        isDraggingOrSettling = true;
+        settleTimer.stop();
+        staggerTimer.stop();
+        _pendingPosition = false;
+    }
+
+    function updateResizeGesture(mouse) {
+        if (!_resizeActive)
+            return;
+        _resizeGestureMoved = true;
+        let dist;
+        if (_resizeUsesGlobal && mouse.globalPosition !== undefined) {
+            const gp = mouse.globalPosition;
+            dist = Math.hypot(gp.x - _resizeCentreGlobal.x, gp.y - _resizeCentreGlobal.y);
+        } else {
+            const canvas = findCanvas(root.parent);
+            const frame = canvas ?? root;
+            const p = resizeHandle.mapToItem(frame, mouse.x, mouse.y);
+            dist = Math.hypot(p.x - _resizeCentreGlobal.x, p.y - _resizeCentreGlobal.y);
+        }
+        dist = Math.max(1, dist);
+        const newSize = WidgetDragMath.clamp(_resizeStartSize * (dist / _resizeStartDist), 50, _resizeMaxSize);
+        if (_usesWidgetSizeKey) {
+            if (_scaleSection !== null)
+                _scaleSection.widgetSize = Math.round(newSize);
+            // Keep the centre fixed while the implicit size changes.
+            x = WidgetDragMath.clamp(_resizeStartX - (width - _resizeStartW) / 2, 0, dragMaximumX());
+            y = WidgetDragMath.clamp(_resizeStartY - (height - _resizeStartH) / 2, 0, dragMaximumY());
+        } else {
+            _liveScaleOverride = newSize / 100;
+        }
+    }
+
+    function resetScaleFromHandle() {
+        if (!_resizeActive)
+            return;
+        _resizeActive = false;
+        _liveScaleOverride = 0;
+        if (_usesWidgetSizeKey) {
+            if (_scaleSection !== null && _scaleSection.widgetSize !== undefined) {
+                const widthBefore = width;
+                const heightBefore = height;
+                _scaleSection.widgetSize = 100;
+                // Keep the centre where the user left it while shrinking back.
+                x = WidgetDragMath.clamp(x - (width - widthBefore) / 2, 0, dragMaximumX());
+                y = WidgetDragMath.clamp(y - (height - heightBefore) / 2, 0, dragMaximumY());
+                if (!isPreview) {
+                    if (widgetInstance !== null)
+                        Config.updateWidgetPosition(widgetInstance.id, x, y);
+                    else if (configEntry) {
+                        configEntry.x = x;
+                        configEntry.y = y;
+                    }
+                }
+            }
+        } else if (!isPreview && widgetInstance !== null) {
+            Config.updateWidgetScale(widgetInstance.id, 1.0);
+            if ((widgetInstance.scale ?? -1) !== 1.0)
+                widgetInstance.scale = 1.0;
+        }
+        isDraggingOrSettling = false;
+    }
+
+    function endResizeGesture() {
+        if (!_resizeActive)
+            return;
+        _resizeActive = false;
+        if (_usesWidgetSizeKey) {
+            if (_scaleSection !== null && _scaleSection.widgetSize !== undefined)
+                _scaleSection.widgetSize = Math.round(_scaleSection.widgetSize);
+            if (!isPreview) {
+                if (widgetInstance !== null) {
+                    Config.updateWidgetPosition(widgetInstance.id, x, y);
+                } else if (configEntry) {
+                    configEntry.x = x;
+                    configEntry.y = y;
+                }
+            }
+        } else {
+            // A click without pointer travel never entered updateResizeGesture,
+            // so the override is still 0: persisting it would clamp to the
+            // floor and shrink the widget. Only real drags may persist.
+            if (_resizeGestureMoved && _liveScaleOverride > 0) {
+                const rounded = WidgetDragMath.clamp(Math.round(_liveScaleOverride * 100) / 100, 0.5, 2);
+                console.warn("[ResizeDebug]", "endResize fallback override=", _liveScaleOverride, "rounded=", rounded);
+                if (!isPreview && widgetInstance !== null) {
+                    Config.updateWidgetScale(widgetInstance.id, rounded);
+                    // Belt-and-suspenders: write the role directly so the scale
+                    // binding re-evaluates even if the config resync hiccups.
+                    if ((widgetInstance.scale ?? -1) !== rounded)
+                        widgetInstance.scale = rounded;
+                    console.warn("[ResizeDebug]", "afterPersist id=", widgetInstance.id, "model.scale=", widgetInstance.scale);
+                }
+                // Clear only after both writes above have landed so the binding
+                // never falls back to the stale pre-resize value mid-frame.
+                _liveScaleOverride = 0;
+            }
+        }
+        settleTimer.restart();
+    }
+
     function beginPointerGesture(mouse) {
         if (!draggable)
             return;
@@ -396,7 +605,7 @@ AbstractWidget {
         animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
     }
     readonly property real lockScaleFactor: lockBehavior === "center" ? 1.0 : (GlobalStates.lockAnimationActive ? 0.85 : 1.0)
-    scale: (Config.options.background.widgets.widgetsScale ?? 1.0) * lockScaleFactor
+    scale: _effectiveInstanceScale * (Config.options.background.widgets.widgetsScale ?? 1.0) * lockScaleFactor
     Behavior on scale {
         animation: Appearance.animation.elementResize.numberAnimation.createObject(this)
     }
@@ -586,6 +795,7 @@ AbstractWidget {
     drag.target: undefined
     drag.threshold: 4
     preventStealing: true
+    hoverEnabled: true
     animateXPos: !isDragging && !isDraggingOrSettling && (visibleWhenLocked || !GlobalStates.screenLocked)
     animateYPos: !isDragging && !isDraggingOrSettling && (visibleWhenLocked || !GlobalStates.screenLocked)
 
@@ -622,6 +832,7 @@ AbstractWidget {
 
         _pointerGestureReady = false;
         _dragMovementActive = false;
+        console.warn("[ResizeDebug]", "moveRelease id=", widgetInstance !== null ? widgetInstance.id : "?", "model.scale=", widgetInstance !== null ? widgetInstance.scale : null, "final=", finalX, finalY);
         settleTimer.restart();
     }
 
@@ -701,6 +912,54 @@ AbstractWidget {
                 root.calculatedX = parsedContent.center_x * root.wallpaperScale - root.width / 2;
                 root.calculatedY  = parsedContent.center_y * root.wallpaperScale - root.height / 2;
             }
+        }
+    }
+
+    Item {
+        id: resizeHandle
+        visible: opacity > 0.001
+        opacity: root._scaleHandleAvailable && !root.isDragging && (root.containsMouse || resizeDragArea.dragging) ? 1 : 0
+        Behavior on opacity {
+            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(resizeHandle)
+        }
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        // Fully inside bounds: several widget roots set clip:true, which would
+        // visually cut a straddling grip.
+        anchors.rightMargin: 3
+        anchors.bottomMargin: 3
+        width: 34
+        height: 34
+        z: 99
+
+        Rectangle {
+            anchors.centerIn: parent
+            width: 26
+            height: 26
+            radius: Appearance.rounding.full
+            color: Appearance.colors.colSecondaryContainer
+            border.color: Appearance.colors.colOutline
+            border.width: 1
+
+            MaterialSymbol {
+                anchors.centerIn: parent
+                text: "open_in_full"
+                iconSize: 13
+                color: Appearance.colors.colOnSecondaryContainer
+            }
+        }
+
+        MouseArea {
+            id: resizeDragArea
+            anchors.fill: parent
+            cursorShape: Qt.SizeFDiagCursor
+            preventStealing: true
+
+            onPressed: mouse => root.beginResizeGesture(mouse)
+            onPositionChanged: mouse => root.updateResizeGesture(mouse)
+            onReleased: root.endResizeGesture()
+            onCanceled: root.endResizeGesture()
+            onDoubleClicked: root.resetScaleFromHandle()
         }
     }
 
