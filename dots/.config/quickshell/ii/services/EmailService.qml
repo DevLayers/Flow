@@ -296,6 +296,13 @@ Singleton {
         return _refreshToken;
     }
 
+    // Narrow public bridge for the opt-in calendar attachment scanner. The
+    // scanner receives an access token when fresh and otherwise exchanges the
+    // account refresh token using the existing Gmail helper.
+    function calendarImportToken() {
+        return root.authenticated ? root._getBestToken() : "";
+    }
+
     function decrementUnreadForModel(targetModel) {
         if (targetModel === inboxMessages)
             inboxUnreadCount = Math.max(0, inboxUnreadCount - 1);

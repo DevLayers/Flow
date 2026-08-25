@@ -72,6 +72,7 @@ Item {
     property string sourceUrlDraft: ""
     property string sourcesStatusText: ""
     readonly property bool calendarSourcesEnabled: Config.options.calendar.timetable.imports.enable
+    readonly property bool gmailIcsEnabled: Config.options.calendar.timetable.imports.gmailIcs.enable
 
     readonly property bool rangeValid: root.formAllDay || root.formEndMinutes > root.formStartMinutes
     readonly property bool canSave: root.formTitle.trim().length > 0 && root.rangeValid
@@ -1172,6 +1173,48 @@ Item {
                                         : Translation.tr("Links are always read-only."))
                                 font.pixelSize: Appearance.font.pixelSize.small
                                 color: Appearance.colors.colOnSurfaceVariant
+                                wrapMode: Text.Wrap
+                            }
+
+                            ConfigSwitch {
+                                Layout.fillWidth: true
+                                enabled: root.calendarSourcesEnabled
+                                buttonIcon: "mail"
+                                text: Translation.tr("Import ICS attachments from Gmail")
+                                checked: Config.options.calendar.timetable.imports.gmailIcs.enable
+                                onCheckedChanged: Config.options.calendar.timetable.imports.gmailIcs.enable = checked
+                            }
+
+                            StyledText {
+                                Layout.fillWidth: true
+                                text: Translation.tr("Checks calendar attachments in the active Gmail account and remembers each imported attachment.")
+                                font.pixelSize: Appearance.font.pixelSize.small
+                                color: Appearance.colors.colOnSurfaceVariant
+                                opacity: root.gmailIcsEnabled ? 1 : 0.7
+                                wrapMode: Text.Wrap
+                            }
+
+                            RippleButtonWithIcon {
+                                Layout.alignment: Qt.AlignRight
+                                implicitHeight: 40
+                                centerContent: true
+                                materialIcon: GmailCalendarImport.scanning ? "sync" : "refresh"
+                                mainText: GmailCalendarImport.scanning ? Translation.tr("Checking Gmail…") : Translation.tr("Check Gmail now")
+                                enabled: root.calendarSourcesEnabled && root.gmailIcsEnabled
+                                    && EmailService.authenticated && !GmailCalendarImport.scanning
+                                colText: Appearance.colors.colOnSecondaryContainer
+                                colBackground: Appearance.colors.colSecondaryContainer
+                                colBackgroundHover: Appearance.colors.colSecondaryContainerHover
+                                colRipple: Appearance.colors.colSecondaryContainerActive
+                                onClicked: GmailCalendarImport.scanNow()
+                            }
+
+                            StyledText {
+                                Layout.fillWidth: true
+                                visible: GmailCalendarImport.lastStatus.length > 0 || GmailCalendarImport.lastError.length > 0
+                                text: GmailCalendarImport.lastError.length > 0 ? GmailCalendarImport.lastError : GmailCalendarImport.lastStatus
+                                font.pixelSize: Appearance.font.pixelSize.small
+                                color: GmailCalendarImport.lastError.length > 0 ? Appearance.colors.colError : Appearance.colors.colOnSurfaceVariant
                                 wrapMode: Text.Wrap
                             }
 

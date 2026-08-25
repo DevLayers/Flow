@@ -13,6 +13,7 @@ original file behind and the event would exist twice.
 from __future__ import annotations
 
 import argparse
+import base64
 import copy
 import hashlib
 import json
@@ -426,18 +427,26 @@ def _import(store: CalendarStore, calendar: CalendarInfo, container: Calendar) -
 
 
 def _read_ics_import(request: dict[str, Any]) -> tuple[Calendar, str, Path | None]:
-    """Read a bounded local ICS file and return its normalized calendar."""
-    source_value = request.get("path")
-    source_path = Path(str(source_value or "")).expanduser() if source_value else None
-    if source_path is None or not str(source_path):
-        raise CalendarError("An ICS file path is required.")
-    if source_path.suffix.lower() not in {".ics", ".ical"}:
-        raise CalendarError("Choose an .ics or .ical calendar file.")
-    if not source_path.is_file():
-        raise CalendarError("ICS file was not found.")
-    if source_path.stat().st_size > ICS_IMPORT_MAX_BYTES:
+    """Read a bounded local or Gmail-provided ICS payload safely."""
+    encoded = request.get("contentsBase64")
+    source_path: Path | None = None
+    if isinstance(encoded, str) and encoded:
+        try:
+            raw = base64.b64decode(encoded.encode("ascii"), altchars=b"-_", validate=True)
+        except (UnicodeEncodeError, ValueError) as error:
+            raise CalendarError("Calendar attachment is not valid base64 data.") from error
+    else:
+        source_value = request.get("path")
+        source_path = Path(str(source_value or "")).expanduser() if source_value else None
+        if source_path is None or not str(source_path):
+            raise CalendarError("An ICS file path is required.")
+        if source_path.suffix.lower() not in {".ics", ".ical"}:
+            raise CalendarError("Choose an .ics or .ical calendar file.")
+        if not source_path.is_file():
+            raise CalendarError("ICS file was not found.")
+        raw = source_path.read_bytes()
+    if len(raw) > ICS_IMPORT_MAX_BYTES:
         raise CalendarError("ICS file is too large to import.")
-    raw = source_path.read_bytes()
     normalized = re.sub(rb"\r(?!\n)", b"", raw.replace(b"\r\r\n", b"\r\n"))
     try:
         calendar = Calendar.from_ical(normalized)

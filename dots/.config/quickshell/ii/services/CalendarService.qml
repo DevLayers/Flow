@@ -561,4 +561,26 @@ Singleton {
         return true;
     }
 
+    function importIcsBase64(contentsBase64, calendar = "", callback = null) {
+        const payload = String(contentsBase64 ?? "").trim();
+        if (!root.khalAvailable) {
+            const reply = { ok: false, error: Translation.tr("Calendar service unavailable.") };
+            if (typeof callback === "function")
+                callback(reply);
+            return false;
+        }
+        if (!payload) {
+            const reply = { ok: false, error: Translation.tr("Calendar attachment is empty.") };
+            if (typeof callback === "function")
+                callback(reply);
+            return false;
+        }
+        root.enqueueCalendarRequest({
+            op: "importIcs",
+            contentsBase64: payload,
+            calendar: String(calendar ?? "")
+        }, callback);
+        return true;
+    }
+
 }

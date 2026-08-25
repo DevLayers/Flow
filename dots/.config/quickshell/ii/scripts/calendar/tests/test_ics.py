@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import base64
 import subprocess
 import sys
 import tempfile
@@ -272,6 +273,19 @@ class IcsHelperTests(unittest.TestCase):
         rejected = self.request({"op": "importIcs", "path": str(oversized)})
         self.assertEqual(rejected["ok"], False)
         self.assertIn("too large", rejected["error"])
+
+    def test_import_ics_accepts_gmail_base64_without_replaying_events(self) -> None:
+        raw = (
+            b"BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\n"
+            b"UID:gmail-invite@example.test\r\nSUMMARY:Gmail invite\r\n"
+            b"DTSTART:20260918T140000\r\nDTEND:20260918T150000\r\n"
+            b"END:VEVENT\r\nEND:VCALENDAR\r\n"
+        )
+        payload = base64.urlsafe_b64encode(raw).decode("ascii")
+        first = self.request({"op": "importIcs", "contentsBase64": payload})
+        self.assertEqual(first, {"ok": True, "imported": 1, "skipped": 0})
+        second = self.request({"op": "importIcs", "contentsBase64": payload})
+        self.assertEqual(second, {"ok": True, "imported": 0, "skipped": 1})
 
     def test_occurrence_operations_and_read_only_guard(self) -> None:
         created = self.request({"op": "save", "calendar": "work", "event": self.event()})

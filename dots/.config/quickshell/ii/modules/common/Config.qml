@@ -3153,6 +3153,14 @@ Singleton {
                         // Local ICS files and remote read-only subscriptions
                         // are inactive until the user enables calendar sources.
                         property bool enable: false
+                        property JsonObject gmailIcs: JsonObject {
+                            // Scans only calendar attachments from the active
+                            // Gmail account and imports through the same
+                            // deduplicating calendar bridge as local files.
+                            property bool enable: false
+                            property int maxMessages: 25
+                            property int scanIntervalMinutes: 60
+                        }
                     }
                     // ESPN games stay outside khal and are displayed only when
                     // explicitly requested in the Timetable.

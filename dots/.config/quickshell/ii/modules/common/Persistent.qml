@@ -324,6 +324,9 @@ Singleton {
                 // Pending calendar reminder snoozes. Each DTO is reconstructed
                 // by CalendarNotifier; no CalendarService object crosses disk.
                 property list<var> timetableSnoozes: []
+                // Gmail account + attachment identity for calendar files the
+                // user opted into importing. Keeps periodic scans idempotent.
+                property list<string> timetableGmailIcsImports: []
             }
 
             property JsonObject clipboard: JsonObject {
