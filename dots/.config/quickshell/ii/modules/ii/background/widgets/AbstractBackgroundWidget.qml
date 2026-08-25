@@ -63,6 +63,14 @@ AbstractWidget {
         return 0;
     }
 
+    readonly property real effectiveScale: Math.max(0.001, root.scale)
+    readonly property real visualWidth: width * effectiveScale
+    readonly property real visualHeight: height * effectiveScale
+    readonly property real visualLeftOffset: width * (1.0 - effectiveScale) / 2.0
+    readonly property real visualRightOffset: width * (1.0 + effectiveScale) / 2.0
+    readonly property real visualTopOffset: height * (1.0 - effectiveScale) / 2.0
+    readonly property real visualBottomOffset: height * (1.0 + effectiveScale) / 2.0
+
     readonly property real centeredOffsetX: {
         if (centeredWidgetCount <= 1) return 0;
         let alignment = Config.options.lock.centerAlignment;
@@ -77,7 +85,7 @@ AbstractWidget {
             for (let i = 0; i < centeredWidgetCount; i++) {
                 let wInstanceId = centeredWidgetsList[i].instanceId || centeredWidgetsList[i].id;
                 let wSize = sizes[wInstanceId];
-                let w = (wSize && wSize.width > 0) ? wSize.width : root.width;
+                let w = (wSize && wSize.width > 0) ? (wSize.width * (wSize.scale || 1.0)) : root.visualWidth;
                 widths.push(w);
                 totalWidth += w;
             }
@@ -87,7 +95,7 @@ AbstractWidget {
             for (let i = 0; i < centeredWidgetIndex; i++) {
                 myX += widths[i] + spacing;
             }
-            let result = myX - (totalWidth - root.width) / 2;
+            let result = myX - (totalWidth - root.visualWidth) / 2;
             return result;
         }
         return 0;
@@ -106,7 +114,7 @@ AbstractWidget {
             for (let i = 0; i < centeredWidgetCount; i++) {
                 let wInstanceId = centeredWidgetsList[i].instanceId || centeredWidgetsList[i].id;
                 let wSize = sizes[wInstanceId];
-                let h = (wSize && wSize.height > 0) ? wSize.height : root.height;
+                let h = (wSize && wSize.height > 0) ? (wSize.height * (wSize.scale || 1.0)) : root.visualHeight;
                 heights.push(h);
                 totalHeight += h;
             }
@@ -116,7 +124,7 @@ AbstractWidget {
             for (let i = 0; i < centeredWidgetIndex; i++) {
                 myY += heights[i] + spacing;
             }
-            return myY - (totalHeight - root.height) / 2;
+            return myY - (totalHeight - root.visualHeight) / 2;
         }
         return 0;
     }
@@ -124,13 +132,17 @@ AbstractWidget {
     readonly property real centeringX: (screenWidth - width) / 2 + centeredOffsetX
     readonly property real centeringY: (screenHeight - height) / 2 + centeredOffsetY
 
-    // Register own size in the shared map whenever width/height changes
+    // Register own size in the shared map whenever width/height/scale changes
     function _registerOwnSize() {
         if (!widgetInstance) return;
         let id = widgetInstance.id;
         if (!id || width <= 0 || height <= 0) return;
         // Mutate in-place to preserve the shared reference across all widget instances
-        root.widgetSizes[id] = { "width": width, "height": height };
+        root.widgetSizes[id] = {
+            "width": width,
+            "height": height,
+            "scale": root.scale
+        };
         // Bump the version counter on widgetStateManager to trigger binding re-evaluation
         if (typeof backgroundScope !== 'undefined' && backgroundScope.widgetStateManager) {
             backgroundScope.widgetStateManager.widgetSizesVersion++;
@@ -138,6 +150,7 @@ AbstractWidget {
     }
     onWidthChanged: _registerOwnSize()
     onHeightChanged: _registerOwnSize()
+    onScaleChanged: _registerOwnSize()
     onWidgetInstanceChanged: _registerOwnSize()
 
     onForceCenterChanged: {
@@ -165,8 +178,8 @@ AbstractWidget {
     property real calculatedY: 0
     property real staggerDelay: 0
     property bool _pendingPosition: false
-    property real targetX: isPreview ? 0 : (forceCenter ? centeringX : ((placementStrategy === "free" || placementStrategy === "draggable") ? Math.max(0, Math.min(widgetInstance !== null ? widgetInstance.x : (configEntry ? configEntry.x : 0), scaledScreenWidth - width)) : calculatedX))
-    property real targetY: isPreview ? 0 : (forceCenter ? centeringY : ((placementStrategy === "free" || placementStrategy === "draggable") ? Math.max(0, Math.min(widgetInstance !== null ? widgetInstance.y : (configEntry ? configEntry.y : 0), scaledScreenHeight - height)) : calculatedY))
+    property real targetX: isPreview ? 0 : (forceCenter ? centeringX : ((placementStrategy === "free" || placementStrategy === "draggable") ? WidgetDragMath.clamp(widgetInstance !== null ? widgetInstance.x : (configEntry ? configEntry.x : 0), dragMinimumX(), dragMaximumX()) : calculatedX))
+    property real targetY: isPreview ? 0 : (forceCenter ? centeringY : ((placementStrategy === "free" || placementStrategy === "draggable") ? WidgetDragMath.clamp(widgetInstance !== null ? widgetInstance.y : (configEntry ? configEntry.y : 0), dragMinimumY(), dragMaximumY()) : calculatedY))
     property bool isDraggingOrSettling: false
 
     // Pointer coordinates and rendered coordinates are intentionally separate.
@@ -293,8 +306,8 @@ AbstractWidget {
             // resuming the grid does not fling the widget across several cells.
             _gridAnchorX = _rawDragX;
             _gridAnchorY = _rawDragY;
-            _lastGridX = Math.max(0, Math.min(Math.round(_rawDragX / _gridStep) * _gridStep, gridMaximumX()));
-            _lastGridY = Math.max(0, Math.min(Math.round(_rawDragY / _gridStep) * _gridStep, gridMaximumY()));
+            _lastGridX = WidgetDragMath.clamp(Math.round(_rawDragX / _gridStep) * _gridStep, dragMinimumX(), gridMaximumX());
+            _lastGridY = WidgetDragMath.clamp(Math.round(_rawDragY / _gridStep) * _gridStep, dragMinimumY(), gridMaximumY());
         }
     }
 
@@ -342,13 +355,6 @@ AbstractWidget {
         }
         return result;
     }
-    Connections {
-        target: root._resizeDebugInstance
-        function onScaleChanged() {
-            console.warn("[ResizeDebug]", root.widgetInstance !== null ? root.widgetInstance.id : "?", "role scale ->", root.widgetInstance.scale);
-        }
-    }
-    readonly property QtObject _resizeDebugInstance: widgetInstance
 
 
     property bool _resizeActive: false
@@ -431,8 +437,8 @@ AbstractWidget {
             if (_scaleSection !== null)
                 _scaleSection.widgetSize = Math.round(newSize);
             // Keep the centre fixed while the implicit size changes.
-            x = WidgetDragMath.clamp(_resizeStartX - (width - _resizeStartW) / 2, 0, dragMaximumX());
-            y = WidgetDragMath.clamp(_resizeStartY - (height - _resizeStartH) / 2, 0, dragMaximumY());
+            x = WidgetDragMath.clamp(_resizeStartX - (width - _resizeStartW) / 2, dragMinimumX(), dragMaximumX());
+            y = WidgetDragMath.clamp(_resizeStartY - (height - _resizeStartH) / 2, dragMinimumY(), dragMaximumY());
         } else {
             _liveScaleOverride = newSize / 100;
         }
@@ -449,8 +455,8 @@ AbstractWidget {
                 const heightBefore = height;
                 _scaleSection.widgetSize = 100;
                 // Keep the centre where the user left it while shrinking back.
-                x = WidgetDragMath.clamp(x - (width - widthBefore) / 2, 0, dragMaximumX());
-                y = WidgetDragMath.clamp(y - (height - heightBefore) / 2, 0, dragMaximumY());
+                x = WidgetDragMath.clamp(x - (width - widthBefore) / 2, dragMinimumX(), dragMaximumX());
+                y = WidgetDragMath.clamp(y - (height - heightBefore) / 2, dragMinimumY(), dragMaximumY());
                 if (!isPreview) {
                     if (widgetInstance !== null)
                         Config.updateWidgetPosition(widgetInstance.id, x, y);
@@ -464,6 +470,11 @@ AbstractWidget {
             Config.updateWidgetScale(widgetInstance.id, 1.0);
             if ((widgetInstance.scale ?? -1) !== 1.0)
                 widgetInstance.scale = 1.0;
+            const clampedX = WidgetDragMath.clamp(x, dragMinimumX(), dragMaximumX());
+            const clampedY = WidgetDragMath.clamp(y, dragMinimumY(), dragMaximumY());
+            if (clampedX !== x) x = clampedX;
+            if (clampedY !== y) y = clampedY;
+            Config.updateWidgetPosition(widgetInstance.id, x, y);
         }
         isDraggingOrSettling = false;
     }
@@ -489,14 +500,17 @@ AbstractWidget {
             // floor and shrink the widget. Only real drags may persist.
             if (_resizeGestureMoved && _liveScaleOverride > 0) {
                 const rounded = WidgetDragMath.clamp(Math.round(_liveScaleOverride * 100) / 100, 0.5, 2);
-                console.warn("[ResizeDebug]", "endResize fallback override=", _liveScaleOverride, "rounded=", rounded);
                 if (!isPreview && widgetInstance !== null) {
                     Config.updateWidgetScale(widgetInstance.id, rounded);
                     // Belt-and-suspenders: write the role directly so the scale
                     // binding re-evaluates even if the config resync hiccups.
                     if ((widgetInstance.scale ?? -1) !== rounded)
                         widgetInstance.scale = rounded;
-                    console.warn("[ResizeDebug]", "afterPersist id=", widgetInstance.id, "model.scale=", widgetInstance.scale);
+                    const clampedX = WidgetDragMath.clamp(x, dragMinimumX(), dragMaximumX());
+                    const clampedY = WidgetDragMath.clamp(y, dragMinimumY(), dragMaximumY());
+                    if (clampedX !== x) x = clampedX;
+                    if (clampedY !== y) y = clampedY;
+                    Config.updateWidgetPosition(widgetInstance.id, x, y);
                 }
                 // Clear only after both writes above have landed so the binding
                 // never falls back to the stale pre-resize value mid-frame.
@@ -537,8 +551,8 @@ AbstractWidget {
 
         _gridAnchorX = root.x;
         _gridAnchorY = root.y;
-        _lastGridX = Math.max(0, Math.min(Math.round(root.x / _gridStep) * _gridStep, gridMaximumX()));
-        _lastGridY = Math.max(0, Math.min(Math.round(root.y / _gridStep) * _gridStep, gridMaximumY()));
+        _lastGridX = WidgetDragMath.clamp(Math.round(root.x / _gridStep) * _gridStep, dragMinimumX(), gridMaximumX());
+        _lastGridY = WidgetDragMath.clamp(Math.round(root.y / _gridStep) * _gridStep, dragMinimumY(), gridMaximumY());
     }
 
     function updatePointerGesture(mouse) {
@@ -560,8 +574,8 @@ AbstractWidget {
             _dragMovementActive = true;
         }
 
-        _rawDragX = WidgetDragMath.clamp(_dragOriginX + deltaX, 0, dragMaximumX());
-        _rawDragY = WidgetDragMath.clamp(_dragOriginY + deltaY, 0, dragMaximumY());
+        _rawDragX = WidgetDragMath.clamp(_dragOriginX + deltaX, dragMinimumX(), dragMaximumX());
+        _rawDragY = WidgetDragMath.clamp(_dragOriginY + deltaY, dragMinimumY(), dragMaximumY());
         setCtrlBypass(Boolean(mouse.modifiers & Qt.ControlModifier));
         root.x = applyGridAndSnapX(_rawDragX, _rawDragY);
         root.y = applyGridAndSnapY(_rawDragY, _rawDragX);
@@ -619,31 +633,43 @@ AbstractWidget {
         return null
     }
 
+    function dragMinimumX() {
+        return -visualLeftOffset;
+    }
+
     function dragMaximumX() {
-        return Math.max(0, scaledScreenWidth - width);
+        return Math.max(dragMinimumX(), scaledScreenWidth - visualRightOffset);
+    }
+
+    function dragMinimumY() {
+        return -visualTopOffset;
     }
 
     function dragMaximumY() {
-        return Math.max(0, scaledScreenHeight - height);
+        return Math.max(dragMinimumY(), scaledScreenHeight - visualBottomOffset);
     }
 
     function gridMaximumX() {
-        return Math.floor(dragMaximumX() / _gridStep) * _gridStep;
+        const minX = dragMinimumX();
+        const maxX = dragMaximumX();
+        return minX + Math.floor((maxX - minX) / _gridStep) * _gridStep;
     }
 
     function gridMaximumY() {
-        return Math.floor(dragMaximumY() / _gridStep) * _gridStep;
+        const minY = dragMinimumY();
+        const maxY = dragMaximumY();
+        return minY + Math.floor((maxY - minY) / _gridStep) * _gridStep;
     }
 
     function advanceGridX(rawX) {
-        const state = WidgetDragMath.advanceGrid(rawX, _gridAnchorX, _lastGridX, _gridStep, 0, gridMaximumX());
+        const state = WidgetDragMath.advanceGrid(rawX, _gridAnchorX, _lastGridX, _gridStep, dragMinimumX(), gridMaximumX());
         _gridAnchorX = state.anchor;
         _lastGridX = state.value;
         return _lastGridX;
     }
 
     function advanceGridY(rawY) {
-        const state = WidgetDragMath.advanceGrid(rawY, _gridAnchorY, _lastGridY, _gridStep, 0, gridMaximumY());
+        const state = WidgetDragMath.advanceGrid(rawY, _gridAnchorY, _lastGridY, _gridStep, dragMinimumY(), gridMaximumY());
         _gridAnchorY = state.anchor;
         _lastGridY = state.value;
         return _lastGridY;
@@ -653,72 +679,170 @@ AbstractWidget {
         const candidates = [];
 
         if (widgetListModel) {
+            const myCenterX = rawX + root.width / 2;
+            const myCenterY = rawY + root.height / 2;
+
             for (let i = 0; i < widgetListModel.count; i++) {
                 const widget = widgetListModel.get(i);
                 if (widgetInstance && widget.instanceId === widgetInstance.id)
                     continue;
-                if (Math.abs(rawY - widget.widgetY) >= _snapOrthogonalRange)
-                    continue;
 
                 const widgetId = widget.instanceId || widget.id;
-                const widgetWidth = (widgetSizes && widgetSizes[widgetId] && widgetSizes[widgetId].width > 0)
-                    ? widgetSizes[widgetId].width
-                    : root.width;
-                const otherLeft = widget.widgetX;
-                const otherRight = widget.widgetX + widgetWidth;
+                let otherWidth = root.width;
+                let otherHeight = root.height;
+                let otherScale = 1.0;
 
-                candidates.push({ "target": otherLeft, "guide": otherLeft, "distance": Math.abs(rawX - otherLeft) });
-                candidates.push({ "target": otherRight - root.width, "guide": otherRight, "distance": Math.abs(rawX + root.width - otherRight) });
-                candidates.push({ "target": otherRight, "guide": otherRight, "distance": Math.abs(rawX - otherRight) });
-                candidates.push({ "target": otherLeft - root.width, "guide": otherLeft, "distance": Math.abs(rawX + root.width - otherLeft) });
+                if (widgetSizes && widgetSizes[widgetId]) {
+                    if (widgetSizes[widgetId].width > 0)
+                        otherWidth = widgetSizes[widgetId].width;
+                    if (widgetSizes[widgetId].height > 0)
+                        otherHeight = widgetSizes[widgetId].height;
+                    if (widgetSizes[widgetId].scale > 0)
+                        otherScale = widgetSizes[widgetId].scale;
+                    else if (widget.scale !== undefined && widget.scale > 0)
+                        otherScale = widget.scale * (Config.options.background.widgets.widgetsScale ?? 1.0);
+                } else if (widget.scale !== undefined && widget.scale > 0) {
+                    otherScale = widget.scale * (Config.options.background.widgets.widgetsScale ?? 1.0);
+                }
+
+                const otherCenterY = widget.widgetY + otherHeight / 2;
+                if (Math.abs(myCenterY - otherCenterY) >= _snapOrthogonalRange)
+                    continue;
+
+                const otherLeftOffset = otherWidth * (1 - otherScale) / 2;
+                const otherRightOffset = otherWidth * (1 + otherScale) / 2;
+                const otherVisualLeft = widget.widgetX + otherLeftOffset;
+                const otherVisualRight = widget.widgetX + otherRightOffset;
+
+                // 1. Align dragged widget's visual left with other widget's visual left
+                const tLeftToLeft = otherVisualLeft - root.visualLeftOffset;
+                candidates.push({
+                    "target": tLeftToLeft,
+                    "guide": otherVisualLeft,
+                    "distance": Math.abs(rawX - tLeftToLeft)
+                });
+
+                // 2. Align dragged widget's visual right with other widget's visual right
+                const tRightToRight = otherVisualRight - root.visualRightOffset;
+                candidates.push({
+                    "target": tRightToRight,
+                    "guide": otherVisualRight,
+                    "distance": Math.abs(rawX - tRightToRight)
+                });
+
+                // 3. Align dragged widget's visual left adjacent to other widget's visual right
+                const tLeftToRight = otherVisualRight - root.visualLeftOffset;
+                candidates.push({
+                    "target": tLeftToRight,
+                    "guide": otherVisualRight,
+                    "distance": Math.abs(rawX - tLeftToRight)
+                });
+
+                // 4. Align dragged widget's visual right adjacent to other widget's visual left
+                const tRightToLeft = otherVisualLeft - root.visualRightOffset;
+                candidates.push({
+                    "target": tRightToLeft,
+                    "guide": otherVisualLeft,
+                    "distance": Math.abs(rawX - tRightToLeft)
+                });
             }
         }
 
-        // Monitor-centre constraint: aligns the widget's centre with the vertical centre line.
+        // Monitor-centre constraint: aligns the widget's visual centre with the vertical centre line.
         const screenCenterX = root.scaledScreenWidth / 2;
+        const tCenter = screenCenterX - root.width / 2;
         candidates.push({
-            "target": screenCenterX - root.width / 2,
+            "target": tCenter,
             "guide": screenCenterX,
-            "distance": Math.abs((rawX + root.width / 2) - screenCenterX)
+            "distance": Math.abs(rawX - tCenter)
         });
 
-        return WidgetDragMath.nearestValidCandidate(candidates, 0, dragMaximumX(), _snapEnter);
+        return WidgetDragMath.nearestValidCandidate(candidates, dragMinimumX(), dragMaximumX(), _snapEnter);
     }
 
     function snapCandidateY(rawY, rawX) {
         const candidates = [];
 
         if (widgetListModel) {
+            const myCenterX = rawX + root.width / 2;
+            const myCenterY = rawY + root.height / 2;
+
             for (let i = 0; i < widgetListModel.count; i++) {
                 const widget = widgetListModel.get(i);
                 if (widgetInstance && widget.instanceId === widgetInstance.id)
                     continue;
-                if (Math.abs(rawX - widget.widgetX) >= _snapOrthogonalRange)
-                    continue;
 
                 const widgetId = widget.instanceId || widget.id;
-                const widgetHeight = (widgetSizes && widgetSizes[widgetId] && widgetSizes[widgetId].height > 0)
-                    ? widgetSizes[widgetId].height
-                    : root.height;
-                const otherTop = widget.widgetY;
-                const otherBottom = widget.widgetY + widgetHeight;
+                let otherWidth = root.width;
+                let otherHeight = root.height;
+                let otherScale = 1.0;
 
-                candidates.push({ "target": otherTop, "guide": otherTop, "distance": Math.abs(rawY - otherTop) });
-                candidates.push({ "target": otherBottom - root.height, "guide": otherBottom, "distance": Math.abs(rawY + root.height - otherBottom) });
-                candidates.push({ "target": otherBottom, "guide": otherBottom, "distance": Math.abs(rawY - otherBottom) });
-                candidates.push({ "target": otherTop - root.height, "guide": otherTop, "distance": Math.abs(rawY + root.height - otherTop) });
+                if (widgetSizes && widgetSizes[widgetId]) {
+                    if (widgetSizes[widgetId].width > 0)
+                        otherWidth = widgetSizes[widgetId].width;
+                    if (widgetSizes[widgetId].height > 0)
+                        otherHeight = widgetSizes[widgetId].height;
+                    if (widgetSizes[widgetId].scale > 0)
+                        otherScale = widgetSizes[widgetId].scale;
+                    else if (widget.scale !== undefined && widget.scale > 0)
+                        otherScale = widget.scale * (Config.options.background.widgets.widgetsScale ?? 1.0);
+                } else if (widget.scale !== undefined && widget.scale > 0) {
+                    otherScale = widget.scale * (Config.options.background.widgets.widgetsScale ?? 1.0);
+                }
+
+                const otherCenterX = widget.widgetX + otherWidth / 2;
+                if (Math.abs(myCenterX - otherCenterX) >= _snapOrthogonalRange)
+                    continue;
+
+                const otherTopOffset = otherHeight * (1 - otherScale) / 2;
+                const otherBottomOffset = otherHeight * (1 + otherScale) / 2;
+                const otherVisualTop = widget.widgetY + otherTopOffset;
+                const otherVisualBottom = widget.widgetY + otherBottomOffset;
+
+                // 1. Align dragged widget's visual top with other widget's visual top
+                const tTopToTop = otherVisualTop - root.visualTopOffset;
+                candidates.push({
+                    "target": tTopToTop,
+                    "guide": otherVisualTop,
+                    "distance": Math.abs(rawY - tTopToTop)
+                });
+
+                // 2. Align dragged widget's visual bottom with other widget's visual bottom
+                const tBottomToBottom = otherVisualBottom - root.visualBottomOffset;
+                candidates.push({
+                    "target": tBottomToBottom,
+                    "guide": otherVisualBottom,
+                    "distance": Math.abs(rawY - tBottomToBottom)
+                });
+
+                // 3. Align dragged widget's visual top adjacent to other widget's visual bottom
+                const tTopToBottom = otherVisualBottom - root.visualTopOffset;
+                candidates.push({
+                    "target": tTopToBottom,
+                    "guide": otherVisualBottom,
+                    "distance": Math.abs(rawY - tTopToBottom)
+                });
+
+                // 4. Align dragged widget's visual bottom adjacent to other widget's visual top
+                const tBottomToTop = otherVisualTop - root.visualBottomOffset;
+                candidates.push({
+                    "target": tBottomToTop,
+                    "guide": otherVisualTop,
+                    "distance": Math.abs(rawY - tBottomToTop)
+                });
             }
         }
 
-        // Monitor-centre constraint: aligns the widget's centre with the horizontal centre line.
+        // Monitor-centre constraint: aligns the widget's visual centre with the horizontal centre line.
         const screenCenterY = root.scaledScreenHeight / 2;
+        const tCenter = screenCenterY - root.height / 2;
         candidates.push({
-            "target": screenCenterY - root.height / 2,
+            "target": tCenter,
             "guide": screenCenterY,
-            "distance": Math.abs((rawY + root.height / 2) - screenCenterY)
+            "distance": Math.abs(rawY - tCenter)
         });
 
-        return WidgetDragMath.nearestValidCandidate(candidates, 0, dragMaximumY(), _snapEnter);
+        return WidgetDragMath.nearestValidCandidate(candidates, dragMinimumY(), dragMaximumY(), _snapEnter);
     }
 
     function applyGridAndSnapX(rawX, rawY) {
