@@ -30,6 +30,23 @@ Singleton {
     property var calendarCurrentRequest: null
     property var eventDetailsByUid: ({})
 
+    function writableCalendar(name) {
+        const requested = String(name ?? "").trim();
+        if (!requested)
+            return null;
+        return root.calendars.find(calendar => String(calendar.name ?? "") === requested && calendar.readOnly !== true) ?? null;
+    }
+
+    function setDefaultCalendar(name, persist = true) {
+        const calendar = root.writableCalendar(name);
+        if (!calendar)
+            return false;
+        root.defaultCalendar = String(calendar.name);
+        if (persist && Config.ready && Config.options.calendar.timetable.defaultCalendar !== root.defaultCalendar)
+            Config.options.calendar.timetable.defaultCalendar = root.defaultCalendar;
+        return true;
+    }
+
     // Process for checking khal configuration
     Process {
         id: khalCheckProcess
@@ -374,8 +391,13 @@ Singleton {
             if (!reply?.ok)
                 return;
             root.calendars = reply.calendars ?? [];
-            const writable = root.calendars.find(calendar => !calendar.readOnly);
-            root.defaultCalendar = writable?.name ?? "";
+            const persisted = String(Config.options.calendar.timetable.defaultCalendar ?? "").trim();
+            const khalDefault = String(reply.defaultCalendar ?? "").trim();
+            if (!root.setDefaultCalendar(persisted, false)
+                    && !root.setDefaultCalendar(khalDefault, false)) {
+                const writable = root.calendars.find(calendar => calendar.readOnly !== true);
+                root.defaultCalendar = writable?.name ?? "";
+            }
             root.loadEvents();
         });
     }
@@ -489,7 +511,13 @@ Singleton {
     }
 
     function createEventFields(calendar, fields, callback = null) {
-        root.enqueueCalendarRequest({ op: "save", calendar: calendar || root.defaultCalendar, event: fields }, callback);
+        const target = String(calendar || root.defaultCalendar).trim();
+        root.enqueueCalendarRequest({ op: "save", calendar: target, event: fields }, reply => {
+            if (reply?.ok)
+                root.setDefaultCalendar(target);
+            if (typeof callback === "function")
+                callback(reply);
+        });
         return true;
     }
 

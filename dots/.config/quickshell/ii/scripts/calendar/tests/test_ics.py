@@ -213,6 +213,7 @@ class IcsHelperTests(unittest.TestCase):
 
     def test_calendar_color_uses_curated_khal_values(self) -> None:
         calendars = self.request({"op": "calendars"})
+        self.assertEqual(calendars["defaultCalendar"], "work")
         work = next(calendar for calendar in calendars["calendars"] if calendar["name"] == "work")
         self.assertEqual(work["color"], "light blue")
 

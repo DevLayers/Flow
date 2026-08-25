@@ -716,7 +716,13 @@ def _expand(store: CalendarStore, request: dict[str, Any]) -> dict[str, Any]:
 
 
 def _calendar_list(store: CalendarStore, _: dict[str, Any]) -> dict[str, Any]:
-    return {"ok": True, "calendars": [
+    configured_default = store.calendars.get(store.default_calendar)
+    default_calendar = ""
+    if configured_default is not None and not configured_default.read_only:
+        default_calendar = configured_default.name
+    if not default_calendar:
+        default_calendar = next((calendar.name for calendar in store.calendars.values() if not calendar.read_only), "")
+    return {"ok": True, "defaultCalendar": default_calendar, "calendars": [
         {"name": calendar.name, "color": calendar.color, "readOnly": calendar.read_only}
         for calendar in store.calendars.values()
     ]}

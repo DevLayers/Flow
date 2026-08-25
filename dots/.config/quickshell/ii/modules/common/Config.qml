@@ -3163,6 +3163,11 @@ Singleton {
                     property bool showInMonthView: true
                 }
                 property JsonObject timetable: JsonObject {
+                    // New events start in khal's configured default calendar
+                    // until the user successfully creates one in another
+                    // writable calendar. The selected khal collection then
+                    // becomes the persistent Timetable default.
+                    property string defaultCalendar: ""
                     property list<string> subscriptions: []
                     property JsonObject imports: JsonObject {
                         // Local ICS files and remote read-only subscriptions
