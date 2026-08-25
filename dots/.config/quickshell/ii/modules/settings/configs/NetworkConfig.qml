@@ -24,9 +24,9 @@ Item {
 
     /**
      * The wired tab is only built where there is a socket to talk about, so the
-     * list is computed rather than fixed. Changing it rebuilds every tab
-     * delegate, which is why the port is appended last: unplugging a USB
-     * adapter must not renumber the three tabs that are always there.
+     * list is computed rather than fixed. The port is appended last so that
+     * unplugging a USB adapter cannot renumber the three tabs that are always
+     * there.
      */
     readonly property var tabs: NetworkState.hasWiredDevice
         ? [...root.baseTabs, root.wiredTab] : root.baseTabs
@@ -83,29 +83,39 @@ Item {
     }
 
     /**
-     * The tab that is actually wanted.
+     * The tab the user is on, held here rather than read back off the bar.
      *
-     * The bar's own index cannot be trusted to hold it: the tab list is
-     * recomputed whenever a translation or the wired device changes, every
-     * button is rebuilt with it, and a rebuilt TabBar comes back pointing at the
-     * button added last — which is why this page kept opening on Hotspot. Only a
-     * deliberate pick is recorded here, and the bar is put back whenever it drifts.
+     * Settings pages are loaded asynchronously, so this page finishes well
+     * before its tab buttons have been incubated: `Component.onCompleted` runs
+     * against a bar with no buttons in it at all. Setting an index on an empty
+     * bar does nothing, and the bar then drags its index along behind each
+     * button as it appears, so the page ends up on whichever tab was built
+     * last. That is what kept opening this page on Hotspot, and why it only
+     * happened some of the time — incubation does not always lose the race.
      */
     property int wantedTab: 0
+
+    /** False while the bar is still filling, when its index means nothing. */
+    readonly property bool barReady: tabBar.count === root.tabs.length
+
+    /** True once the filled bar has been put where this page wants it. */
+    property bool barSettled: false
 
     function selectTab(index: int): void {
         if (index < 0 || index >= root.tabs.length)
             return;
         root.wantedTab = index;
         GlobalStates.settingsNetworkTab = index;
-        tabBar.currentIndex = index;
+        root.applyWantedTab();
     }
 
-    function restoreWantedTab(): void {
-        if (root.wantedTab >= root.tabs.length)
+    function applyWantedTab(): void {
+        if (!root.barReady)
+            return;
+        if (root.wantedTab < 0 || root.wantedTab >= root.tabs.length)
             root.wantedTab = 0;
-        if (tabBar.currentIndex !== root.wantedTab)
-            tabBar.currentIndex = root.wantedTab;
+        tabBar.currentIndex = root.wantedTab;
+        root.barSettled = true;
     }
 
     onContentYChanged: {
@@ -123,12 +133,26 @@ Item {
         root.focusSectionTab(SearchRegistry.currentSearch);
     }
 
-    onCurrentTabChanged: {
-        if (root.currentTab === root.wantedTab)
+    // The moment the bar holds every tab it is put where it should have been
+    // all along. This is also what puts it back when a wired port appears and
+    // adds a fourth button underneath it.
+    onBarReadyChanged: {
+        if (!root.barReady) {
+            root.barSettled = false;
             return;
-        Qt.callLater(root.restoreWantedTab);
+        }
+        Qt.callLater(root.applyWantedTab);
     }
-    onTabsChanged: Qt.callLater(root.restoreWantedTab)
+
+    // A move made by a settled bar is the user's — a click, the wheel or the
+    // arrow keys — and is the one thing worth remembering. Everything the bar
+    // does to itself on the way up happens before it settles and is ignored.
+    onCurrentTabChanged: {
+        if (!root.barSettled || root.currentTab < 0 || root.currentTab === root.wantedTab)
+            return;
+        root.wantedTab = root.currentTab;
+        GlobalStates.settingsNetworkTab = root.currentTab;
+    }
 
     SecondaryTabBar {
         id: tabBar
@@ -141,18 +165,22 @@ Item {
         height: tabBar.visible ? tabBar.implicitHeight : 0
         opacity: subPageOverlay.slideProgress
 
+        // The model is the number of tabs, not the list itself. The list is a
+        // binding, so it is rebuilt whenever a translation or the wired device
+        // changes, and handing a rebuilt list to a Repeater destroys and
+        // recreates every button under the bar — which leaves the bar pointing
+        // at whichever button was added last. That is what kept dropping this
+        // page on Hotspot. A count only changes when a tab really appears or
+        // disappears, and the labels stay live through the index below.
         Repeater {
-            model: root.tabs
+            model: root.tabs.length
 
             delegate: SecondaryTabButton {
-                required property var modelData
                 required property int index
+                readonly property var tab: root.tabs[index] ?? null
 
-                buttonText: modelData.name
-                buttonIcon: modelData.icon
-                // A click is the one thing that genuinely means "go here", so
-                // it is recorded rather than read back off the bar afterwards.
-                onClicked: root.selectTab(index)
+                buttonText: tab?.name ?? ""
+                buttonIcon: tab?.icon ?? ""
             }
         }
     }
@@ -175,19 +203,22 @@ Item {
         opacity: subPageOverlay.slideProgress
         visible: opacity > 0
 
+        // Counted rather than listed for the same reason as the bar above, and
+        // for one more: a rebuilt list would tear down the open tab and load it
+        // again from scratch every time a translation changed.
         Repeater {
             id: tabRepeater
-            model: root.tabs
+            model: root.tabs.length
 
             delegate: Loader {
                 id: tabLoader
-                required property var modelData
                 required property int index
+                readonly property var tab: root.tabs[index] ?? null
 
                 anchors.fill: parent
                 active: root.currentTab === index
                 asynchronous: true
-                source: Qt.resolvedUrl(modelData.source)
+                source: tabLoader.tab ? Qt.resolvedUrl(tabLoader.tab.source) : ""
                 onItemChanged: if (item) tabHost.currentPage = item
 
                 // A tab is unloaded as soon as another one is picked, so the
