@@ -23,6 +23,18 @@ class TimetableCalendarDefaultContractTests(unittest.TestCase):
         self.assertIn("root.setDefaultCalendar(target)", service)
         self.assertIn('"defaultCalendar": default_calendar', helper)
 
+    def test_every_mutation_queues_a_confirmed_vdirsyncer_sync(self) -> None:
+        service = (ROOT / "services" / "CalendarService.qml").read_text(encoding="utf-8")
+
+        self.assertIn("function requestCalendarSync(calendar = \"\")", service)
+        self.assertIn("property list<string> calendarSyncQueue", service)
+        self.assertIn("function requestWritableCalendarSyncs()", service)
+        self.assertIn('"python3", root.vdirsyncerSyncPath', service)
+        self.assertIn("root.requestCalendarSync(String(current?.payload?.calendar ?? \"\"));", service)
+        self.assertIn("onExited: exitCode =>", service)
+        self.assertIn("[CalendarService] vdirsyncer sync failed:", service)
+        self.assertIn("Qt.callLater(function() { root.requestCalendarSync(next); });", service)
+
 
 if __name__ == "__main__":
     unittest.main()

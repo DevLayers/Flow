@@ -81,7 +81,9 @@ class CalendarStore:
                 name=str(name),
                 path=path,
                 color=str(raw.get("color") or ""),
-                read_only=bool(raw.get("readonly", False)),
+                # Google exposes virtual calendars as discoverable collections,
+                # but rejects event mutations against them with HTTP 403.
+                read_only=bool(raw.get("readonly", False)) or str(name).endswith("@virtual"),
             )
         if not self.calendars:
             raise CalendarError("No calendars are configured in khal.")

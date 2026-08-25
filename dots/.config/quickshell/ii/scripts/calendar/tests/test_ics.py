@@ -40,6 +40,10 @@ class IcsHelperTests(unittest.TestCase):
                 "type = calendar",
                 "readonly = True",
                 "",
+                "[[calendar@virtual]]",
+                f"path = {self.root / 'virtual'}",
+                "type = calendar",
+                "",
                 "[locale]",
                 "timeformat = %H:%M",
                 "dateformat = %d/%m/%Y",
@@ -215,7 +219,9 @@ class IcsHelperTests(unittest.TestCase):
         calendars = self.request({"op": "calendars"})
         self.assertEqual(calendars["defaultCalendar"], "work")
         work = next(calendar for calendar in calendars["calendars"] if calendar["name"] == "work")
+        virtual = next(calendar for calendar in calendars["calendars"] if calendar["name"] == "calendar@virtual")
         self.assertEqual(work["color"], "light blue")
+        self.assertTrue(virtual["readOnly"])
 
         changed = self.request({"op": "setCalendarColor", "calendar": "work", "color": "light green"})
         self.assertEqual(changed, {"ok": True, "calendar": "work", "color": "light green"})

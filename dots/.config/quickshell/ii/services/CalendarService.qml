@@ -24,11 +24,16 @@ Singleton {
     property var calendarPaths: [root.homePath + "/.calendars"]
     property string khalDbPath: root.homePath + "/.cache/khal/khal.db"
     readonly property string icsHelperPath: Directories.scriptPath + "/calendar/ics.py"
+    readonly property string vdirsyncerSyncPath: Directories.scriptPath + "/calendar/vdirsyncer_sync.py"
     property list<var> calendars: []
     property string defaultCalendar: ""
     property list<var> calendarRequestQueue: []
     property var calendarCurrentRequest: null
     property var eventDetailsByUid: ({})
+    property list<string> calendarSyncQueue: []
+    property string lastCalendarSyncError: ""
+    property string lastCalendarSyncStatus: ""
+    property real lastCalendarSyncAt: 0
 
     function writableCalendar(name) {
         const requested = String(name ?? "").trim();
@@ -57,7 +62,6 @@ Singleton {
             root.khalAvailable = (exitCode === 0);
             if (root.khalAvailable) {
                 khalPathsProcess.running = true;
-                interval.running = true;
                 root.loadCalendarList();
             }
         }
@@ -333,14 +337,97 @@ Singleton {
         repeat: true
         onTriggered: {
             root.loadEvents();
+            root.requestWritableCalendarSyncs();
             interval.interval = 900000; // 15 minutes
         }
     }
 
     Process {
         id: vdirsyncerProcess
-        command: ["vdirsyncer", "sync"]
+
+        command: ["python3", root.vdirsyncerSyncPath]
+        stdinEnabled: true
         running: false
+        property string calendarName: ""
+        property string responseText: ""
+
+        onRunningChanged: {
+            if (!running)
+                return;
+            write(JSON.stringify({ calendar: vdirsyncerProcess.calendarName }) + "\n");
+            stdinEnabled = false;
+        }
+
+        stdout: StdioCollector {
+            onStreamFinished: vdirsyncerProcess.responseText = this.text.trim()
+        }
+
+        stderr: StdioCollector {
+            onStreamFinished: {
+                if (this.text.trim())
+                    console.warn("[CalendarService] vdirsyncer helper:", this.text.trim());
+            }
+        }
+
+        onExited: exitCode => {
+            let reply;
+            try {
+                reply = JSON.parse(vdirsyncerProcess.responseText);
+            } catch (error) {
+                reply = { ok: false, error: Translation.tr("vdirsyncer sync returned an unreadable response.") };
+            }
+            if (exitCode !== 0 && reply?.ok)
+                reply = { ok: false, error: Translation.tr("vdirsyncer exited with code %1.").arg(String(exitCode)) };
+            root.finishCalendarSync(reply);
+        }
+    }
+
+    function requestCalendarSync(calendar = "") {
+        if (!root.khalAvailable)
+            return false;
+        const target = String(calendar ?? "").trim();
+        if (vdirsyncerProcess.running) {
+            const queue = root.calendarSyncQueue.slice();
+            if (!queue.includes(target))
+                queue.push(target);
+            root.calendarSyncQueue = queue;
+            return true;
+        }
+        root.lastCalendarSyncError = "";
+        root.lastCalendarSyncStatus = Translation.tr("Synchronizing calendar…");
+        vdirsyncerProcess.calendarName = target;
+        vdirsyncerProcess.responseText = "";
+        vdirsyncerProcess.stdinEnabled = true;
+        vdirsyncerProcess.running = true;
+        return true;
+    }
+
+    function requestWritableCalendarSyncs() {
+        const calendars = root.calendars.filter(calendar => calendar.readOnly !== true).map(calendar => String(calendar.name));
+        if (calendars.length === 0)
+            return false;
+        for (const calendar of calendars)
+            root.requestCalendarSync(calendar);
+        return true;
+    }
+
+    function finishCalendarSync(reply) {
+        root.lastCalendarSyncAt = Date.now();
+        if (reply?.ok) {
+            root.lastCalendarSyncError = "";
+            root.lastCalendarSyncStatus = Translation.tr("Calendar synchronized.");
+        } else {
+            root.lastCalendarSyncError = String(reply?.error ?? Translation.tr("Could not synchronize calendar."));
+            root.lastCalendarSyncStatus = "";
+            console.warn("[CalendarService] vdirsyncer sync failed:", root.lastCalendarSyncError);
+        }
+        root.loadEvents();
+        if (root.calendarSyncQueue.length === 0)
+            return;
+        const queue = root.calendarSyncQueue.slice();
+        const next = queue.shift();
+        root.calendarSyncQueue = queue;
+        Qt.callLater(function() { root.requestCalendarSync(next); });
     }
 
     // A single helper process is serialized because khal owns one SQLite
@@ -376,7 +463,7 @@ Singleton {
             "splitSeries", "truncateSeries", "setCalendarColor", "importIcs"
         ].includes(String(current?.payload?.op ?? ""))) {
             root.eventDetailsByUid = ({});
-            vdirsyncerProcess.running = true;
+            root.requestCalendarSync(String(current?.payload?.calendar ?? ""));
             root.loadEvents();
             if (current?.payload?.op === "setCalendarColor")
                 root.loadCalendarList();
@@ -398,6 +485,8 @@ Singleton {
                 const writable = root.calendars.find(calendar => calendar.readOnly !== true);
                 root.defaultCalendar = writable?.name ?? "";
             }
+            if (!interval.running)
+                interval.running = true;
             root.loadEvents();
         });
     }
@@ -457,13 +546,13 @@ Singleton {
     }
 
     function removeItem(item) {
-        root.removeEventByUid(item?.uid ?? "");
+        root.removeEventByUid(item?.uid ?? "", item?.calendar ?? "");
     }
 
-    function removeEventByUid(uid) {
+    function removeEventByUid(uid, calendar = "") {
         if (!uid)
             return;
-        root.enqueueCalendarRequest({ op: "deleteSeries", uid: String(uid) });
+        root.enqueueCalendarRequest({ op: "deleteSeries", uid: String(uid), calendar: String(calendar ?? "") });
     }
 
     // A summary is not an identifier. Callers that only have a title must
@@ -503,9 +592,9 @@ Singleton {
             payload[key] = fields[key];
         const recurrenceId = fields.recurrenceId || root.recurrenceIdForEvent(event);
         const request = scope === "this"
-            ? { op: "overrideOccurrence", uid: String(event.uid), recurrenceId: recurrenceId, fields: payload }
+            ? { op: "overrideOccurrence", uid: String(event.uid), calendar: event.calendar ?? "", recurrenceId: recurrenceId, fields: payload }
             : scope === "future"
-                ? { op: "splitSeries", uid: String(event.uid), recurrenceId: recurrenceId, fields: payload }
+                ? { op: "splitSeries", uid: String(event.uid), calendar: event.calendar ?? "", recurrenceId: recurrenceId, fields: payload }
                 : { op: "save", calendar: event.calendar ?? "", event: payload };
         root.enqueueCalendarRequest(request);
     }
@@ -532,10 +621,10 @@ Singleton {
             return;
         const recurrenceId = root.recurrenceIdForEvent(event);
         const request = scope === "this"
-            ? { op: "deleteOccurrence", uid: String(event.uid), recurrenceId: recurrenceId }
+            ? { op: "deleteOccurrence", uid: String(event.uid), calendar: event.calendar ?? "", recurrenceId: recurrenceId }
             : scope === "future"
-                ? { op: "truncateSeries", uid: String(event.uid), recurrenceId: recurrenceId }
-                : { op: "deleteSeries", uid: String(event.uid) };
+                ? { op: "truncateSeries", uid: String(event.uid), calendar: event.calendar ?? "", recurrenceId: recurrenceId }
+                : { op: "deleteSeries", uid: String(event.uid), calendar: event.calendar ?? "" };
         root.enqueueCalendarRequest(request);
     }
 
@@ -568,6 +657,7 @@ Singleton {
 
     function importFromIcs(path, autoDelete = false, calendar = "", callback = null) {
         const sourcePath = String(path ?? "").trim();
+        const target = String(calendar || root.defaultCalendar).trim();
         if (!root.khalAvailable) {
             const reply = { ok: false, error: Translation.tr("Calendar service unavailable.") };
             if (typeof callback === "function")
@@ -584,13 +674,14 @@ Singleton {
             op: "importIcs",
             path: sourcePath,
             deleteSource: Boolean(autoDelete),
-            calendar: String(calendar ?? "")
+            calendar: target
         }, callback);
         return true;
     }
 
     function importIcsBase64(contentsBase64, calendar = "", callback = null) {
         const payload = String(contentsBase64 ?? "").trim();
+        const target = String(calendar || root.defaultCalendar).trim();
         if (!root.khalAvailable) {
             const reply = { ok: false, error: Translation.tr("Calendar service unavailable.") };
             if (typeof callback === "function")
@@ -606,7 +697,7 @@ Singleton {
         root.enqueueCalendarRequest({
             op: "importIcs",
             contentsBase64: payload,
-            calendar: String(calendar ?? "")
+            calendar: target
         }, callback);
         return true;
     }
