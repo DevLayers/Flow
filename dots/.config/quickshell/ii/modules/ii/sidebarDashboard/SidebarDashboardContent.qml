@@ -615,6 +615,8 @@ Item {
                     font.pixelSize: 14
                     font.weight: Font.Normal
                     horizontalAlignment: Text.AlignLeft
+                    width: 210
+                    elide: Text.ElideRight
 
                     text: {
                         const mode = Config.options.sidebar.dashboardHeader.textMode;
@@ -641,6 +643,8 @@ Item {
                     font.pixelSize: 12
                     font.weight: Font.Normal
                     horizontalAlignment: Text.AlignLeft
+                    width: 220
+                    elide: Text.ElideRight
 
                     visible: Config.options.sidebar.dashboardSubHeader.greetingSubtextMode !== "none"
                     text: {
