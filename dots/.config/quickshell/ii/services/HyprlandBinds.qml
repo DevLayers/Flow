@@ -564,6 +564,17 @@ Singleton {
 
     readonly property string launcher: "launch_first_available.sh"
 
+    /**
+     * The submap the shortcut editor parks Hyprland in while it is listening for a key. It has
+     * to exist as a real submap with a real bind for Hyprland to accept it, so it turns up in
+     * `hyprctl binds` - and it is not a shortcut anybody set, so it is dropped from the live
+     * list below rather than shown as one.
+     */
+    readonly property string captureSubmap: "__quickshell_key_capture"
+    /// Whether that submap exists right now. Defining it again would stack another copy of its
+    /// bind onto the last, and a reload takes the whole thing away.
+    property bool captureSubmapDefined: false
+
     /// Where a variable's value comes from now: this page, a hand-written custom file, or stock.
     function appSource(name: string): string {
         if (HyprlandGui.managedGlobals.hasOwnProperty(name)) return "managed";
@@ -844,6 +855,8 @@ Singleton {
         // so there is nothing left to debounce here. A reload it caused itself only matters if
         // it wrote one of the two files this parser reads.
         function onReloaded(own, targets) {
+            // A reload rebuilds every bind, so whatever the key editor defined is gone with them.
+            root.captureSubmapDefined = false;
             if (own && targets.keybinds !== true && targets.variables !== true) return;
             root.stale = true;
             if (HyprlandGui.watching) root.refresh();
@@ -876,7 +889,8 @@ Singleton {
         stdout: StdioCollector {
             onStreamFinished: {
                 try {
-                    root.live = JSON.parse(text);
+                    root.live = JSON.parse(text)
+                        .filter(bind => bind.submap !== root.captureSubmap);
                 } catch (error) {
                     console.warn("[HyprlandBinds] cannot parse hyprctl binds:", error);
                 }

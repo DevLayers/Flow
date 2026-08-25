@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import QtQuick.Layouts
+import Quickshell
 import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
@@ -99,6 +100,47 @@ ColumnLayout {
     }
 
     readonly property bool isPhysical: /^code:\d+$/.test(root.key)
+
+    /**
+     * While the button is listening, every shortcut that already exists has to stop working, or
+     * pressing one runs it instead of recording it - which is exactly what made this unusable
+     * for the shortcuts people actually want to change.
+     *
+     * Hyprland matches binds before the key reaches this window, so nothing on this side can
+     * get in front of them. A submap can: inside one, only that submap's own binds fire and
+     * every other key falls through to whatever has focus. The submap holds a single Escape
+     * bind that leaves it again, so even a shell that dies mid-capture leaves a way out - and
+     * a config reload drops the submap on its own. That bind is non-consuming, so Escape still
+     * reaches the button below and stops it listening rather than leaving it armed over a
+     * submap it has already left.
+     */
+    function inhibitShortcuts(on: bool) {
+        const name = HyprlandBinds.captureSubmap;
+        if (!on) {
+            Quickshell.execDetached(["hyprctl", "eval",
+                `if hl.get_current_submap() == "${name}" then hl.dispatch(hl.dsp.submap("reset")) end`]);
+            return;
+        }
+        const define = HyprlandBinds.captureSubmapDefined ? ""
+            : `hl.define_submap("${name}", function() hl.bind("ESCAPE", function() `
+                + `hl.dispatch(hl.dsp.submap("reset")) end, { non_consuming = true }) end) `;
+        HyprlandBinds.captureSubmapDefined = true;
+        Quickshell.execDetached(["hyprctl", "eval", define
+            + `if hl.get_current_submap() == "" then hl.dispatch(hl.dsp.submap("${name}")) end`]);
+    }
+
+    onCapturingChanged: root.inhibitShortcuts(root.capturing)
+    Component.onDestruction: {
+        if (root.capturing) root.inhibitShortcuts(false);
+    }
+
+    /// Nothing else would notice a window that lost focus without saying so, and being left in
+    /// the submap means a keyboard that does nothing.
+    Timer {
+        running: root.capturing
+        interval: 30000
+        onTriggered: root.capturing = false
+    }
 
     RippleButton {
         id: captureButton
