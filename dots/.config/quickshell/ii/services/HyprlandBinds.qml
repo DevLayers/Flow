@@ -4,7 +4,6 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import Quickshell
 import Quickshell.Io
-import Quickshell.Hyprland
 import qs.modules.common
 import qs.modules.common.functions
 
@@ -839,21 +838,16 @@ Singleton {
     }
 
     Connections {
-        target: Hyprland
+        target: HyprlandGui
 
-        function onRawEvent(event) {
-            if (event.name !== "configreloaded") return;
+        // HyprlandGui has already gathered the burst one write produces into a single report,
+        // so there is nothing left to debounce here. A reload it caused itself only matters if
+        // it wrote one of the two files this parser reads.
+        function onReloaded(own, targets) {
+            if (own && targets.keybinds !== true && targets.variables !== true) return;
             root.stale = true;
-            if (HyprlandGui.watching) reloadDebounce.restart();
+            if (HyprlandGui.watching) root.refresh();
         }
-    }
-
-    Timer {
-        id: reloadDebounce
-        // One write produces a handful of reload events; re-reading on each would run the
-        // parser six times for one change.
-        interval: 500
-        onTriggered: root.refresh()
     }
 
     Process {
@@ -935,12 +929,18 @@ Singleton {
         stdout: StdioCollector {
             onStreamFinished: {
                 const map = Object.assign({}, root.available);
+                let changed = false;
                 for (const line of String(text).split("\n")) {
                     const parts = line.trim().split(" ");
                     if (parts.length !== 2) continue;
-                    map[parts[1]] = parts[0] === "ok";
+                    const found = parts[0] === "ok";
+                    if (map[parts[1]] === found) continue;
+                    map[parts[1]] = found;
+                    changed = true;
                 }
-                root.available = map;
+                // Almost every probe finds exactly what the last one did. Assigning the map
+                // anyway would rebuild every row that reads it, for no news.
+                if (changed) root.available = map;
             }
         }
     }

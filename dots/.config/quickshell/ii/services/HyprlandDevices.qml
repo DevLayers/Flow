@@ -95,12 +95,24 @@ Singleton {
     }
 
     Connections {
+        target: HyprlandGui
+
+        // Only general.lua holds device blocks, so a write to any other file changes nothing
+        // in this list.
+        function onReloaded(own, targets) {
+            if (own && targets.general !== true) return;
+            root.stale = true;
+            if (HyprlandGui.watching) root.refresh();
+        }
+    }
+
+    Connections {
         target: Hyprland
 
+        // Plugging a mouse in does not reload the config, so the list has to follow the
+        // compositor's own device events too.
         function onRawEvent(event) {
-            // Plugging a mouse in does not reload the config, so the list has to follow the
-            // compositor's own device events instead.
-            if (event.name !== "configreloaded" && event.name !== "activelayout") return;
+            if (event.name !== "activelayout") return;
             root.stale = true;
             if (HyprlandGui.watching) rescan.restart();
         }

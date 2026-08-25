@@ -21,16 +21,17 @@ The desired state arrives on stdin, never on argv: window-rule patterns contain
 $ | \\ and quotes, and none of that should ever reach a shell.
 """
 
-import argparse
-import difflib
 import json
 import os
 import re
-import shutil
-import subprocess
 import sys
-import tempfile
 import time
+
+# The GUI starts this script once per read and once per write, so how long it takes to start
+# is part of how long a setting takes to apply. argparse, difflib, shutil, subprocess and
+# tempfile together cost more than everything this script actually does, and none of them are
+# needed by a plain write - so the options are described as data at the bottom and parsed by
+# hand, and the rest are imported where they are used.
 
 REGION_VERSION = 1
 BEGIN_RE = re.compile(r'^\s*--\s*>>>\s*quickshell:managed:begin(?:\s+v(\d+))?')
@@ -918,6 +919,7 @@ def latest_backup(path):
 
 
 def write_atomic(path, lines):
+    import tempfile
     directory = os.path.dirname(os.path.abspath(path))
     os.makedirs(directory, exist_ok=True)
     with tempfile.NamedTemporaryFile(mode='w', encoding='utf-8', errors='surrogateescape',
@@ -996,6 +998,7 @@ def cmd_write(args):
         print(json.dumps({"ok": True, "changed": False, "file": path}))
         return 0
     if args.dry_run:
+        import difflib
         diff = ''.join(difflib.unified_diff(lines, new_lines,
                                             fromfile=path + " (current)",
                                             tofile=path + " (proposed)"))
@@ -1004,16 +1007,13 @@ def cmd_write(args):
         return 0
     saved = backup(path) if existed else None
     write_atomic(path, new_lines)
-    # The entries as they now sit in the file, so the caller can update its own copy
-    # instead of reading the file back. Re-reading opened a window in which the file
-    # on disk and the caller's idea of it disagreed, and edits made in that window
-    # were built on the older one.
-    begin, end, _ = find_region(new_lines)
-    written = parse_region(new_lines, begin, end) if begin is not None else []
+    # The file exactly as `read` would describe it, so the caller can update its own copy
+    # instead of reading it back. Re-reading opened a window in which the file on disk and
+    # the caller's idea of it disagreed, and edits made in that window were built on the
+    # older one; it also meant the reload this write causes had to be answered with a read
+    # of every file, for a change this side already knows in full.
     print(json.dumps({"ok": True, "changed": True, "file": path, "backup": saved,
-                      "created": not existed, "entries": written,
-                      "regionText": "".join(new_lines[begin:end]) if begin is not None else "",
-                      "hasRegion": begin is not None}))
+                      "created": not existed, "record": read_one(path)}))
     return 0
 
 
@@ -1031,6 +1031,7 @@ def cmd_strip(args):
     while new_lines and not new_lines[-1].strip():
         new_lines.pop()
     if args.dry_run:
+        import difflib
         diff = ''.join(difflib.unified_diff(lines, new_lines, fromfile=path, tofile=path))
         print(json.dumps({"ok": True, "changed": True, "file": path, "diff": diff}))
         return 0
@@ -1057,6 +1058,9 @@ def _config_keys(entries):
 
 def _syntax_ok(lines):
     """Ask a real Lua parser, when there is one. Absence is not a failure."""
+    import shutil
+    import subprocess
+    import tempfile
     luac = shutil.which("luac") or shutil.which("luac5.4")
     if luac is None:
         return True
@@ -1130,6 +1134,7 @@ def cmd_drop(args):
         print(json.dumps({"ok": False, "error": problem}))
         return 1
 
+    import difflib
     diff = ''.join(difflib.unified_diff(lines, new_lines,
                                         fromfile=path + " (current)",
                                         tofile=path + " (proposed)"))
@@ -1144,37 +1149,77 @@ def cmd_drop(args):
     return 0
 
 
+class Args(object):
+    """What the commands were handed when this parsed with argparse."""
+
+    def __init__(self, values):
+        self.__dict__.update(values)
+
+
+# command -> (handler, {flag: (attribute, kind, default)}, [attributes that must be given]).
+# `kind` is "value" for one argument, "append" for one that may repeat, "flag" for none.
+def _specs():
+    common = {"--file": ("file", "value", None),
+              "--dry-run": ("dry_run", "flag", False),
+              "--custom-dir": ("custom_dir", "value", DEFAULT_CUSTOM_DIR)}
+    write = dict(common)
+    write["--json"] = ("json", "value", "-")
+    drop = dict(common)
+    drop["--key"] = ("key", "value", None)
+    return {
+        "read": (cmd_read, {"--file": ("file", "append", None),
+                            "--no-unmanaged": ("no_unmanaged", "flag", False)}, ["file"]),
+        "write": (cmd_write, write, ["file"]),
+        "strip": (cmd_strip, common, ["file"]),
+        "drop-key": (cmd_drop, drop, ["file", "key"]),
+    }
+
+
+def _fail(message):
+    sys.stderr.write("hyprgui: %s\n" % message)
+    return 2
+
+
 def main():
-    parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    sub = parser.add_subparsers(dest="command", required=True)
+    argv = sys.argv[1:]
+    specs = _specs()
+    if not argv or argv[0] not in specs:
+        return _fail("expected one of %s" % ", ".join(sorted(specs)))
+    handler, options, required = specs[argv[0]]
 
-    read = sub.add_parser("read")
-    read.add_argument("--file", required=True, action="append")
-    read.add_argument("--no-unmanaged", action="store_true")
-    read.set_defaults(func=cmd_read)
+    values = {}
+    for name, kind, default in options.values():
+        values[name] = [] if kind == "append" else default
 
-    write = sub.add_parser("write")
-    write.add_argument("--file", required=True)
-    write.add_argument("--json", default="-")
-    write.add_argument("--dry-run", action="store_true")
-    write.add_argument("--custom-dir", default=DEFAULT_CUSTOM_DIR)
-    write.set_defaults(func=cmd_write)
+    index = 1
+    while index < len(argv):
+        token = argv[index]
+        index += 1
+        argument = None
+        if "=" in token and token.startswith("--"):
+            token, argument = token.split("=", 1)
+        if token not in options:
+            return _fail("%s does not take %s" % (argv[0], token))
+        name, kind, _ = options[token]
+        if kind == "flag":
+            if argument is not None:
+                return _fail("%s takes no value" % token)
+            values[name] = True
+            continue
+        if argument is None:
+            if index >= len(argv):
+                return _fail("%s needs a value" % token)
+            argument = argv[index]
+            index += 1
+        if kind == "append":
+            values[name].append(argument)
+        else:
+            values[name] = argument
 
-    strip = sub.add_parser("strip")
-    strip.add_argument("--file", required=True)
-    strip.add_argument("--dry-run", action="store_true")
-    strip.add_argument("--custom-dir", default=DEFAULT_CUSTOM_DIR)
-    strip.set_defaults(func=cmd_strip)
-
-    drop = sub.add_parser("drop-key")
-    drop.add_argument("--file", required=True)
-    drop.add_argument("--key", required=True)
-    drop.add_argument("--dry-run", action="store_true")
-    drop.add_argument("--custom-dir", default=DEFAULT_CUSTOM_DIR)
-    drop.set_defaults(func=cmd_drop)
-
-    args = parser.parse_args()
-    return args.func(args)
+    for name in required:
+        if not values.get(name):
+            return _fail("%s needs --%s" % (argv[0], name.replace("_", "-")))
+    return handler(Args(values))
 
 
 if __name__ == "__main__":

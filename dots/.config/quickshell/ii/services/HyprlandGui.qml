@@ -211,6 +211,12 @@ Singleton {
     signal changed
     signal wrote(string target)
     signal writeFailed(string target, string message)
+    /**
+     * A settled config reload. `own` says this side caused it, and `targets` names the files it
+     * wrote; everything else that re-parses Hyprland's config listens here rather than to the
+     * raw event, so the burst one write produces is coalesced once instead of once per service.
+     */
+    signal reloaded(bool own, var targets)
 
     // ------------------------------------------------------------- getting here
 
@@ -546,6 +552,10 @@ Singleton {
     /// Bumped on every reload Hyprland reports, so a write can tell whether the reload it was
     /// waiting for has already been and gone.
     property int _reloadTick: 0
+    /// The files this side wrote and has not yet seen the reload for, so the reload can be told
+    /// apart from someone editing the config by hand.
+    property var _selfWrites: ({})
+    property double _selfWriteAt: 0
 
     function _validKey(key: string): bool {
         return /^[A-Za-z0-9_.:-]+$/.test(String(key ?? ""));
@@ -626,7 +636,22 @@ Singleton {
         root._desired = staged;
         root.dirty = true;
         root.changed();
-        writeDebounce.restart();
+        root._scheduleWrite();
+    }
+
+    /**
+     * One edit goes out at once; a run of them coalesces behind whatever is already going out.
+     * Waiting a fixed interval on every change made a single click pay for a burst that never
+     * came, and that wait was the largest part of the delay between clicking a switch and
+     * Hyprland acting on it.
+     */
+    function _scheduleWrite() {
+        if (writeProc.running || root._writeQueue.length > 0) {
+            writeDebounce.restart();
+            return;
+        }
+        writeDebounce.stop();
+        root._flush();
     }
 
     function _flush() {
@@ -827,17 +852,15 @@ Singleton {
 
         // What the file now holds, from the write itself. Reading it back instead left a gap in
         // which this side still believed the old contents, and an edit made during that gap was
-        // built on them - which silently threw away the change that had just been written.
-        if (result.entries !== undefined) {
+        // built on them - which silently threw away the change that had just been written. The
+        // write hands back the same record a read would, so nothing here is a partial update
+        // and the reload it causes needs no read at all.
+        if (result.record !== undefined) {
             const stored = Object.assign({}, root._stored);
-            stored[job.target] = root._cleanEntriesInto(job.target, result.entries);
+            stored[job.target] = root._cleanEntriesInto(job.target, result.record.entries ?? []);
             root._stored = stored;
             const files = Object.assign({}, root.files);
-            files[job.target] = Object.assign({}, files[job.target] ?? {}, {
-                entries: result.entries,
-                hasRegion: result.hasRegion === true,
-                regionText: result.regionText ?? ""
-            });
+            files[job.target] = result.record;
             root.files = files;
         } else {
             root._rereadAfterWrite = true;
@@ -854,6 +877,10 @@ Singleton {
 
         root.wrote(job.target);
         if (!result.changed) return;
+        const marks = Object.assign({}, root._selfWrites);
+        marks[job.target] = true;
+        root._selfWrites = marks;
+        root._selfWriteAt = Date.now();
         // A file Hyprland was not watching yet only loads after an explicit reload.
         if (result.created) Quickshell.execDetached(["hyprctl", "reload"]);
         // Hyprland watches the file, so it can be done reloading before this side has finished
@@ -1073,12 +1100,11 @@ Singleton {
         }
     }
 
+    /// Only ever runs while a write is already going out: the first edit of a run does not
+    /// wait, so this is how long the ones behind it gather before following.
     Timer {
         id: writeDebounce
-        // Long enough to gather a run of clicks into one write, short enough that a single
-        // click feels answered. Sliders no longer write while they are moving, so this does
-        // not have to cover a drag any more.
-        interval: 180
+        interval: 150
         onTriggered: root._flush()
     }
 
@@ -1097,13 +1123,24 @@ Singleton {
         }
     }
 
-    /// One config write produces a burst of configreloaded events. Refresh once, after it settles.
+    /// One config write produces a burst of configreloaded events. Answer once, after it settles.
     Timer {
         id: reloadDebounce
         interval: 250
         onTriggered: {
+            // Ours if a write of ours is still waiting for its reload. Two seconds is far more
+            // than the gap between the file landing and the burst ending, and the cost of
+            // guessing wrong is one stale read that the next reload corrects.
+            const own = root._selfWriteAt > 0 && Date.now() - root._selfWriteAt < 2000;
+            const targets = root._selfWrites;
+            root._selfWrites = ({});
+            root._selfWriteAt = 0;
+            root.reloaded(own, targets);
             if (root.subscribers === 0) return;
-            root.refresh();
+            // A reload this side caused changed nothing this side does not already hold: the
+            // write handed back the file in full. Reading all five again on every click was
+            // most of what made a setting feel slow to apply.
+            if (!own) root.refresh();
             root.refreshEffective(root.watchedKeys);
         }
     }

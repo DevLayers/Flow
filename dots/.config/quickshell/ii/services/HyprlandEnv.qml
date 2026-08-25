@@ -4,7 +4,6 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import Quickshell
 import Quickshell.Io
-import Quickshell.Hyprland
 import qs.modules.common
 import qs.modules.common.functions
 
@@ -474,19 +473,13 @@ Singleton {
     }
 
     Connections {
-        target: Hyprland
+        target: HyprlandGui
 
-        function onRawEvent(event) {
-            if (event.name !== "configreloaded") return;
+        function onReloaded(own, targets) {
+            if (own && targets.env !== true) return;
             root.stale = true;
-            if (HyprlandGui.watching) reloadDebounce.restart();
+            if (HyprlandGui.watching) root.refresh();
         }
-    }
-
-    Timer {
-        id: reloadDebounce
-        interval: 500
-        onTriggered: root.refresh()
     }
 
     function _readEnvList(text: string): var {
