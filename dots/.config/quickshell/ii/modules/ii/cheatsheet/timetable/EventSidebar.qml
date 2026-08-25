@@ -71,8 +71,10 @@ Item {
     property bool showCalendarSelector: false
     property string sourceUrlDraft: ""
     property string sourcesStatusText: ""
+    property string outlookClientIdDraft: ""
     readonly property bool calendarSourcesEnabled: Config.options.calendar.timetable.imports.enable
     readonly property bool gmailIcsEnabled: Config.options.calendar.timetable.imports.gmailIcs.enable
+    readonly property bool outlookEnabled: Config.options.calendar.timetable.imports.outlook.enable
 
     readonly property bool rangeValid: root.formAllDay || root.formEndMinutes > root.formStartMinutes
     readonly property bool canSave: root.formTitle.trim().length > 0 && root.rangeValid
@@ -111,7 +113,13 @@ Item {
             SportsService.clearFocusedGame(root.event?.id);
         root.event = null;
         root.sourcesStatusText = "";
+        root.outlookClientIdDraft = OutlookService.clientId;
         root.setMode("sources");
+    }
+
+    function connectOutlook() {
+        if (!OutlookService.beginAuthorization(root.outlookClientIdDraft))
+            root.sourcesStatusText = OutlookService.lastError;
     }
 
     function importSourceFile(path) {
@@ -1215,6 +1223,134 @@ Item {
                                 text: GmailCalendarImport.lastError.length > 0 ? GmailCalendarImport.lastError : GmailCalendarImport.lastStatus
                                 font.pixelSize: Appearance.font.pixelSize.small
                                 color: GmailCalendarImport.lastError.length > 0 ? Appearance.colors.colError : Appearance.colors.colOnSurfaceVariant
+                                wrapMode: Text.Wrap
+                            }
+
+                            ConfigSwitch {
+                                Layout.fillWidth: true
+                                enabled: root.calendarSourcesEnabled
+                                buttonIcon: "event_available"
+                                text: Translation.tr("Sync Outlook calendar")
+                                checked: Config.options.calendar.timetable.imports.outlook.enable
+                                onCheckedChanged: Config.options.calendar.timetable.imports.outlook.enable = checked
+                            }
+
+                            StyledText {
+                                Layout.fillWidth: true
+                                text: Translation.tr("Mirrors Outlook events into a local read-only calendar. Microsoft access is used only for calendar and ICS attachment reading.")
+                                font.pixelSize: Appearance.font.pixelSize.small
+                                color: Appearance.colors.colOnSurfaceVariant
+                                opacity: root.outlookEnabled ? 1 : 0.7
+                                wrapMode: Text.Wrap
+                            }
+
+                            ConfigTextField {
+                                id: outlookClientIdInput
+                                Layout.fillWidth: true
+                                visible: root.outlookEnabled && !OutlookService.deviceFlowActive
+                                enabled: root.calendarSourcesEnabled && !OutlookService.authenticating
+                                icon: "key"
+                                text: Translation.tr("Microsoft application (client) ID")
+                                placeholderText: Translation.tr("Paste the public client ID from Microsoft Entra")
+                                inputText: root.outlookClientIdDraft
+                                textField.onTextChanged: root.outlookClientIdDraft = textField.text
+                            }
+
+                            RowLayout {
+                                Layout.fillWidth: true
+                                visible: root.outlookEnabled && !OutlookService.deviceFlowActive
+                                spacing: 8
+
+                                RippleButtonWithIcon {
+                                    Layout.fillWidth: true
+                                    implicitHeight: 40
+                                    centerContent: true
+                                    materialIcon: OutlookService.authenticated ? "person_add" : "login"
+                                    mainText: OutlookService.authenticated ? Translation.tr("Reconnect Outlook") : Translation.tr("Connect Outlook")
+                                    enabled: root.calendarSourcesEnabled && !OutlookService.authenticating && root.outlookClientIdDraft.trim().length > 0
+                                    colText: Appearance.colors.colOnSecondaryContainer
+                                    colBackground: Appearance.colors.colSecondaryContainer
+                                    colBackgroundHover: Appearance.colors.colSecondaryContainerHover
+                                    colRipple: Appearance.colors.colSecondaryContainerActive
+                                    onClicked: root.connectOutlook()
+                                }
+
+                                RippleButtonWithIcon {
+                                    implicitHeight: 40
+                                    visible: OutlookService.authenticated
+                                    centerContent: true
+                                    materialIcon: "link_off"
+                                    mainText: Translation.tr("Disconnect")
+                                    enabled: root.calendarSourcesEnabled && !OutlookCalendarImport.syncing
+                                    colText: Appearance.colors.colOnErrorContainer
+                                    colBackground: Appearance.colors.colErrorContainer
+                                    colBackgroundHover: Appearance.colors.colErrorContainerHover
+                                    colRipple: Appearance.colors.colErrorContainerActive
+                                    onClicked: OutlookService.disconnect()
+                                }
+                            }
+
+                            ColumnLayout {
+                                Layout.fillWidth: true
+                                visible: root.outlookEnabled && OutlookService.deviceFlowActive
+                                spacing: 6
+
+                                StyledText {
+                                    Layout.fillWidth: true
+                                    text: OutlookService.deviceMessage || Translation.tr("Open Microsoft sign-in and enter this code:")
+                                    font.pixelSize: Appearance.font.pixelSize.small
+                                    color: Appearance.colors.colOnSurfaceVariant
+                                    wrapMode: Text.Wrap
+                                }
+
+                                StyledText {
+                                    Layout.fillWidth: true
+                                    text: OutlookService.userCode
+                                    font.pixelSize: Appearance.font.pixelSize.large
+                                    font.weight: Font.Bold
+                                    color: Appearance.colors.colPrimary
+                                    horizontalAlignment: Text.AlignHCenter
+                                }
+
+                                RippleButtonWithIcon {
+                                    Layout.fillWidth: true
+                                    implicitHeight: 40
+                                    centerContent: true
+                                    materialIcon: "open_in_new"
+                                    mainText: Translation.tr("Open Microsoft sign-in")
+                                    colText: Appearance.colors.colOnPrimaryContainer
+                                    colBackground: Appearance.colors.colPrimaryContainer
+                                    colBackgroundHover: Appearance.colors.colPrimaryContainerHover
+                                    colRipple: Appearance.colors.colPrimaryContainerActive
+                                    onClicked: Qt.openUrlExternally(OutlookService.verificationUri)
+                                }
+                            }
+
+                            RippleButtonWithIcon {
+                                Layout.alignment: Qt.AlignRight
+                                implicitHeight: 40
+                                visible: root.outlookEnabled && OutlookService.authenticated && !OutlookService.deviceFlowActive
+                                centerContent: true
+                                materialIcon: OutlookCalendarImport.syncing ? "sync" : "refresh"
+                                mainText: OutlookCalendarImport.syncing ? Translation.tr("Synchronizing Outlook…") : Translation.tr("Sync Outlook now")
+                                enabled: root.calendarSourcesEnabled && !OutlookCalendarImport.syncing
+                                colText: Appearance.colors.colOnSecondaryContainer
+                                colBackground: Appearance.colors.colSecondaryContainer
+                                colBackgroundHover: Appearance.colors.colSecondaryContainerHover
+                                colRipple: Appearance.colors.colSecondaryContainerActive
+                                onClicked: OutlookCalendarImport.syncNow()
+                            }
+
+                            StyledText {
+                                Layout.fillWidth: true
+                                visible: OutlookService.lastError.length > 0 || OutlookCalendarImport.lastStatus.length > 0 || OutlookCalendarImport.lastError.length > 0
+                                text: OutlookService.lastError.length > 0
+                                    ? OutlookService.lastError
+                                    : (OutlookCalendarImport.lastError.length > 0 ? OutlookCalendarImport.lastError : OutlookCalendarImport.lastStatus)
+                                font.pixelSize: Appearance.font.pixelSize.small
+                                color: OutlookService.lastError.length > 0 || OutlookCalendarImport.lastError.length > 0
+                                    ? Appearance.colors.colError
+                                    : Appearance.colors.colOnSurfaceVariant
                                 wrapMode: Text.Wrap
                             }
 

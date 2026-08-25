@@ -131,10 +131,16 @@ def render_vdirsyncer_config(
     return _with_managed_block(existing, "\n".join(lines))
 
 
-def render_khal_config(existing: str, subscription_root: Path, enabled: bool) -> str:
-    """Insert one readonly khal discover calendar inside [calendars]."""
+def render_khal_config(
+    existing: str,
+    subscription_root: Path,
+    subscriptions_enabled: bool,
+    outlook_root: Path | None = None,
+    outlook_enabled: bool = False,
+) -> str:
+    """Insert II-owned readonly khal sources inside [calendars]."""
     clean = _without_managed_block(existing)
-    if not enabled:
+    if not subscriptions_enabled and not outlook_enabled:
         return (clean + "\n") if clean else ""
 
     calendars = _CALENDARS_HEADER.search(clean)
@@ -142,15 +148,27 @@ def render_khal_config(existing: str, subscription_root: Path, enabled: bool) ->
         raise SubscriptionError("The khal config is missing its [calendars] section.")
     following = _TOP_LEVEL_HEADER.search(clean, calendars.end())
     insertion = following.start() if following else len(clean)
-    body = "\n".join([
-        BEGIN_MARKER,
-        "[[ii_timetable_subscriptions]]",
-        f"path = {subscription_root}/*",
-        "type = discover",
-        "readonly = True",
-        END_MARKER,
-        "",
-    ])
+    lines = [BEGIN_MARKER]
+    if subscriptions_enabled:
+        lines.extend([
+            "[[ii_timetable_subscriptions]]",
+            f"path = {subscription_root}/*",
+            "type = discover",
+            "readonly = True",
+            "",
+        ])
+    if outlook_enabled:
+        if outlook_root is None:
+            raise SubscriptionError("Outlook calendar path is missing.")
+        lines.extend([
+            "[[ii_timetable_outlook]]",
+            f"path = {outlook_root}",
+            "type = calendar",
+            "readonly = True",
+            "",
+        ])
+    lines.extend([END_MARKER, ""])
+    body = "\n".join(lines)
     before = clean[:insertion].rstrip()
     after = clean[insertion:]
     return before + "\n\n" + body + after.lstrip("\n")
@@ -189,7 +207,10 @@ def apply_subscriptions(payload: dict[str, Any]) -> dict[str, Any]:
     khal_path = Path(str(payload.get("khalConfigPath") or "")).expanduser()
     status_path = Path(str(payload.get("statusPath") or "")).expanduser()
     subscription_root = Path(str(payload.get("subscriptionRoot") or "")).expanduser()
-    if not all((vdirsyncer_path.name, khal_path.name, status_path.name, subscription_root.name)):
+    raw_outlook_root = str(payload.get("outlookRoot") or "").strip()
+    outlook_root = Path(raw_outlook_root).expanduser() if raw_outlook_root else subscription_root.parent / "timetable-outlook"
+    outlook_enabled = bool(payload.get("outlookEnabled"))
+    if not all((vdirsyncer_path.name, khal_path.name, status_path.name, subscription_root.name, outlook_root.name)):
         raise SubscriptionError("Subscription paths are incomplete.")
 
     raw_urls = payload.get("subscriptions") or []
@@ -200,12 +221,20 @@ def apply_subscriptions(payload: dict[str, Any]) -> dict[str, Any]:
     # Render both files before changing either one. A malformed or missing khal
     # config therefore never leaves a half-created vdirsyncer configuration.
     vdirsyncer_existing = _read_text(vdirsyncer_path, required=False)
-    khal_existing = _read_text(khal_path, required=bool(subscriptions))
+    khal_existing = _read_text(khal_path, required=bool(subscriptions) or outlook_enabled)
     vdirsyncer_next = render_vdirsyncer_config(vdirsyncer_existing, status_path, subscriptions)
-    khal_next = render_khal_config(khal_existing, subscription_root, bool(subscriptions)) if khal_existing or subscriptions else ""
+    khal_next = render_khal_config(
+        khal_existing,
+        subscription_root,
+        bool(subscriptions),
+        outlook_root,
+        outlook_enabled,
+    ) if khal_existing or subscriptions or outlook_enabled else ""
 
     for subscription in subscriptions:
         subscription.local_path.mkdir(parents=True, exist_ok=True)
+    if outlook_enabled:
+        outlook_root.mkdir(parents=True, exist_ok=True)
     if subscriptions:
         status_path.mkdir(parents=True, exist_ok=True)
 

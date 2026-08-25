@@ -26,6 +26,7 @@ Singleton {
     readonly property string khalConfigPath: root.configRoot + "/khal/config"
     readonly property string vdirsyncerStatusPath: root.stateRoot + "/vdirsyncer/status"
     readonly property string subscriptionRoot: root.stateRoot + "/vdirsyncer/timetable-subscriptions"
+    readonly property string outlookRoot: root.stateRoot + "/calendar/timetable-outlook"
 
     property string lastError: ""
     property bool applying: false
@@ -33,6 +34,8 @@ Singleton {
     property bool applyQueued: false
     property var managedCalendars: []
     readonly property bool importsEnabled: Config.options?.calendar?.timetable?.imports?.enable ?? false
+    readonly property bool outlookEnabled: root.importsEnabled
+        && (Config.options?.calendar?.timetable?.imports?.outlook?.enable ?? false)
 
     function subscriptionUrls() {
         return Array.from(Config.options?.calendar?.timetable?.subscriptions ?? []);
@@ -86,6 +89,8 @@ Singleton {
             "khalConfigPath": root.khalConfigPath,
             "statusPath": root.vdirsyncerStatusPath,
             "subscriptionRoot": root.subscriptionRoot,
+            "outlookRoot": root.outlookRoot,
+            "outlookEnabled": root.outlookEnabled,
             "subscriptions": root.effectiveSubscriptionUrls()
         };
     }
@@ -134,6 +139,14 @@ Singleton {
 
     Connections {
         target: Config.options?.calendar?.timetable?.imports
+
+        function onEnableChanged() {
+            root.requestApply();
+        }
+    }
+
+    Connections {
+        target: Config.options?.calendar?.timetable?.imports?.outlook
 
         function onEnableChanged() {
             root.requestApply();

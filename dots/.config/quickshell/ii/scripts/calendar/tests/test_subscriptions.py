@@ -98,6 +98,24 @@ class SubscriptionBridgeTests(unittest.TestCase):
         self.assertEqual(self.khal_path.read_text(encoding="utf-8"), original_khal)
         self.assertFalse(self.vdirsyncer_path.exists())
 
+    def test_outlook_collection_is_readonly_without_creating_a_remote_pair(self) -> None:
+        payload = self.payload([])
+        payload.update({
+            "outlookRoot": str(self.root / "outlook"),
+            "outlookEnabled": True,
+        })
+
+        result = subscriptions.apply_subscriptions(payload)
+
+        self.assertTrue(result["ok"])
+        self.assertFalse(result["syncRequired"])
+        self.assertTrue((self.root / "outlook").is_dir())
+        khal = self.khal_path.read_text(encoding="utf-8")
+        self.assertIn("[[ii_timetable_outlook]]", khal)
+        self.assertIn(f"path = {self.root / 'outlook'}", khal)
+        self.assertIn("readonly = True", khal)
+        self.assertFalse(self.vdirsyncer_path.exists())
+
 
 if __name__ == "__main__":
     unittest.main()

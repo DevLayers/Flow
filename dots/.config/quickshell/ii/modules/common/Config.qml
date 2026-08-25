@@ -3161,6 +3161,12 @@ Singleton {
                             property int maxMessages: 25
                             property int scanIntervalMinutes: 60
                         }
+                        property JsonObject outlook: JsonObject {
+                            // Direct Microsoft Graph calendar mirror. It is
+                            // registered as a local read-only khal collection.
+                            property bool enable: false
+                            property int syncIntervalMinutes: 60
+                        }
                     }
                     // ESPN games stay outside khal and are displayed only when
                     // explicitly requested in the Timetable.
