@@ -4,12 +4,13 @@ import QtQuick
 import QtQuick.Layouts
 import qs.modules.common
 import qs.modules.common.widgets
+import qs.services
 
 Item {
     id: root
 
     property var parsed: null
-    property var onCreate: null
+    signal createRequested()
 
     implicitHeight: parsed ? content.implicitHeight + Appearance.sizes.elevationMargin * 2 : 0
     visible: parsed !== null
@@ -20,10 +21,7 @@ Item {
         colBackground: Appearance.colors.colPrimaryContainer
         colBackgroundHover: Appearance.colors.colPrimaryContainerHover
         colRipple: Appearance.colors.colPrimaryContainerActive
-        onClicked: {
-            if (typeof root.onCreate === "function")
-                root.onCreate();
-        }
+        onClicked: root.createRequested()
 
         RowLayout {
             id: content

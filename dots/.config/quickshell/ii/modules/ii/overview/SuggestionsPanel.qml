@@ -35,17 +35,13 @@ Item {
         if (Config.options.search.suggestions.showFrecency && Config.options.search.frecency) {
             let list = AppSearch.frecencyQuery("").filter(item => item && item.id);
             let scoredApps = list.map(app => {
-                let rawApp = AppSearch.list.find(x => x.id === app.id);
                 return {
                     name: app.name,
                     comment: app.comment || "",
                     type: Translation.tr("App"),
-                    iconName: app.id,
-                    appEntry: rawApp,
-                    execute: () => {
-                        AppUsage.recordLaunch(app.id);
-                        rawApp?.launch();
-                    },
+                    iconName: app.icon,
+                    appEntry: app,
+                    execute: () => LauncherSearch.launchApplication(app),
                     score: AppUsage.getScore(app.id)
                 };
             });
@@ -63,17 +59,21 @@ Item {
         // 2. ALIASES: From persistent user state / config
         if (Config.options.search.suggestions.showAliases) {
             let aliasesConfig = (Persistent.ready ? Persistent.states.search.aliases : null) || Config.options.search.aliases || [];
-            let mappedAliases = aliasesConfig.map(alias => ({
-                name: alias.alias || "",
-                comment: alias.command || "",
-                type: Translation.tr("Alias"),
-                iconName: "keyboard_command_key",
-                iconType: 2, // Material icon
-                execute: () => {
-                    Quickshell.execDetached(["bash", "-c", alias.command]);
-                }
-            }));
-            if (mappedAliases.length >= 2) {
+            let mappedAliases = aliasesConfig.map(alias => {
+                if (!LauncherSearch.aliasAvailable(alias))
+                    return null;
+                const panel = alias.type === "builtin" ? SearchPanelRegistry.byId(alias.target) : null;
+                return {
+                    name: alias.alias || "",
+                    comment: panel?.label ?? alias.target ?? "",
+                    type: Translation.tr("Alias"),
+                    iconName: panel?.icon ?? (alias.type === "app" ? "apps" : alias.type === "folder" ? "folder" : alias.type === "command" ? "terminal" : "label"),
+                    iconType: 2, // Material icon
+                    keepOverviewOpen: alias.type === "folder" || alias.type === "builtin",
+                    execute: () => LauncherSearch.executeAlias(alias)
+                };
+            }).filter(Boolean);
+            if (mappedAliases.length > 0) {
                 suggestions.push({
                     title: Translation.tr("Aliases"),
                     items: mappedAliases.slice(0, maxN)
@@ -88,12 +88,9 @@ Item {
                 name: app.name,
                 comment: app.comment || "",
                 type: Translation.tr("App"),
-                iconName: app.id,
+                iconName: app.icon,
                 appEntry: app, // Expose raw app entry for more actions
-                execute: () => {
-                    AppUsage.recordLaunch(app.id);
-                    app.launch();
-                }
+                execute: () => LauncherSearch.launchApplication(app)
             }));
             if (mappedApps.length >= 2) {
                 suggestions.push({

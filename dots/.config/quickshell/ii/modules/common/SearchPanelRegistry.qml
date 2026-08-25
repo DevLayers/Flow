@@ -38,7 +38,16 @@ Singleton {
 
     readonly property var enabledPanels: root.panels.filter(panel => panel.enabled())
     readonly property var activePrefixes: root.enabledPanels.map(panel => root.prefixOf(panel)).filter(prefix => prefix.length > 0)
-    readonly property var aliasTargets: root.enabledPanels.filter(panel => panel.aliasable !== false).map(panel => ({ id: panel.id, name: panel.label, icon: panel.icon }))
+    // Alias configuration is a catalogue, not a snapshot of the currently
+    // enabled Loaders. Keeping every public panel here lets users prepare an
+    // alias before enabling its module, while LauncherSearch still suppresses
+    // execution until the target itself is enabled.
+    readonly property var aliasTargets: root.panels.filter(panel => panel.aliasable !== false).map(panel => ({
+        id: panel.id,
+        name: panel.label,
+        icon: panel.icon,
+        enabled: panel.enabled()
+    }))
 
     function byId(panelId) {
         return root.panels.find(panel => panel.id === panelId) ?? null;

@@ -15,6 +15,7 @@ Item {
     property string noticeText: ""
 
     readonly property int gridColumns: 2
+    readonly property real timerCardHeight: Appearance.sizes.elevationMargin * 9
     readonly property var countdowns: Array.from(TimerService.countdowns ?? [])
     readonly property real typedMinutes: root.minutesFromQuery(root.searchQuery)
     readonly property var rows: root.filteredRows()
@@ -346,7 +347,7 @@ Item {
                 Layout.fillHeight: true
                 clip: true
                 cellWidth: width / root.gridColumns
-                cellHeight: Appearance.sizes.elevationMargin * 7
+                cellHeight: root.timerCardHeight
                 model: root.rows
 
                 delegate: Item {

@@ -22,6 +22,11 @@ Singleton {
 
     readonly property var sections: [
         {
+            id: "aliases",
+            title: qsTr("Aliases"),
+            icon: "label"
+        },
+        {
             id: "media",
             title: qsTr("Now playing"),
             icon: "music_note"
@@ -57,9 +62,14 @@ Singleton {
             icon: "bolt"
         },
         {
-            id: "content",
-            title: qsTr("Files, links & text"),
+            id: "quicklinks",
+            title: qsTr("Quick links"),
             icon: "link"
+        },
+        {
+            id: "textSnippets",
+            title: qsTr("Text snippets"),
+            icon: "content_copy"
         },
         {
             id: "other",

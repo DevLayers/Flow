@@ -30,6 +30,10 @@ QtObject {
     property list<string> keywords: []
     property bool isMath: false
     property bool isBuiltin: false
+    // Explicit alias intent is independent of the result's target kind. The
+    // organizer uses this stable flag instead of translated labels or key
+    // prefixes so app, folder, command and panel aliases share one section.
+    property bool isAlias: false
     property bool isFallback: false
     property bool keepOverviewOpen: false
     property var settingRef: null

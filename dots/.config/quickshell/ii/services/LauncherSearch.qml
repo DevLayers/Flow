@@ -19,6 +19,12 @@ Singleton {
     property string processConfirmKey: ""
     readonly property int quickToggleRevision: QuickToggleRegistry.revision
     readonly property int browserSitesRevision: BrowserSites.revision
+    // Persistent owns user-created aliases. Config remains the boot-time
+    // fallback and compatibility mirror, but must not be the canonical source
+    // once states.json is ready.
+    readonly property var configuredAliases: Array.from((Persistent.ready
+        ? Persistent.states.search.aliases
+        : Config.options.search.aliases) ?? [])
     readonly property bool barOpenForSearch: GlobalStates.barOpen
     readonly property bool alwaysListAppsEnabled: Config.options.search.alwaysListApps
     readonly property bool overviewEnabled: Config.options.overview.enable
@@ -33,6 +39,7 @@ Singleton {
     onSettingsIndexReadyChanged: root._scheduleResultsUpdate()
     onQuickToggleRevisionChanged: root._scheduleResultsUpdate()
     onBrowserSitesRevisionChanged: root._scheduleResultsUpdate()
+    onConfiguredAliasesChanged: root._scheduleResultsUpdate()
     onBarOpenForSearchChanged: root._scheduleResultsUpdate()
     onAlwaysListAppsEnabledChanged: {
         root.enforceAlwaysListAppsOverviewPolicy();
@@ -86,6 +93,71 @@ Singleton {
         } else {
             root.query = prefix + root.query;
         }
+    }
+
+    function normalizedAlias(value): string {
+        return String(value ?? "").trim().toLowerCase();
+    }
+
+    function launchApplication(app): bool {
+        if (!app)
+            return false;
+        AppUsage.recordLaunch(app.id);
+        if (!app.runInTerminal) {
+            app.execute();
+        } else {
+            Quickshell.execDetached(["bash", "-c", `${Config.options.apps.terminal} -e '${StringUtils.shellSingleQuoteEscape(app.command.join(" "))}'`]);
+        }
+        return true;
+    }
+
+    function aliasAvailable(entry): bool {
+        const type = String(entry?.type ?? "");
+        const target = String(entry?.target ?? "").trim();
+        if (target.length === 0)
+            return false;
+        if (type === "app")
+            return !!DesktopEntries.byId(target);
+        if (type === "folder" || type === "command")
+            return true;
+        if (type !== "builtin")
+            return false;
+        const panel = SearchPanelRegistry.byId(target);
+        if (panel)
+            return panel.enabled();
+        return target === "math" && Config.options.search.modules.math;
+    }
+
+    function executeAlias(entry): bool {
+        if (!root.aliasAvailable(entry))
+            return false;
+        const type = String(entry?.type ?? "");
+        const target = String(entry?.target ?? "").trim();
+        if (type === "app")
+            return root.launchApplication(DesktopEntries.byId(target));
+        if (type === "folder") {
+            root.query = root.fileBrowserQueryForPath(target);
+            return true;
+        }
+        if (type === "command") {
+            Quickshell.execDetached(["bash", "-c", target]);
+            return true;
+        }
+        const panel = SearchPanelRegistry.byId(target);
+        if (panel) {
+            if (panel.id === "ai")
+                root.query = Config.options.search.prefix.ai;
+            else {
+                root.query = "";
+                GlobalStates.openSearchPanel(panel.id);
+            }
+            return true;
+        }
+        if (target === "math") {
+            root.query = Config.options.search.prefix.math;
+            return true;
+        }
+        return false;
     }
 
     function runCommandQuery(queryText: string) {
@@ -1378,14 +1450,7 @@ Singleton {
             iconName: entry.icon,
             iconType: LauncherSearchResult.IconType.System,
             verb: Translation.tr("Open"),
-            execute: () => {
-                AppUsage.recordLaunch(entry.id);
-                if (!entry.runInTerminal)
-                    entry.execute();
-                else {
-                    Quickshell.execDetached(["bash", '-c', `${Config.options.apps.terminal} -e '${StringUtils.shellSingleQuoteEscape(entry.command.join(' '))}'`]);
-                }
-            },
+            execute: () => root.launchApplication(entry),
             comment: entry.comment,
             runInTerminal: entry.runInTerminal,
             genericName: entry.genericName,
@@ -1768,9 +1833,12 @@ Singleton {
             result = result.concat(root.favoriteResults());
 
         // App/Folder/Command Aliases
-        const aliases = Config.options?.search?.aliases ?? [];
+        const aliases = root.configuredAliases;
+        const normalizedAliasQuery = root.normalizedAlias(root.query);
         const aliasObjects = aliases.map(entry => {
-            if (entry.alias && entry.alias.toLowerCase() === root.query.toLowerCase()) {
+            if (normalizedAliasQuery.length > 0
+                    && root.normalizedAlias(entry?.alias) === normalizedAliasQuery
+                    && root.aliasAvailable(entry)) {
                 if (entry.type === "app") {
                     const app = DesktopEntries.byId(entry.target);
                     if (app) {
@@ -1782,13 +1850,8 @@ Singleton {
                             iconType: LauncherSearchResult.IconType.System,
                             verb: Translation.tr("Open"),
                             type: Translation.tr("App Alias"),
-                            execute: () => {
-                                AppUsage.recordLaunch(app.id);
-                                if (!app.runInTerminal)
-                                    app.execute();
-                                else
-                                    Quickshell.execDetached(["bash", '-c', `${Config.options.apps.terminal} -e '${StringUtils.shellSingleQuoteEscape(app.command.join(' '))}'`]);
-                            }
+                            isAlias: true,
+                            execute: () => root.executeAlias(entry)
                         });
                     }
                 } else if (entry.type === "folder") {
@@ -1799,10 +1862,9 @@ Singleton {
                         iconType: LauncherSearchResult.IconType.Material,
                         verb: Translation.tr("Browse"),
                         type: Translation.tr("Folder Alias"),
+                        isAlias: true,
                         comment: entry.target,
-                        execute: () => {
-                            root.query = root.fileBrowserQueryForPath(entry.target);
-                        }
+                        execute: () => root.executeAlias(entry)
                     });
                 } else if (entry.type === "command") {
                     return resultComp.createObject(null, {
@@ -1812,66 +1874,23 @@ Singleton {
                         iconType: LauncherSearchResult.IconType.Material,
                         verb: Translation.tr("Run"),
                         type: Translation.tr("Command Alias"),
-                        execute: () => {
-                            Quickshell.execDetached(["bash", "-c", entry.target]);
-                        }
+                        isAlias: true,
+                        execute: () => root.executeAlias(entry)
                     });
                 } else if (entry.type === "builtin") {
                     let verb = Translation.tr("Open");
                     let icon = "explore";
                     let typeName = Translation.tr("Mode");
                     let name = entry.target;
-                    let execFunc = () => {};
                     const registeredPanel = SearchPanelRegistry.byId(entry.target);
 
-                    if (registeredPanel?.hosted === true) {
+                    if (registeredPanel) {
                         icon = registeredPanel.icon;
                         name = registeredPanel.label;
                         typeName = Translation.tr("Search panel");
-                        execFunc = () => {
-                            root.query = "";
-                            GlobalStates.openSearchPanel(registeredPanel.id);
-                        };
-                    } else if (entry.target === "clipboard") {
-                        icon = "content_paste";
-                        name = Translation.tr("Clipboard");
-                        execFunc = () => {
-                            root.query = Config.options.search.prefix.clipboard;
-                        };
-                    } else if (entry.target === "emojis") {
-                        icon = "mood";
-                        name = Translation.tr("Emojis");
-                        execFunc = () => {
-                            root.query = Config.options.search.prefix.emojis;
-                        };
                     } else if (entry.target === "math") {
                         icon = "calculate";
                         name = Translation.tr("Calculator");
-                        execFunc = () => {
-                            root.query = Config.options.search.prefix.math;
-                        };
-                    } else if (entry.target === "settings") {
-                        icon = "settings";
-                        name = Translation.tr("Dotfiles Settings");
-                        typeName = Translation.tr("Settings");
-                        execFunc = () => {
-                            GlobalStates.overviewOpen = false;
-                            GlobalStates.openSettings();
-                        };
-                    } else if (entry.target === "bluetooth") {
-                        icon = "bluetooth";
-                        name = Translation.tr("Bluetooth Manager");
-                        typeName = Translation.tr("Settings");
-                        execFunc = () => {
-                            root.query = Config.options.search.prefix.bluetooth;
-                        };
-                    } else if (entry.target === "translator") {
-                        icon = "translate";
-                        name = Translation.tr("Translator");
-                        typeName = Translation.tr("Tool");
-                        execFunc = () => {
-                            root.query = Config.options.search.prefix.translator;
-                        };
                     }
 
                     return resultComp.createObject(null, {
@@ -1883,7 +1902,8 @@ Singleton {
                         type: typeName,
                         comment: Translation.tr("Alias: ") + entry.alias,
                         isBuiltin: true,
-                        execute: execFunc
+                        isAlias: true,
+                        execute: () => root.executeAlias(entry)
                     });
                 }
             }
@@ -2267,7 +2287,9 @@ Singleton {
         }
 
         // Filter out duplicate original apps/folders/commands if an alias is shown.
-        const activeAliases = (Config.options?.search?.aliases ?? []).filter(entry => entry.alias && entry.alias.toLowerCase() === root.query.toLowerCase());
+        const normalizedActiveAliasQuery = root.normalizedAlias(root.query);
+        const activeAliases = root.configuredAliases.filter(entry => normalizedActiveAliasQuery.length > 0
+            && root.normalizedAlias(entry?.alias) === normalizedActiveAliasQuery);
         const activeAppAliasIds = new Set(activeAliases
             .filter(alias => alias.type === "app")
             .map(alias => {
@@ -2280,7 +2302,7 @@ Singleton {
                 if (!item || !item.key)
                     return false;
                 for (const alias of activeAliases) {
-                    if (alias.type === "app" && item.type !== Translation.tr("App Alias") && item.key.startsWith("app:") && activeAppAliasIds.has(item.key.slice(4)))
+                    if (alias.type === "app" && item.isAlias !== true && item.key.startsWith("app:") && activeAppAliasIds.has(item.key.slice(4)))
                         return false;
                     if (alias.type === "folder" && item.key.startsWith("file:")) {
                         const filePath = item.key.slice(5);
@@ -2351,6 +2373,7 @@ Singleton {
             keywords: properties.keywords || [],
             isMath: !!properties.isMath,
             isBuiltin: !!properties.isBuiltin,
+            isAlias: !!properties.isAlias,
             isFallback: !!properties.isFallback,
             keepOverviewOpen: !!properties.keepOverviewOpen,
             controlKind: properties.controlKind || "",

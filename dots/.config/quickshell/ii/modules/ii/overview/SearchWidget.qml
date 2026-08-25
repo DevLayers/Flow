@@ -819,7 +819,7 @@ Item {
         { id: "apps", label: Translation.tr("Apps"), icon: "apps", sections: ["apps"] },
         { id: "controls", label: Translation.tr("Controls"), icon: "tune", sections: ["controls"] },
         { id: "tools", label: Translation.tr("Tools"), icon: "widgets", sections: ["tools", "actions"] },
-        { id: "content", label: Translation.tr("Content"), icon: "article", sections: ["content", "files", "siteTabs", "siteFavorites", "siteSuggestions"] },
+        { id: "content", label: Translation.tr("Content"), icon: "article", sections: ["quicklinks", "textSnippets", "files", "siteTabs", "siteFavorites", "siteSuggestions"] },
         { id: "media", label: Translation.tr("Media"), icon: "music_note", sections: ["media"] },
         { id: "settings", label: Translation.tr("Settings"), icon: "settings", sections: ["settings"] },
         { id: "other", label: Translation.tr("Other"), icon: "more_horiz", sections: ["other"] }
@@ -895,7 +895,9 @@ Item {
         const key = String(item?.key ?? "");
         if (item?.isFallback === true)
             return "continue";
-        if (key.startsWith("app:") || item?.type === Translation.tr("App Alias"))
+        if (item?.isAlias === true)
+            return "aliases";
+        if (key.startsWith("app:"))
             return "apps";
         if (key.startsWith("site:")) {
             if (item?.siteSource === "open")
@@ -912,12 +914,16 @@ Item {
             return "controls";
         if (/^(panel:|keybind:|cheatsheet:|shortcut:)/.test(key))
             return "tools";
+        if (key.startsWith("tool:") || key.startsWith("win:"))
+            return "tools";
         // Files and folders are their own class of result, not "links & text":
         // they are the one group whose rows are a location on disk.
         if (/^(file:|fsearch:)/.test(key))
             return "files";
-        if (/^(quicklink:|alias:|text-snippet:)/.test(key))
-            return "content";
+        if (key.startsWith("quicklink:"))
+            return "quicklinks";
+        if (key.startsWith("text-snippet:"))
+            return "textSnippets";
         if (key.startsWith("math:"))
             return "tools";
         if (/^(cmd:shell|web:search|ai:ask|fallback:)/.test(key))
@@ -991,15 +997,6 @@ Item {
                 if (key.startsWith("panel:") && key !== "panel:settings") {
                     bestIndex = i;
                     break;
-                }
-            }
-            if (bestIndex === -1) {
-                for (let i = 0; i < unique.length; i++) {
-                    const key = String(unique[i].key ?? "");
-                    if (unique[i].type === Translation.tr("App Alias") || key.startsWith("quicklink:")) {
-                        bestIndex = i;
-                        break;
-                    }
                 }
             }
             if (bestIndex !== -1)

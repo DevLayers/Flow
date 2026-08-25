@@ -189,6 +189,11 @@ class SearchRaycastContractTests(unittest.TestCase):
         self.assertIn("property int displayClockTick", timers)
         self.assertIn('(?:h|hr|hour|hours)', timers)
         self.assertIn("TimerService.addCountdown", timers)
+        self.assertIn(
+            "readonly property real timerCardHeight: Appearance.sizes.elevationMargin * 9",
+            timers,
+        )
+        self.assertIn("cellHeight: root.timerCardHeight", timers)
 
         timer_service = source("services/TimerService.qml")
         self.assertIn("return countdown", timer_service)
@@ -409,6 +414,101 @@ class SearchRaycastContractTests(unittest.TestCase):
         self.assertIn("root.componentInfo(modelData.id)", entry)
         self.assertIn("infoProvider: id => SearchResultSectionRegistry.getComponent(id)", launcher_page)
 
+    def test_aliases_are_a_first_class_top_priority_result_group(self):
+        registry = source("modules/common/SearchResultSectionRegistry.qml")
+        widget = source("modules/ii/overview/SearchWidget.qml")
+        launcher = source("services/LauncherSearch.qml")
+        model = source("modules/common/models/LauncherSearchResult.qml")
+        config = source("modules/common/Config.qml")
+
+        # Aliases are an explicit intent, independent of what they target. They
+        # must not disappear with Applications, Content or More results.
+        self.assertIn('id: "aliases"', registry)
+        self.assertIn('title: qsTr("Aliases")', registry)
+        self.assertLess(registry.index('id: "aliases"'), registry.index('id: "media"'))
+        classifier = widget.split("function resultSectionId(item): string", 1)[1].split(
+            "function sectionPresentation", 1
+        )[0]
+        self.assertIn('return "aliases"', classifier)
+        self.assertLess(classifier.index("item?.isAlias"), classifier.index('key.startsWith("app:")'))
+        self.assertIn("property bool isAlias: false", model)
+
+        alias_block = launcher.split("// App/Folder/Command Aliases", 1)[1].split(
+            "//////// Prioritized by type /////////", 1
+        )[0]
+        self.assertEqual(alias_block.count("isAlias: true"), 4)
+        self.assertIn("readonly property var configuredAliases", launcher)
+        self.assertIn("onConfiguredAliasesChanged: root._scheduleResultsUpdate()", launcher)
+        self.assertIn("root.normalizedAlias(root.query)", launcher)
+        self.assertNotIn('unique[i].type === Translation.tr("App Alias")', widget)
+
+        # Existing v11 orders are authoritative and omit the new id, so merely
+        # adding it to the catalogue would still leave every current user without
+        # aliases. The schema migration prepends it once and the shipped order
+        # starts with the same group.
+        self.assertIn("readonly property int currentConfigVersion: 13", config)
+        self.assertIn("if (from < 12)", config)
+        self.assertIn('sectionOrder.unshift({ "id": "aliases" })', config)
+        default_order = config.split("property list<var> sectionOrder: [", 1)[1].split(
+            "]", 1
+        )[0]
+        self.assertTrue(default_order.lstrip().startswith('{ "id": "aliases" }'))
+
+    def test_quicklinks_and_text_snippets_have_independent_result_priority(self):
+        registry = source("modules/common/SearchResultSectionRegistry.qml")
+        widget = source("modules/ii/overview/SearchWidget.qml")
+        config = source("modules/common/Config.qml")
+
+        self.assertIn('id: "quicklinks"', registry)
+        self.assertIn('title: qsTr("Quick links")', registry)
+        self.assertIn('id: "textSnippets"', registry)
+        self.assertIn('title: qsTr("Text snippets")', registry)
+        self.assertNotIn('id: "content"', registry)
+
+        classifier = widget.split("function resultSectionId(item): string", 1)[1].split(
+            "function sectionPresentation", 1
+        )[0]
+        self.assertIn('return "quicklinks"', classifier)
+        self.assertIn('return "textSnippets"', classifier)
+        self.assertIn('return "files"', classifier)
+        self.assertLess(classifier.index('return "files"'), classifier.index('return "quicklinks"'))
+        self.assertIn('key.startsWith("tool:") || key.startsWith("win:")', classifier)
+
+        category_block = widget.split("readonly property var resultCategoryDefinitions", 1)[1].split(
+            "readonly property var availableResultCategories", 1
+        )[0]
+        self.assertIn('sections: ["quicklinks", "textSnippets", "files",', category_block)
+        self.assertNotIn('sections: ["content",', category_block)
+        self.assertNotIn('key.startsWith("quicklink:")', widget.split("// Applications are always", 1)[1].split("const buckets", 1)[0])
+
+        # v12 stored the two producers as one `content` position. Replacing that
+        # entry in place preserves the user's surrounding order and whether the
+        # old group had been disabled.
+        self.assertIn("readonly property int currentConfigVersion: 13", config)
+        self.assertIn("if (from < 13)", config)
+        self.assertIn('sectionOrder.splice(contentIndex, 1, { "id": "quicklinks" }, { "id": "textSnippets" })', config)
+        default_order = config.split("property list<var> sectionOrder: [", 1)[1].split(
+            "]", 1
+        )[0]
+        self.assertIn('{ "id": "quicklinks" }', default_order)
+        self.assertIn('{ "id": "textSnippets" }', default_order)
+        self.assertIn('{ "id": "media" }', default_order)
+        self.assertNotIn('{ "id": "content" }', default_order)
+
+    def test_suggestions_execute_current_app_and_alias_schemas(self):
+        suggestions = source("modules/ii/overview/SuggestionsPanel.qml")
+        launcher = source("services/LauncherSearch.qml")
+
+        self.assertNotIn(".launch()", suggestions)
+        self.assertNotIn("alias.command", suggestions)
+        self.assertIn("LauncherSearch.launchApplication", suggestions)
+        self.assertIn("LauncherSearch.aliasAvailable", suggestions)
+        self.assertIn("LauncherSearch.executeAlias", suggestions)
+        self.assertIn("mappedAliases.length > 0", suggestions)
+        self.assertIn("function launchApplication(app): bool", launcher)
+        self.assertIn("function aliasAvailable(entry): bool", launcher)
+        self.assertIn("function executeAlias(entry): bool", launcher)
+
     def test_every_file_row_has_an_icon_and_no_row_sized_preview(self):
         launcher = source("services/LauncherSearch.qml")
         item = source("modules/ii/overview/SearchItem.qml")
@@ -606,9 +706,112 @@ class SearchRaycastContractTests(unittest.TestCase):
         self.assertIn("function submitFields(fields): bool", panel)
         for field in ("titleField", "startDateField", "startTimeField", "endDateField", "endTimeField", "locationField", "allDayButton"):
             self.assertIn("id: " + field, form)
+        self.assertNotIn("property bool checked", form)
+        self.assertIn("allDayButton.toggled", form)
         self.assertIn('mutationState = "success"', google)
         self.assertIn('root.syncing = false;\n                    root.mutationState = "success"', google)
         self.assertIn("Qt.callLater(root.refresh)", google)
+
+    def test_calendar_create_form_has_persistent_labels_and_clear_actions(self):
+        form = source("modules/ii/overview/calendar/CalendarCreateForm.qml")
+
+        self.assertIn("component LabeledField", form)
+        self.assertIn("component CompactField", form)
+        self.assertIn("property bool validationAttempted: false", form)
+        for label in (
+            "Event title",
+            "Starts",
+            "Ends",
+            "Date",
+            "Time",
+            "Location",
+            "All-day event",
+        ):
+            self.assertIn('Translation.tr("' + label + '")', form)
+        self.assertIn("MaterialShapeWrappedMaterialSymbol", form)
+        self.assertIn("id: createEventButton", form)
+        self.assertIn("RippleButtonWithIcon", form)
+        self.assertIn("KeyNavigation.tab", form)
+        # StyledToolTip inherits QtQuick.Controls.ToolTip and has no placement
+        # property named `side`; using it makes the whole form type unavailable.
+        self.assertNotIn("side: Tooltip", form)
+
+    def test_calendar_children_import_translation_and_quick_create_uses_a_signal(self):
+        calendar_dir = ROOT / "modules/ii/overview/calendar"
+        translated_components = [
+            path
+            for path in calendar_dir.glob("*.qml")
+            if "Translation.tr" in path.read_text(encoding="utf-8")
+        ]
+        self.assertGreater(len(translated_components), 0)
+        for path in translated_components:
+            self.assertIn(
+                "import qs.services",
+                path.read_text(encoding="utf-8"),
+                path.name,
+            )
+
+        quick_create = source("modules/ii/overview/calendar/CalendarQuickCreate.qml")
+        panel = source("modules/ii/overview/CalendarPanel.qml")
+        self.assertNotIn("property var onCreate", quick_create)
+        self.assertIn("signal createRequested()", quick_create)
+        self.assertIn("root.createRequested()", quick_create)
+        self.assertIn("onCreateRequested: root.createFromQuery()", panel)
+        self.assertIn("hints: root.createPageOpen", panel)
+        self.assertIn('{ label: Translation.tr("Back"), keys: ["Esc"] }', panel)
+
+    def test_alias_catalog_covers_every_public_search_panel_and_wraps_all_rows(self):
+        registry = source("modules/common/SearchPanelRegistry.qml")
+        aliases = source("modules/settings/configs/widgets/LauncherAliasesConfig.qml")
+        legacy = source("modules/settings/configs/AppSearchConfig.qml")
+        launcher = source("services/LauncherSearch.qml")
+
+        public_panels = (
+            "clipboard",
+            "fileBrowser",
+            "bluetooth",
+            "translator",
+            "mediaDownloader",
+            "materialSymbols",
+            "ai",
+            "calendar",
+            "tasks",
+            "timers",
+            "emojis",
+            "screenshots",
+            "windows",
+            "settings",
+            "keybinds",
+            "commands",
+            "gmail",
+            "sports",
+            "tools",
+        )
+        for panel_id in public_panels:
+            self.assertIn('id: "' + panel_id + '"', registry)
+
+        registered_files = {
+            line.split('source: "', 1)[1].split('"', 1)[0]
+            for line in registry.splitlines()
+            if 'source: "' in line and 'Panel.qml"' in line
+        }
+        panel_directory = ROOT / "modules/ii/overview"
+        public_files = {
+            path.name
+            for path in panel_directory.glob("*Panel.qml")
+            if path.name not in {"SearchPanelHost.qml", "SuggestionsPanel.qml"}
+        }
+        self.assertEqual(public_files, registered_files)
+
+        self.assertIn("root.panels.filter(panel => panel.aliasable !== false)", registry)
+        for page in (aliases, legacy):
+            self.assertIn("SearchPanelRegistry.aliasTargets.concat([", page)
+            self.assertIn("id: builtinFlow", page)
+            self.assertIn("Layout.preferredHeight: builtinFlow.implicitHeight", page)
+            self.assertIn("modelData.enabled === false", page)
+        self.assertNotIn('{ "id": "emojis", "name": Translation.tr("Emoji Picker")', aliases)
+        self.assertIn('if (panel.id === "ai")', launcher)
+        self.assertIn("return panel.enabled()", launcher)
 
     def test_window_panel_targets_live_open_windows(self):
         panel = source("modules/ii/overview/WindowManagementPanel.qml")

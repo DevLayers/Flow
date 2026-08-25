@@ -317,7 +317,7 @@ ContentPage {
 
     ContentSection {
         icon: "label"
-        title: Translation.tr("App Aliases")
+        title: Translation.tr("Search Aliases")
 
         ColumnLayout {
             Layout.fillWidth: true
@@ -770,7 +770,9 @@ ContentPage {
                         }
 
                         Flow {
+                            id: appTargetFlow
                             Layout.fillWidth: true
+                            Layout.preferredHeight: appTargetFlow.implicitHeight
                             spacing: 8
 
                             Repeater {
@@ -815,41 +817,14 @@ ContentPage {
 
                     // Builtin suggestion area
                     Flow {
+                        id: builtinFlow
                         Layout.fillWidth: true
+                        Layout.preferredHeight: builtinFlow.implicitHeight
                         spacing: 8
                         visible: addAliasArea.selectedType === "builtin"
-                        property var builtins: [
-                            {
-                                id: "clipboard",
-                                name: Translation.tr("Clipboard"),
-                                icon: "content_paste"
-                            },
-                            {
-                                id: "emojis",
-                                name: Translation.tr("Emoji Picker"),
-                                icon: "mood"
-                            },
-                            {
-                                id: "math",
-                                name: Translation.tr("Calculator Mode"),
-                                icon: "calculate"
-                            },
-                            {
-                                id: "bluetooth",
-                                name: Translation.tr("Bluetooth Manager"),
-                                icon: "bluetooth"
-                            },
-                            {
-                                id: "translator",
-                                name: Translation.tr("Translator"),
-                                icon: "translate"
-                            },
-                            {
-                                id: "settings",
-                                name: Translation.tr("Settings"),
-                                icon: "settings"
-                            }
-                        ]
+                        property var builtins: SearchPanelRegistry.aliasTargets.concat([
+                            { "id": "math", "name": Translation.tr("Calculator Mode"), "icon": "calculate", "enabled": true }
+                        ])
                         Repeater {
                             model: parent.builtins
                             delegate: Rectangle {
@@ -870,7 +845,9 @@ ContentPage {
                                         color: builtinChip.selected ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnSurface
                                     }
                                     StyledText {
-                                        text: modelData.name
+                                        text: modelData.name + (modelData.enabled === false
+                                            ? " · " + Translation.tr("Disabled")
+                                            : "")
                                         font.pixelSize: Appearance.font.pixelSize.small
                                         color: builtinChip.selected ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnSurface
                                         font.bold: builtinChip.selected

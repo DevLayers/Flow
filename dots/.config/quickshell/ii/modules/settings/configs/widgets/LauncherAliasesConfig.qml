@@ -45,7 +45,7 @@ Item {
             }
 
             StyledText {
-                text: Translation.tr("App Aliases")
+                text: Translation.tr("Search aliases")
                 font.pixelSize: Appearance.font.pixelSize.large
                 font.family: Appearance.font.family.title
                 color: Appearance.colors.colOnLayer0
@@ -64,7 +64,7 @@ Item {
                     visible: !((Persistent.ready ? Persistent.states.search.aliases : Config.options.search.aliases) && (Persistent.ready ? Persistent.states.search.aliases : Config.options.search.aliases).length > 0)
                     Layout.fillWidth: true
                     materialIcon: "info"
-                    text: Translation.tr("No aliases configured yet. Use the form below to create shortcuts for your favorite apps, folders, and commands.")
+                    text: Translation.tr("No aliases configured yet. Use the form below to create shortcuts for apps, folders, commands, and Search panels.")
                 }
 
                 Repeater {
@@ -539,7 +539,9 @@ Item {
                             }
 
                             Flow {
+                                id: appTargetFlow
                                 Layout.fillWidth: true
+                                Layout.preferredHeight: appTargetFlow.implicitHeight
                                 spacing: 8
 
                                 Repeater {
@@ -590,12 +592,13 @@ Item {
                         }
 
                         Flow {
+                            id: builtinFlow
                             property var builtins: SearchPanelRegistry.aliasTargets.concat([
-                                { "id": "emojis", "name": Translation.tr("Emoji Picker"), "icon": "mood" },
                                 { "id": "math", "name": Translation.tr("Calculator Mode"), "icon": "calculate" }
                             ])
 
                             Layout.fillWidth: true
+                            Layout.preferredHeight: builtinFlow.implicitHeight
                             spacing: 8
                             visible: addAliasArea.selectedType === "builtin"
 
@@ -625,7 +628,9 @@ Item {
                                         }
 
                                         StyledText {
-                                            text: modelData.name
+                                            text: modelData.name + (modelData.enabled === false
+                                                ? " · " + Translation.tr("Disabled")
+                                                : "")
                                             font.pixelSize: Appearance.font.pixelSize.small
                                             color: builtinChip.selected ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnSurface
                                             font.bold: builtinChip.selected

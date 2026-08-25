@@ -581,7 +581,7 @@ Singleton {
     //
     // Bump `currentConfigVersion` and add a matching block to `migrateRaw()`
     // whenever an existing key changes type or meaning.
-    readonly property int currentConfigVersion: 11
+    readonly property int currentConfigVersion: 13
     // Defaults have to be captured before the file lands, because deserializing
     // is what destroys them. FileView loads asynchronously, so at component
     // completion the adapter still holds nothing but the QML defaults.
@@ -904,6 +904,46 @@ Singleton {
                 }
             }
             console.log("[Config] Added Browser Sites search provider");
+        }
+
+        // v11 -> v12: aliases became an explicit result class. Existing orders
+        // predate the id and are otherwise authoritative, so without a one-time
+        // insertion every upgraded user would keep filtering aliases out. Put
+        // exact alias intent before every broader fuzzy result class.
+        if (from < 12) {
+            if (raw.search === undefined || raw.search === null
+                    || typeof raw.search !== "object" || Array.isArray(raw.search))
+                raw.search = {};
+            const sectionOrder = raw.search.sectionOrder;
+            if (Array.isArray(sectionOrder) && sectionOrder.length > 0) {
+                const hasAliases = sectionOrder.some(entry => String(entry?.id ?? entry) === "aliases");
+                if (!hasAliases)
+                    sectionOrder.unshift({ "id": "aliases" });
+            }
+            console.log("[Config] Added Aliases search result group");
+        }
+
+        // v12 -> v13: the former Content result group mixed two independent
+        // user-owned providers. Replace it in place so the surrounding priority
+        // stays unchanged. If Content had been removed, both providers remain
+        // disabled and are merely offered by the Settings add selector.
+        if (from < 13) {
+            if (raw.search === undefined || raw.search === null
+                    || typeof raw.search !== "object" || Array.isArray(raw.search))
+                raw.search = {};
+            const sectionOrder = raw.search.sectionOrder;
+            if (Array.isArray(sectionOrder) && sectionOrder.length > 0) {
+                const contentIndex = sectionOrder.findIndex(entry => String(entry?.id ?? entry) === "content");
+                if (contentIndex >= 0) {
+                    const hasQuicklinks = sectionOrder.some(entry => String(entry?.id ?? entry) === "quicklinks");
+                    const hasTextSnippets = sectionOrder.some(entry => String(entry?.id ?? entry) === "textSnippets");
+                    if (!hasQuicklinks && !hasTextSnippets)
+                        sectionOrder.splice(contentIndex, 1, { "id": "quicklinks" }, { "id": "textSnippets" });
+                    else
+                        sectionOrder.splice(contentIndex, 1);
+                }
+            }
+            console.log("[Config] Split Content search results into Quick links and Text snippets");
         }
 
         raw.configVersion = root.currentConfigVersion;
@@ -3763,13 +3803,16 @@ Singleton {
                 // order and the on/off switch. Reordered from Settings; the
                 // catalogue of ids lives in SearchResultSectionRegistry.
                 property list<var> sectionOrder: [
+                    { "id": "aliases" },
+                    { "id": "media" },
                     { "id": "best" },
                     { "id": "apps" },
                     { "id": "sites" },
                     { "id": "controls" },
                     { "id": "tools" },
                     { "id": "actions" },
-                    { "id": "content" },
+                    { "id": "quicklinks" },
+                    { "id": "textSnippets" },
                     { "id": "other" },
                     { "id": "settings" },
                     { "id": "files" },
