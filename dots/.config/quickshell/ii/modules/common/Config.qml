@@ -872,6 +872,40 @@ Singleton {
             console.log("[Config] Added Search v2 content defaults");
         }
 
+        // v10 -> v11: normal Search can index bookmarks and selected history
+        // from the default Mozilla-compatible browser profile. Existing result
+        // orders receive the new section exactly once; after this migration the
+        // stored v11 order is authoritative, so removing Sites stays removed.
+        if (from < 11) {
+            if (raw.search === undefined || raw.search === null
+                    || typeof raw.search !== "object" || Array.isArray(raw.search))
+                raw.search = {};
+            if (raw.search.browserSites === undefined) {
+                raw.search.browserSites = {
+                    enable: true,
+                    profilePath: "",
+                    maxIndexedSites: 300,
+                    maxResults: 6,
+                    includeHistory: true,
+                    useLocalFavicons: true,
+                    allowRemoteFavicons: false,
+                    refreshMinutes: 10
+                };
+            }
+            const sectionOrder = raw.search.sectionOrder;
+            if (Array.isArray(sectionOrder) && sectionOrder.length > 0) {
+                const hasSites = sectionOrder.some(entry => String(entry?.id ?? entry) === "sites");
+                if (!hasSites) {
+                    const appsIndex = sectionOrder.findIndex(entry => String(entry?.id ?? entry) === "apps");
+                    const settingsIndex = sectionOrder.findIndex(entry => String(entry?.id ?? entry) === "settings");
+                    const insertAt = appsIndex >= 0 ? appsIndex + 1
+                        : (settingsIndex >= 0 ? settingsIndex : sectionOrder.length);
+                    sectionOrder.splice(insertAt, 0, { "id": "sites" });
+                }
+            }
+            console.log("[Config] Added Browser Sites search provider");
+        }
+
         raw.configVersion = root.currentConfigVersion;
         console.log(`[Config] Migrated config schema ${from} -> ${root.currentConfigVersion}`);
         return true;
@@ -3713,15 +3747,25 @@ Singleton {
                     // on every query, so they also fix a *partly* wrong query.
                     property bool keyboardLayouts: true
                 }
+                property JsonObject browserSites: JsonObject {
+                    property bool enable: true
+                    property string profilePath: ""
+                    property int maxIndexedSites: 300
+                    property int maxResults: 6
+                    property bool includeHistory: true
+                    property bool useLocalFavicons: true
+                    property bool allowRemoteFavicons: false
+                    property int refreshMinutes: 10
+                }
                 property list<var> aliases: []
                 // Priority of the result groups, top to bottom. Removing an
                 // entry hides that group's results, so this list is both the
                 // order and the on/off switch. Reordered from Settings; the
                 // catalogue of ids lives in SearchResultSectionRegistry.
                 property list<var> sectionOrder: [
-                    { "id": "media" },
                     { "id": "best" },
                     { "id": "apps" },
+                    { "id": "sites" },
                     { "id": "controls" },
                     { "id": "tools" },
                     { "id": "actions" },
@@ -3895,6 +3939,7 @@ Singleton {
                     property JsonObject notes: JsonObject { property bool enable: true }
                     property JsonObject processes: JsonObject { property bool enable: true }
                     property JsonObject converter: JsonObject { property bool enable: true; property string baseCurrency: "BRL" }
+                    property JsonObject tools: JsonObject { property bool enable: true }
                     property JsonObject generators: JsonObject { property bool enable: true }
                 }
                 property JsonObject frecencyData: JsonObject {
@@ -3977,7 +4022,13 @@ Singleton {
                         property bool multiline: true
                     }
                 }
-                property bool showNowPlayingBubble: false
+                property JsonObject nowPlaying: JsonObject {
+                    property bool enable: true          // hoje é `showNowPlayingBubble`
+                    property bool showInlineControls: true
+                    property bool tintFromArtwork: false
+                    property bool showPlayerName: true  // só quando há mais de um player
+                }
+                property bool showNowPlayingBubble: nowPlaying.enable
                 property string connectStyle: "connect"  // Search rendered as embedded drop in Connect Mode
                 property int baseWidth: 580
                 property int baseHeight: 500

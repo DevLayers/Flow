@@ -15,7 +15,7 @@ def source(path):
 class SearchRaycastContractTests(unittest.TestCase):
     def test_registry_is_the_single_catalog_for_hosted_panels(self):
         registry = source("modules/common/SearchPanelRegistry.qml")
-        for panel_id in ("calendar", "tasks", "timers", "emojis", "screenshots", "windows", "settings", "keybinds", "commands", "gmail", "sports", "generators"):
+        for panel_id in ("calendar", "tasks", "timers", "emojis", "screenshots", "windows", "settings", "keybinds", "commands", "gmail", "sports", "tools"):
             self.assertIn('id: "' + panel_id + '"', registry)
         self.assertGreaterEqual(registry.count("hosted: true"), 12)
 
@@ -35,7 +35,7 @@ class SearchRaycastContractTests(unittest.TestCase):
             "commands": ("terminal", "Ghostish"),
             "gmail": ("mail", "Heart"),
             "sports": ("sports_soccer", "VerySunny"),
-            "generators": ("wand_stars", "Burst"),
+            "tools": ("wand_stars", "Burst"),
         }
 
         registry_lines = registry.splitlines()
@@ -70,7 +70,7 @@ class SearchRaycastContractTests(unittest.TestCase):
             "WindowManagementPanel.qml", "SettingsTogglesPanel.qml",
             "KeybindsPanel.qml", "CommandsPanel.qml", "GmailPanel.qml",
             "SportsPanel.qml",
-            "GeneratorsPanel.qml",
+            "ToolsPanel.qml",
         ):
             self.assertIn(
                 "SearchPanelScaffold",
@@ -159,12 +159,12 @@ class SearchRaycastContractTests(unittest.TestCase):
 
     def test_launcher_producers_are_local_and_guarded(self):
         launcher = source("services/LauncherSearch.qml")
-        for function in ("favoriteResults", "snippetMatches", "processMatches", "generatorEntries", "modeMatches", "bluetoothMatches", "fallbackResults"):
+        for function in ("favoriteResults", "snippetMatches", "processMatches", "toolEntries", "modeMatches", "bluetoothMatches", "fallbackResults"):
             self.assertIn("function " + function, launcher)
         self.assertIn("processConfirmKey", launcher)
         self.assertIn("_scheduleResultsUpdate", launcher)
         self.assertNotIn("XmlHttpRequest", launcher)
-        self.assertIn('const genericTerms = ["generator"', launcher)
+        self.assertIn("DevToolsRegistry.inlineMatches", launcher)
         self.assertIn("Config.options.search.modules.systemControls", launcher)
         shell_actions = source("modules/common/ShellActionRegistry.qml")
         for term in ('id: "notes"', 'notesOpen = true', 'notes", "notas'):
@@ -594,13 +594,14 @@ class SearchRaycastContractTests(unittest.TestCase):
 
     def test_generators_have_a_panel_preview_and_feedback(self):
         registry = source("modules/common/SearchPanelRegistry.qml")
-        panel = source("modules/ii/overview/GeneratorsPanel.qml")
+        panel = source("modules/ii/overview/ToolsPanel.qml")
+        devtools_registry = source("modules/common/DevToolsRegistry.qml")
         launcher = source("services/LauncherSearch.qml")
-        self.assertIn('id: "generators"', registry)
-        for generator_id in ("uuid", "password", "lorem"):
-            self.assertIn('id: "' + generator_id + '"', panel)
-        self.assertIn("generatedValue", panel)
-        self.assertIn("copied to clipboard", panel)
+        self.assertIn('id: "tools"', registry)
+        for tool_id in ("uuid", "password", "lorem", "base64", "json_formatter"):
+            self.assertIn('id: "' + tool_id + '"', devtools_registry)
+        self.assertIn("outputText", panel)
+        self.assertIn("Copied to clipboard", panel)
         self.assertIn("feedbackText", launcher)
 
     def test_settings_pages_are_discoverable_and_close_search_before_opening(self):
@@ -672,7 +673,7 @@ class SearchRaycastContractTests(unittest.TestCase):
             "modules/ii/overview/CommandsPanel.qml",
             "modules/ii/overview/GmailPanel.qml",
             "modules/ii/overview/SportsPanel.qml",
-            "modules/ii/overview/GeneratorsPanel.qml",
+            "modules/ii/overview/ToolsPanel.qml",
         )
         for path in paths:
             self.assertIn("ConfiguredKeyHint", source(path), path)
@@ -683,7 +684,7 @@ class SearchRaycastContractTests(unittest.TestCase):
         self.assertEqual(panel.count("Layout.preferredWidth: gameContent.columnWidth"), 3)
 
     def test_generator_selection_hint_does_not_resize_or_hover_scale_card(self):
-        panel = source("modules/ii/overview/GeneratorsPanel.qml")
+        panel = source("modules/ii/overview/ToolsPanel.qml")
         self.assertIn("scale: down ? 0.98 : 1.0", panel)
         self.assertIn("anchors.bottom: parent.bottom", panel)
         self.assertIn("anchors.right: parent.right", panel)
@@ -701,7 +702,7 @@ class SearchRaycastContractTests(unittest.TestCase):
             "modules/ii/overview/CommandsPanel.qml",
             "modules/ii/overview/GmailPanel.qml",
             "modules/ii/overview/SportsPanel.qml",
-            "modules/ii/overview/GeneratorsPanel.qml",
+            "modules/ii/overview/ToolsPanel.qml",
         )
         for path in paths:
             self.assertNotIn("border.", source(path), path)
@@ -760,9 +761,52 @@ class SearchRaycastContractTests(unittest.TestCase):
         self.assertIn("fetchFavicons", quicklinks)
         self.assertIn("LauncherSearchResult.IconType.Image", item)
         self.assertIn('source: visible ? root.iconName : ""', item)
-        self.assertIn('target: "searchPanel"', states)
-        self.assertIn('name: "overviewCommandsOpen"', overview)
+    def test_search_now_playing_redesign_contract(self):
+        now_playing = source("modules/ii/overview/SearchNowPlaying.qml")
+        search_item = source("modules/ii/overview/SearchItem.qml")
+        search_widget = source("modules/ii/overview/SearchWidget.qml")
+        launcher = source("services/LauncherSearch.qml")
+        result_model = source("modules/common/models/LauncherSearchResult.qml")
+        config = source("modules/common/Config.qml")
+        app_search_config = source("modules/settings/configs/AppSearchConfig.qml")
+
+        # 1. SearchNowPlaying component checks
+        self.assertIn("vignetteMask", now_playing)
+        self.assertIn("artBlurredUnderlay", now_playing)
+        self.assertIn("artExpanded", now_playing)
+        self.assertIn("property bool artDownloaded: false", now_playing)
+        self.assertIn("readonly property bool supportsHorizontalNavigation: true", now_playing)
+        self.assertIn("function navigateLeft(): bool", now_playing)
+        self.assertIn("function navigateRight(): bool", now_playing)
+        self.assertIn("function activate(): bool", now_playing)
+        self.assertIn("ColorQuantizer", now_playing)
+        self.assertIn('text: root.isPlaying ? "pause" : "play_arrow"', now_playing)
+
+        # 2. SearchItem decoupling checks
+        self.assertNotIn("isNowPlaying", search_item)
+        self.assertNotIn("nowPlayingLoader", search_item)
+        self.assertNotIn("artDownloaded", search_item)
+        self.assertNotIn("Directories.coverArt", search_item)
+
+        # 3. Model & Service checks
+        for prop in ("trackTitle", "trackArtist", "trackAlbum", "trackArtUrl", "isPlaying", "playerIdentity", "canGoPrevious", "canGoNext", "canTogglePlaying"):
+            self.assertIn(f"property string {prop}" if "track" in prop or prop == "playerIdentity" else f"property bool {prop}", result_model)
+            self.assertIn(f"{prop}:", launcher)
+
+        # 4. SearchWidget routing
+        self.assertIn('resultDelegate.modelData.modelRef?.key === "mpris:now-playing"', search_widget)
+        self.assertIn("id: nowPlayingRow", search_widget)
+        self.assertIn("SearchNowPlaying", search_widget)
+
+        # 5. Config structure
+        self.assertIn("property JsonObject nowPlaying: JsonObject {", config)
+        self.assertIn("property bool enable: true", config)
+        self.assertIn("property bool showInlineControls: true", config)
+        self.assertIn("property bool tintFromArtwork: false", config)
+        self.assertIn("property bool showPlayerName: true", config)
+        self.assertIn("Config.options.search.nowPlaying?.enable", app_search_config)
 
 
 if __name__ == "__main__":
     unittest.main()
+

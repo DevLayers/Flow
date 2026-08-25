@@ -18,6 +18,7 @@ Singleton {
     property int mprisTrigger: 0
     property string processConfirmKey: ""
     readonly property int quickToggleRevision: QuickToggleRegistry.revision
+    readonly property int browserSitesRevision: BrowserSites.revision
     readonly property bool barOpenForSearch: GlobalStates.barOpen
     readonly property bool alwaysListAppsEnabled: Config.options.search.alwaysListApps
     readonly property bool overviewEnabled: Config.options.overview.enable
@@ -31,6 +32,7 @@ Singleton {
 
     onSettingsIndexReadyChanged: root._scheduleResultsUpdate()
     onQuickToggleRevisionChanged: root._scheduleResultsUpdate()
+    onBrowserSitesRevisionChanged: root._scheduleResultsUpdate()
     onBarOpenForSearchChanged: root._scheduleResultsUpdate()
     onAlwaysListAppsEnabledChanged: {
         root.enforceAlwaysListAppsOverviewPolicy();
@@ -447,7 +449,7 @@ Singleton {
             return true;
         }
         if (openWith.startsWith("app:"))
-            Quickshell.execDetached(["gtk-launch", openWith.slice(4)]);
+            Quickshell.execDetached(["gtk-launch", openWith.slice(4), url]);
         else
             Quickshell.execDetached(["xdg-open", url]);
         return true;
@@ -644,50 +646,56 @@ Singleton {
         });
     }
 
-    function generatorEntries(queryText: string): var {
-        if (!Config.options.search.modules.generators.enable)
+    function toolEntries(queryText: string): var {
+        if (!Config.options.search.modules.tools.enable)
             return [];
-        const query = String(queryText ?? "").trim().toLocaleLowerCase();
-        if (query.length < 2)
-            return [];
-        const genericTerms = ["generator", "generators", "generate", "gerador", "geradores", "gerar"];
-        const isGeneric = genericTerms.some(term => term === query);
-        const subject = genericTerms.reduce((value, term) => value.replace(new RegExp("^" + term + "\\s+"), ""), query).trim();
-        return [
-            { id: "uuid", name: Translation.tr("Generate UUID"), keywords: ["uuid", "guid"], icon: "fingerprint" },
-            { id: "password", name: Translation.tr("Generate password"), keywords: ["password", "senha", "pass"], icon: "password" },
-            { id: "lorem", name: Translation.tr("Generate Lorem Ipsum"), keywords: ["lorem", "ipsum", "text"], icon: "notes" }
-        ].filter(entry => isGeneric || entry.keywords.some(keyword => keyword.includes(subject) || subject.includes(keyword)));
+        return DevToolsRegistry.inlineMatches(queryText);
     }
 
-    function generatorValue(id) {
-        if (id === "uuid") {
-            const hex = () => Math.floor(Math.random() * 16).toString(16);
-            return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, key => key === "x" ? hex() : (8 + Math.floor(Math.random() * 4)).toString(16));
-        }
-        if (id === "password") {
-            const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%";
-            let value = "";
-            for (let index = 0; index < 20; index++)
-                value += alphabet[Math.floor(Math.random() * alphabet.length)];
-            return value;
-        }
-        return "Lorem ipsum dolor sit amet, consectetur adipiscing elit.";
+    function createToolResult(match: var): var {
+        const tool = match.tool;
+        const arg = match.arg || "";
+        const typeLabel = tool.type === "generator" ? Translation.tr("Generator") : Translation.tr("Tool");
+
+        return resultComp.createObject(null, {
+            key: "tool:" + tool.id + (arg.length > 0 ? ":" + arg : ""),
+            name: tool.name + (arg.length > 0 ? ` (${arg})` : ""),
+            type: typeLabel,
+            verb: Translation.tr("Execute & Copy"),
+            iconName: tool.icon,
+            iconType: LauncherSearchResult.IconType.Material,
+            comment: arg.length > 0
+                ? Translation.tr("Execute with argument and copy result")
+                : (tool.type === "generator"
+                    ? Translation.tr("Press Enter to generate and copy locally")
+                    : Translation.tr("Press Enter to open in Tools panel")),
+            keepOverviewOpen: true,
+            feedbackText: Translation.tr("Result copied to clipboard"),
+            execute: () => {
+                if (tool.type === "generator" || arg.length > 0) {
+                    const res = DevToolsRegistry.run(tool.id, arg, tool.defaultOptions);
+                    if (res.output) {
+                        Quickshell.clipboardText = res.output;
+                    }
+                } else {
+                    GlobalStates.openSearchPanel("tools", "", "");
+                }
+            }
+        });
+    }
+
+    function generatorEntries(queryText: string): var {
+        return root.toolEntries(queryText);
+    }
+
+    function generatorValue(id: string): string {
+        const tool = DevToolsRegistry.byId(id);
+        const res = DevToolsRegistry.run(id, "", tool?.defaultOptions ?? {});
+        return String(res.output ?? "");
     }
 
     function createGeneratorResult(entry: var): var {
-        return resultComp.createObject(null, {
-            key: "generator:" + entry.id,
-            name: entry.name,
-            type: Translation.tr("Generator"),
-            verb: Translation.tr("Copy"),
-            iconName: entry.icon,
-            iconType: LauncherSearchResult.IconType.Material,
-            comment: Translation.tr("Press Enter to generate and copy locally"),
-            keepOverviewOpen: true,
-            feedbackText: Translation.tr("Generated value copied to clipboard"),
-            execute: () => Quickshell.clipboardText = root.generatorValue(entry.id)
-        });
+        return root.createToolResult(entry);
     }
 
     function modeMatches(queryText: string): var {
@@ -1291,6 +1299,67 @@ Singleton {
         }
     }
 
+    function createBrowserSiteResult(site: var): var {
+        const url = String(site?.url ?? "");
+        const title = String(site?.title || site?.host || url);
+        const siteSource = String(site?.source ?? (site?.bookmarked === true ? "favorite" : "suggested"));
+        // The completed index already carries every cache hit. Prefer that
+        // immutable value so a result is never published between the `sites`
+        // and `faviconSources` property updates. Only misses use the lazy queue.
+        const indexedFavicon = String(site?.favicon ?? "");
+        const favicon = indexedFavicon.startsWith("file://")
+            ? indexedFavicon
+            : BrowserSites.faviconFor(site);
+        const tabCount = Math.max(1, Number(site?.tabCount ?? 1));
+        const detail = siteSource === "open" && tabCount > 1
+            ? String(tabCount) + " " + Translation.tr("open tabs") + " • " + url
+            : url;
+        const actions = [
+            resultComp.createObject(null, {
+                name: Translation.tr("Copy URL"),
+                iconName: "link",
+                iconType: LauncherSearchResult.IconType.Material,
+                execute: () => Quickshell.clipboardText = url
+            }),
+            resultComp.createObject(null, {
+                name: Translation.tr("Copy title"),
+                iconName: "content_copy",
+                iconType: LauncherSearchResult.IconType.Material,
+                execute: () => Quickshell.clipboardText = title
+            })
+        ];
+        if (BrowserSites.privateBrowsingSupported) {
+            actions.push(resultComp.createObject(null, {
+                name: Translation.tr("Open in private window"),
+                iconName: "visibility_off",
+                iconType: LauncherSearchResult.IconType.Material,
+                execute: () => BrowserSites.openPrivateWindow(url)
+            }));
+        }
+        return resultComp.createObject(null, {
+            key: "site:" + url,
+            name: title,
+            comment: detail,
+            type: siteSource === "open"
+                ? Translation.tr("Open tab")
+                : (siteSource === "favorite"
+                    ? Translation.tr("Favorite")
+                    : Translation.tr("Suggested")),
+            verb: Translation.tr("Open"),
+            iconName: favicon.length > 0 ? favicon : "public",
+            iconType: favicon.length > 0
+                ? LauncherSearchResult.IconType.Image
+                : LauncherSearchResult.IconType.Material,
+            fallbackIconName: siteSource === "open"
+                ? "tab"
+                : (siteSource === "favorite" ? "bookmark" : "history"),
+            siteSource: siteSource,
+            pinnable: false,
+            execute: () => Qt.openUrlExternally(url),
+            actions: actions
+        });
+    }
+
     function createAppResultObject(entry) {
         const cached = root.appResultCache[entry.id];
         if (cached)
@@ -1366,7 +1435,8 @@ Singleton {
         ////////////////// MPRIS (empty query) //////////////////
         if (root.query === "") {
             let mprisResults = [];
-            if (Config.options.search.showNowPlayingBubble && MprisController.activePlayer) {
+            const showNowPlaying = Config.options.search.nowPlaying?.enable ?? Config.options.search.showNowPlayingBubble;
+            if (showNowPlaying && MprisController.activePlayer) {
                 const player = MprisController.activePlayer;
                 const title = player.trackTitle || Translation.tr("Unknown");
                 const artist = player.trackArtist || "";
@@ -1379,6 +1449,15 @@ Singleton {
                     verb: MprisController.isPlaying ? Translation.tr("Pause") : Translation.tr("Play"),
                     iconName: MprisController.isPlaying ? "pause" : "play_arrow",
                     iconType: LauncherSearchResult.IconType.Material,
+                    trackTitle: title,
+                    trackArtist: artist,
+                    trackAlbum: player.trackAlbum || "",
+                    trackArtUrl: MprisController.artUrl || "",
+                    isPlaying: MprisController.isPlaying,
+                    playerIdentity: player.identity ?? "",
+                    canGoPrevious: MprisController.canGoPrevious,
+                    canGoNext: MprisController.canGoNext,
+                    canTogglePlaying: MprisController.canTogglePlaying,
                     execute: () => {
                         MprisController.togglePlaying();
                     },
@@ -1595,6 +1674,10 @@ Singleton {
 
         const appQuery = StringUtils.cleanPrefix(root.query, Config.options.search.prefix.app);
         const appResultObjects = root.matchApplications(appQuery).slice(0, 60).map(entry => root.createAppResultObject(entry));
+        const browserSiteSearchActive = !root.queryUsesPrefix(root.query);
+        const browserSiteResultObjects = browserSiteSearchActive
+            ? BrowserSites.matchSites(root.query).map(site => root.createBrowserSiteResult(site))
+            : [];
         const settingsSearchActive = root.isSettingsSearchQuery(root.query)
             && Config.options.search.modules.settingsToggles.enable;
         const settingsMatches = settingsSearchActive && root.settingsIndexReady
@@ -1902,6 +1985,9 @@ Singleton {
         //////////////// Apps //////////////////
         result = result.concat(appResultObjects);
 
+        //////////////// Sites //////////////////
+        result = result.concat(browserSiteResultObjects);
+
         ////////////// Settings //////////////////
         // App rows remain the primary launcher results. Settings matches are
         // useful controls in the same list, but belong after the programs
@@ -2036,9 +2122,9 @@ Singleton {
         for (const device of root.bluetoothMatches(root.query))
             result.push(root.createBluetoothResult(device));
 
-        ////////// Local generators ////////////
-        for (const entry of root.generatorEntries(root.query))
-            result.push(root.createGeneratorResult(entry));
+        ////////// Local tools & generators ////////////
+        for (const match of root.toolEntries(root.query))
+            result.push(root.createToolResult(match));
 
         ////////// Module shortcuts ////////////
         // Typing module names shows a shortcut to switch to that mode
@@ -2226,6 +2312,9 @@ Singleton {
         function onTrackChanged() {
             root.mprisTrigger++;
         }
+        function onArtUrlChanged() {
+            root.mprisTrigger++;
+        }
     }
 
     Connections {
@@ -2272,7 +2361,19 @@ Singleton {
             category: properties.category || properties.type || "",
             settingRef: properties.settingRef ?? null,
             keyHints: properties.keyHints ?? [],
-            feedbackText: properties.feedbackText || ""
+            feedbackText: properties.feedbackText || "",
+            filePath: properties.filePath || "",
+            fallbackIconName: properties.fallbackIconName || "",
+            siteSource: properties.siteSource || "",
+            trackTitle: properties.trackTitle || "",
+            trackArtist: properties.trackArtist || "",
+            trackAlbum: properties.trackAlbum || "",
+            trackArtUrl: properties.trackArtUrl || "",
+            isPlaying: !!properties.isPlaying,
+            playerIdentity: properties.playerIdentity || "",
+            canGoPrevious: properties.canGoPrevious !== undefined ? !!properties.canGoPrevious : false,
+            canGoNext: properties.canGoNext !== undefined ? !!properties.canGoNext : false,
+            canTogglePlaying: properties.canTogglePlaying !== undefined ? !!properties.canTogglePlaying : false
         };
     }
 

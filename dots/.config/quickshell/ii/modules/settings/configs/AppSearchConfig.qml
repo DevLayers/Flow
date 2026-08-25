@@ -111,13 +111,60 @@ ContentPage {
 
             ConfigSwitch {
                 buttonIcon: "music_note"
-                text: Translation.tr("Show now playing media bubble")
-                checked: Config.options.search.showNowPlayingBubble
+                text: Translation.tr("Show now playing media row")
+                checked: Config.options.search.nowPlaying?.enable ?? Config.options.search.showNowPlayingBubble
                 onCheckedChanged: {
+                    if (Config.options.search.nowPlaying)
+                        Config.options.search.nowPlaying.enable = checked;
                     Config.options.search.showNowPlayingBubble = checked;
                 }
                 StyledToolTip {
-                    text: Translation.tr("Shows a floating media player bubble in the search launcher when media is playing")
+                    text: Translation.tr("Shows a media player row in the search launcher when media is playing")
+                }
+            }
+
+            ConfigSwitch {
+                indent: true
+                visible: Config.options.search.nowPlaying?.enable ?? Config.options.search.showNowPlayingBubble
+                buttonIcon: "play_circle"
+                text: Translation.tr("Show inline playback controls")
+                checked: Config.options.search.nowPlaying?.showInlineControls ?? true
+                onCheckedChanged: {
+                    if (Config.options.search.nowPlaying)
+                        Config.options.search.nowPlaying.showInlineControls = checked;
+                }
+                StyledToolTip {
+                    text: Translation.tr("Shows previous, play/pause and next buttons directly on the now playing row")
+                }
+            }
+
+            ConfigSwitch {
+                indent: true
+                visible: Config.options.search.nowPlaying?.enable ?? Config.options.search.showNowPlayingBubble
+                buttonIcon: "badge"
+                text: Translation.tr("Show player name when multiple players exist")
+                checked: Config.options.search.nowPlaying?.showPlayerName ?? true
+                onCheckedChanged: {
+                    if (Config.options.search.nowPlaying)
+                        Config.options.search.nowPlaying.showPlayerName = checked;
+                }
+                StyledToolTip {
+                    text: Translation.tr("Displays the source app name next to the artist if multiple players are active")
+                }
+            }
+
+            ConfigSwitch {
+                indent: true
+                visible: Config.options.search.nowPlaying?.enable ?? Config.options.search.showNowPlayingBubble
+                buttonIcon: "palette"
+                text: Translation.tr("Tint row from album artwork")
+                checked: Config.options.search.nowPlaying?.tintFromArtwork ?? false
+                onCheckedChanged: {
+                    if (Config.options.search.nowPlaying)
+                        Config.options.search.nowPlaying.tintFromArtwork = checked;
+                }
+                StyledToolTip {
+                    text: Translation.tr("Extracts the dominant color from the album artwork to tint the row background")
                 }
             }
 

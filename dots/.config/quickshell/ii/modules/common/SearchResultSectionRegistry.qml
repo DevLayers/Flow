@@ -37,6 +37,11 @@ Singleton {
             icon: "apps"
         },
         {
+            id: "sites",
+            title: qsTr("Sites"),
+            icon: "public"
+        },
+        {
             id: "controls",
             title: qsTr("Controls"),
             icon: "tune"
@@ -80,11 +85,36 @@ Singleton {
 
     readonly property var defaultOrder: root.sections.map(section => section.id)
 
+    // `sites` remains one configurable provider in Settings, but the Search
+    // expands it into semantic result groups. This keeps priority controls
+    // compact while avoiding a mixed, visually ambiguous Sites bucket.
+    readonly property var siteSubsections: [
+        {
+            id: "siteTabs",
+            title: qsTr("Open tabs"),
+            icon: "tab"
+        },
+        {
+            id: "siteFavorites",
+            title: qsTr("Favorite sites"),
+            icon: "bookmark"
+        },
+        {
+            id: "siteSuggestions",
+            title: qsTr("Suggested sites"),
+            icon: "history"
+        }
+    ]
+
     function getComponent(id: string): var {
         const wanted = String(id ?? "");
         for (let i = 0; i < root.sections.length; i++) {
             if (root.sections[i].id === wanted)
                 return root.sections[i];
+        }
+        for (let i = 0; i < root.siteSubsections.length; i++) {
+            if (root.siteSubsections[i].id === wanted)
+                return root.siteSubsections[i];
         }
         return null;
     }
@@ -92,6 +122,19 @@ Singleton {
     function getAvailableComponents(usedIds: var): var {
         const used = Array.from(usedIds ?? []);
         return root.sections.filter(section => used.indexOf(section.id) === -1);
+    }
+
+    function expandOrder(order: var): var {
+        const expanded = [];
+        const source = Array.from(order ?? []);
+        for (let i = 0; i < source.length; i++) {
+            const sectionId = String(source[i]?.id ?? source[i] ?? "");
+            if (sectionId === "sites")
+                expanded.push("siteTabs", "siteFavorites", "siteSuggestions");
+            else if (sectionId.length > 0)
+                expanded.push(sectionId);
+        }
+        return expanded;
     }
 
     /**
@@ -112,6 +155,7 @@ Singleton {
             if (id.length > 0 && root.getComponent(id) !== null && order.indexOf(id) === -1)
                 order.push(id);
         }
-        return order.length > 0 ? order : root.defaultOrder;
+        const selectedOrder = order.length > 0 ? order : root.defaultOrder;
+        return root.expandOrder(selectedOrder);
     }
 }

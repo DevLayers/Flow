@@ -70,6 +70,127 @@ Item {
                 spacing: Appearance.sizes.elevationMargin / 2
                 ConfigSwitch { buttonIcon: "select_window"; text: Translation.tr("Window search"); description: Translation.tr("Type prefix ‘%1’ followed by a window title or app class.").arg(String(Config.options.search.prefix.windowSearch)); checked: Config.options.search.modules.windowSearch; onCheckedChanged: Config.options.search.modules.windowSearch = checked }
                 ConfigSwitch {
+                    buttonIcon: "public"
+                    text: Translation.tr("Browser sites")
+                    description: Translation.tr("Match browser bookmarks and history in normal Search without typing a prefix.")
+                    checked: Config.options.search.browserSites.enable
+                    onCheckedChanged: Config.options.search.browserSites.enable = checked
+                }
+                ContentSubsection {
+                    visible: Config.options.search.browserSites.enable
+                    enabled: visible
+                    Layout.fillWidth: true
+                    title: Translation.tr("Browser sites index")
+                    icon: "language"
+                    tooltip: Translation.tr("The index is built outside the typing path and refreshed only after the browser database changes.")
+
+                    StyledText {
+                        Layout.fillWidth: true
+                        text: {
+                            if (BrowserSites.loading)
+                                return Translation.tr("Loading browser sites…");
+                            if (BrowserSites.error.length > 0)
+                                return Translation.tr("Error: %1").arg(String(BrowserSites.error));
+                            if (BrowserSites.ready)
+                                return Translation.tr("Ready · %1 sites indexed").arg(String(BrowserSites.sites.length));
+                            return Translation.tr("Waiting to index browser sites");
+                        }
+                        color: BrowserSites.error.length > 0
+                            ? Appearance.colors.colError
+                            : Appearance.colors.colOnLayer2
+                        wrapMode: Text.WordWrap
+                    }
+
+                    StyledText {
+                        Layout.fillWidth: true
+                        text: BrowserSites.profilePath.length > 0
+                            ? Translation.tr("Profile: %1").arg(String(BrowserSites.profilePath))
+                            : Translation.tr("Profile: auto-detect")
+                        color: Appearance.colors.colSubtext
+                        wrapMode: Text.WrapAnywhere
+                    }
+
+                    ConfigTextField {
+                        Layout.fillWidth: true
+                        text: Translation.tr("Profile override")
+                        icon: "folder_open"
+                        placeholderText: Translation.tr("Auto-detect browser profile")
+                        tooltip: Translation.tr("Leave empty to detect the newest valid profile. An override must be a profile directory containing places.sqlite.")
+                        inputText: Config.options.search.browserSites.profilePath
+                        textField.onEditingFinished: Config.options.search.browserSites.profilePath = textField.text.trim()
+                    }
+                }
+
+                ColumnLayout {
+                    visible: Config.options.search.browserSites.enable
+                    enabled: visible
+                    Layout.fillWidth: true
+                    spacing: Appearance.sizes.elevationMargin / 2
+
+                    ConfigSwitch {
+                        buttonIcon: "history"
+                        text: Translation.tr("Include browsing history")
+                        description: Translation.tr("Adds the highest-ranked history hosts. Bookmarks are always indexed.")
+                        checked: Config.options.search.browserSites.includeHistory
+                        onCheckedChanged: Config.options.search.browserSites.includeHistory = checked
+                    }
+
+                    ConfigSwitch {
+                        buttonIcon: "database"
+                        text: Translation.tr("Use local favicons")
+                        description: Translation.tr("Reads icons from the local browser database and cache without network access.")
+                        checked: Config.options.search.browserSites.useLocalFavicons
+                        onCheckedChanged: Config.options.search.browserSites.useLocalFavicons = checked
+                    }
+
+                    ConfigSwitch {
+                        buttonIcon: "cloud_download"
+                        text: Translation.tr("Allow remote favicons")
+                        description: Translation.tr("Allows a network request containing the site domain when no local icon is available. Keep off for maximum privacy.")
+                        checked: Config.options.search.browserSites.allowRemoteFavicons
+                        onCheckedChanged: Config.options.search.browserSites.allowRemoteFavicons = checked
+                    }
+
+                    ConfigSpinBox {
+                        icon: "storage"
+                        text: Translation.tr("History sites indexed")
+                        value: Config.options.search.browserSites.maxIndexedSites
+                        from: 0
+                        to: 5000
+                        stepSize: 50
+                        onValueChanged: Config.options.search.browserSites.maxIndexedSites = value
+                        StyledToolTip {
+                            text: Translation.tr("Maximum history hosts kept in memory. Every bookmark remains included regardless of this limit.")
+                        }
+                    }
+
+                    ConfigSpinBox {
+                        icon: "format_list_numbered"
+                        text: Translation.tr("Site results shown")
+                        value: Config.options.search.browserSites.maxResults
+                        from: 1
+                        to: 20
+                        stepSize: 1
+                        onValueChanged: Config.options.search.browserSites.maxResults = value
+                        StyledToolTip {
+                            text: Translation.tr("Maximum browser-site rows contributed to one normal Search query.")
+                        }
+                    }
+
+                    ConfigSpinBox {
+                        icon: "refresh"
+                        text: Translation.tr("Refresh interval (minutes)")
+                        value: Config.options.search.browserSites.refreshMinutes
+                        from: 1
+                        to: 1440
+                        stepSize: 1
+                        onValueChanged: Config.options.search.browserSites.refreshMinutes = value
+                        StyledToolTip {
+                            text: Translation.tr("Minimum time between index rebuilds. A rebuild still waits until places.sqlite has changed.")
+                        }
+                    }
+                }
+                ConfigSwitch {
                     buttonIcon: "folder_data"
                     text: Translation.tr("File browser")
                     description: Translation.tr("Type ‘%1’ to open the full explorer. Navigate with arrows and Enter; press Ctrl+K for file operations and shortcuts.").arg(String(Config.options.search.prefix.fileBrowser))
@@ -122,6 +243,12 @@ Item {
                         wrapMode: TextEdit.NoWrap
                         onTextChanged: Config.options.search.fileSearchDirectory = text
                     }
+                }
+
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    enabled: Config.options.search.modules.fileSearch
+                    spacing: Appearance.sizes.elevationMargin / 2
 
                     ConfigSwitch {
                         buttonIcon: "search"
@@ -222,7 +349,7 @@ Item {
                 ConfigSwitch { buttonIcon: "sports_soccer"; text: Translation.tr("Today’s games"); description: Translation.tr("Search for ‘sports’, ‘games’, ‘jogos’, ‘football’, or ‘futebol’ to see every monitored game today."); checked: Config.options.search.modules.sports.enable; onCheckedChanged: Config.options.search.modules.sports.enable = checked }
                 ConfigSwitch { buttonIcon: "cancel"; text: Translation.tr("Quit process"); description: Translation.tr("Search for ‘process’, ‘kill’, ‘quit’, ‘fechar’, or a running process name. Enter requires confirmation."); checked: Config.options.search.modules.processes.enable; onCheckedChanged: Config.options.search.modules.processes.enable = checked }
                 ConfigSwitch { buttonIcon: "routine"; text: Translation.tr("Modes & routines"); description: Translation.tr("Type a mode or routine name to activate or deactivate it."); checked: Config.options.modes.enable; onCheckedChanged: Config.options.modes.enable = checked }
-                ConfigSwitch { buttonIcon: "code"; text: Translation.tr("Generators"); description: Translation.tr("Search for ‘generator’ to browse all, or type ‘uuid’, ‘password’, or ‘lorem’. Enter generates and copies locally."); checked: Config.options.search.modules.generators.enable; onCheckedChanged: Config.options.search.modules.generators.enable = checked }
+                ConfigSwitch { buttonIcon: "wand_stars"; text: Translation.tr("Tools & Generators"); description: Translation.tr("Search for ‘tools’ or ‘generator’ to browse all, or type ‘uuid’, ‘password’, ‘lorem’, ‘base64’, ‘json’, etc. Enter executes and copies locally."); checked: Config.options.search.modules.tools.enable; onCheckedChanged: Config.options.search.modules.tools.enable = checked }
             }
         }
     }

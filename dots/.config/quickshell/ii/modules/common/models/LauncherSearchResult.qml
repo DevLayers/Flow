@@ -46,6 +46,20 @@ QtObject {
     // Symbol to draw when `iconType` is Image and the image cannot be loaded.
     // A thumbnail that fails is still a row that needs an icon.
     property string fallbackIconName: ""
+    // Browser result origin. Kept separate from the translated `type` so the
+    // Search organizer can group results without comparing localized labels.
+    property string siteSource: ""
+
+    // Media result fields
+    property string trackTitle: ""
+    property string trackArtist: ""
+    property string trackAlbum: ""
+    property string trackArtUrl: ""
+    property bool isPlaying: false
+    property string playerIdentity: ""
+    property bool canGoPrevious: false
+    property bool canGoNext: false
+    property bool canTogglePlaying: false
 
     // Extra stuff to allow for more flexibility
     property string category: type
