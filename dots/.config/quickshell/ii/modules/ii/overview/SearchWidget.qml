@@ -228,8 +228,7 @@ Item {
         target: root.activePanelItem
         ignoreUnknownSignals: true
         function onRequestSetSearchQuery(query) {
-            const prefix = SearchPanelRegistry.prefixOf(root.activePanel);
-            root.setSearchingText(prefix + query);
+            root.setSearchingText(query);
         }
         function onRequestFocusSearchInput() {
             root.focusSearchInput();
@@ -294,16 +293,36 @@ Item {
         id: aiAutoEngageTimer
         interval: 350
         onTriggered: {
-            if (root.aiAutoTriggerEnabled && !root.aiAutoEngaged && !root.queryHasAnyPrefix && root.searchingText.trim().length >= 3 && root.realResultCount === 0) {
+            if (!root.isAnySpecialMode && root.aiAutoTriggerEnabled && !root.aiAutoEngaged && !root.queryHasAnyPrefix && root.searchingText.trim().length >= 3 && root.realResultCount === 0) {
                 root.aiAutoEngaged = true;
                 root.engageAiMode();
             }
         }
     }
 
+    // A prefix is a route trigger, not part of the hosted panel's local
+    // search. Latch its target before clearing the trigger, otherwise the
+    // panel would immediately resolve back to ordinary Search. The AI route
+    // has its own draft lifecycle and intentionally stays outside this path.
+    function consumePanelPrefix(): bool {
+        if (root.requestedPanelId.length > 0)
+            return false;
+        const panel = SearchPanelRegistry.resolve(root.searchingText);
+        if (!panel?.hosted)
+            return false;
+        const prefix = SearchPanelRegistry.prefixOf(panel);
+        if (prefix.length === 0)
+            return false;
+        root.requestedPanelId = panel.id;
+        root.setSearchingText(root.searchingText.slice(prefix.length));
+        return true;
+    }
+
     onSearchingTextChanged: {
         if (!root.applyingSearchHistory)
             root.searchHistoryIndex = -1;
+        if (root.consumePanelPrefix())
+            return;
         // Typing the prefix is one of the ways in, so it latches here rather
         // than as a reaction to the mode changing.
         if (Ai.enabled && root.searchingText.startsWith(Config.options.search.prefix.ai))
@@ -311,7 +330,7 @@ Item {
         if (root.searchingText === "" || root.queryHasAnyPrefix) {
             root.aiAutoEngaged = false;
             aiAutoEngageTimer.stop();
-        } else if (root.aiAutoTriggerEnabled && !root.aiAutoEngaged && root.searchingText.trim().length >= 3 && root.realResultCount === 0) {
+        } else if (!root.isAnySpecialMode && root.aiAutoTriggerEnabled && !root.aiAutoEngaged && root.searchingText.trim().length >= 3 && root.realResultCount === 0) {
             aiAutoEngageTimer.restart();
         }
     }
@@ -321,7 +340,7 @@ Item {
     onRealResultCountChanged: {
         if (root.aiAutoEngaged)
             return;
-        if (root.aiAutoTriggerEnabled && !root.queryHasAnyPrefix && root.searchingText.trim().length >= 3 && root.realResultCount === 0)
+        if (!root.isAnySpecialMode && root.aiAutoTriggerEnabled && !root.queryHasAnyPrefix && root.searchingText.trim().length >= 3 && root.realResultCount === 0)
             aiAutoEngageTimer.restart();
         else
             aiAutoEngageTimer.stop();
