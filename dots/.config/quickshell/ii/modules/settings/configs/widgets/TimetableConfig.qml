@@ -472,4 +472,59 @@ ContentPage {
             }
         }
     }
+
+    ContentSection {
+        icon: "event_available"
+        title: Translation.tr("Outlook calendar")
+
+        ConfigSwitch {
+            buttonIcon: "calendar_add_on"
+            text: Translation.tr("Enable calendar sources")
+            checked: Config.options.calendar.timetable.imports.enable
+            onCheckedChanged: Config.options.calendar.timetable.imports.enable = checked
+        }
+
+        StyledText {
+            Layout.fillWidth: true
+            text: Translation.tr("This master switch controls local ICS imports, subscribed calendars, and Outlook sources without removing saved configuration.")
+            font.pixelSize: Appearance.font.pixelSize.small
+            color: Appearance.colors.colOnLayer1
+            wrapMode: Text.Wrap
+        }
+
+        ConfigSwitch {
+            enabled: Config.options.calendar.timetable.imports.enable
+            buttonIcon: "event_available"
+            text: Translation.tr("Sync Outlook calendar")
+            checked: Config.options.calendar.timetable.imports.outlook.enable
+            onCheckedChanged: Config.options.calendar.timetable.imports.outlook.enable = checked
+        }
+
+        StyledText {
+            Layout.fillWidth: true
+            text: Translation.tr("Mirrors connected Outlook events into a local read-only Timetable calendar.")
+            font.pixelSize: Appearance.font.pixelSize.small
+            color: Appearance.colors.colOnLayer1
+            opacity: Config.options.calendar.timetable.imports.outlook.enable ? 1 : 0.7
+            wrapMode: Text.Wrap
+        }
+
+        ConfigSwitch {
+            enabled: Config.options.calendar.timetable.imports.enable
+                && Config.options.calendar.timetable.imports.outlook.enable
+            buttonIcon: "attach_email"
+            text: Translation.tr("Import ICS attachments from Outlook")
+            checked: Config.options.calendar.timetable.imports.outlook.icsAttachments.enable
+            onCheckedChanged: Config.options.calendar.timetable.imports.outlook.icsAttachments.enable = checked
+        }
+
+        StyledText {
+            Layout.fillWidth: true
+            text: Translation.tr("Checks calendar attachments in the connected Outlook mailbox and imports each successful attachment only once.")
+            font.pixelSize: Appearance.font.pixelSize.small
+            color: Appearance.colors.colOnLayer1
+            opacity: Config.options.calendar.timetable.imports.outlook.icsAttachments.enable ? 1 : 0.7
+            wrapMode: Text.Wrap
+        }
+    }
 }
