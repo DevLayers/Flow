@@ -34,13 +34,10 @@ Item {
             HyprlandBinds.writeChain(subPageRoot.chain.prefix, candidates));
     }
 
-    function move(index: int, delta: int) {
+    function move(from: int, to: int) {
         const list = Array.from(subPageRoot.chain.candidates);
-        const target = index + delta;
-        if (target < 0 || target >= list.length) return;
-        const moved = list[index];
-        list[index] = list[target];
-        list[target] = moved;
+        if (from < 0 || to < 0 || from >= list.length || to >= list.length || from === to) return;
+        list.splice(to, 0, list.splice(from, 1)[0]);
         subPageRoot.commit(list);
     }
 
@@ -77,16 +74,26 @@ Item {
         }
     }
 
+    /**
+     * One candidate. The order is the whole point of this list, so it is changed by dragging
+     * rather than by a pair of arrows: two clicks to move an entry up two places used to be two
+     * writes and two config reloads, and the list under the pointer moved between them.
+     */
     component CandidateRow: RippleButton {
         id: candidateRow
 
         required property string candidate
         required property int index
+        property bool draggable: true
+        property bool ghost: false
+
+        signal dragStarted(real y)
+        signal dragMoved(real y)
+        signal dragEnded
 
         readonly property var installed: HyprlandBinds.candidateAvailable(candidateRow.candidate)
         readonly property bool winning: candidateRow.candidate === subPageRoot.winner
 
-        Layout.fillWidth: true
         implicitHeight: 52
         useDynamicRadius: true
         colBackground: candidateRow.winning ? Appearance.colors.colPrimaryContainer
@@ -98,9 +105,42 @@ Item {
 
         contentItem: RowLayout {
             anchors.fill: parent
-            anchors.leftMargin: 16
+            anchors.leftMargin: 8
             anchors.rightMargin: 8
-            spacing: 10
+            spacing: 8
+
+            MouseArea {
+                id: handle
+                visible: candidateRow.draggable
+                Layout.alignment: Qt.AlignVCenter
+                implicitWidth: 22
+                implicitHeight: 40
+                hoverEnabled: true
+                cursorShape: pressed ? Qt.ClosedHandCursor : Qt.OpenHandCursor
+                // Without this the page's own flick takes the drag away as soon as it moves.
+                preventStealing: true
+
+                onPressed: mouse => candidateRow.dragStarted(handle.mapToItem(candidateRow, mouse.x, mouse.y).y)
+                onPositionChanged: mouse => {
+                    if (handle.pressed)
+                        candidateRow.dragMoved(handle.mapToItem(candidateRow, mouse.x, mouse.y).y);
+                }
+                onReleased: candidateRow.dragEnded()
+                onCanceled: candidateRow.dragEnded()
+
+                MaterialSymbol {
+                    anchors.centerIn: parent
+                    text: "drag_indicator"
+                    iconSize: 20
+                    color: candidateRow.winning ? Appearance.colors.colOnPrimaryContainer
+                        : Appearance.colors.colSubtext
+                    opacity: candidateRow.hovered || handle.containsMouse || candidateRow.ghost ? 1 : 0.35
+
+                    Behavior on opacity {
+                        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                    }
+                }
+            }
 
             MaterialSymbol {
                 Layout.alignment: Qt.AlignVCenter
@@ -125,25 +165,15 @@ Item {
             }
 
             RowButton {
-                buttonIcon: "keyboard_arrow_up"
-                enabled: candidateRow.index > 0
-                onClicked: subPageRoot.move(candidateRow.index, -1)
-            }
-
-            RowButton {
-                buttonIcon: "keyboard_arrow_down"
-                enabled: candidateRow.index < subPageRoot.chain.candidates.length - 1
-                onClicked: subPageRoot.move(candidateRow.index, 1)
-            }
-
-            RowButton {
                 buttonIcon: "close"
+                visible: !candidateRow.ghost
                 onClicked: subPageRoot.drop(candidateRow.index)
             }
         }
     }
 
     ContentPage {
+        id: page
         anchors.fill: parent
         forceWidth: false
 
@@ -198,13 +228,57 @@ Item {
             icon: "list"
             visible: subPageRoot.chain.chain
 
-            Repeater {
-                model: subPageRoot.chain.candidates
+            DragOrderList {
+                id: chainList
+                Layout.fillWidth: true
+                count: subPageRoot.chain.candidates.length
+                flick: page.flickable
+                onMoved: (from, to) => subPageRoot.move(from, to)
 
                 delegate: CandidateRow {
-                    required property var modelData
+                    id: chainRow
 
-                    candidate: String(modelData)
+                    Layout.fillWidth: true
+                    candidate: String(subPageRoot.chain.candidates[chainRow.index] ?? "")
+                    draggable: chainList.count > 1
+                    opacity: chainList.dragFrom === chainRow.index ? 0 : 1
+
+                    transform: Translate {
+                        y: chainList.shiftFor(chainRow.index)
+
+                        Behavior on y {
+                            enabled: chainList.dragging
+                            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                        }
+                    }
+
+                    onDragStarted: y => {
+                        chainList.pointerY = chainRow.mapToItem(chainList, 0, y).y;
+                        chainList.beginDrag(chainRow.index, y);
+                    }
+                    onDragMoved: y => chainList.pointerMoved(chainRow, y)
+                    onDragEnded: chainList.endDrag()
+                }
+
+                ghostDelegate: Item {
+                    implicitHeight: ghostRow.implicitHeight
+
+                    StyledRectangularShadow {
+                        target: ghostRow
+                    }
+
+                    CandidateRow {
+                        id: ghostRow
+                        anchors {
+                            left: parent.left
+                            right: parent.right
+                        }
+                        index: chainList.dragFrom
+                        candidate: String(subPageRoot.chain.candidates[chainList.dragFrom] ?? "")
+                        ghost: true
+                        enabled: false
+                        scale: 1.01
+                    }
                 }
             }
 
@@ -228,7 +302,7 @@ Item {
 
             HyprOptionNote {
                 notes: {
-                    const out = [{ "icon": "info", "text": Translation.tr("The first installed one wins, so the order is the choice. A tick means the command exists on this machine right now.") }];
+                    const out = [{ "icon": "info", "text": Translation.tr("The first installed one wins, so the order is the choice. Drag a row by its handle to change it. A tick means the command exists on this machine right now.") }];
                     if (subPageRoot.winner !== "" && subPageRoot.chain.candidates.length > 0
                         && subPageRoot.winner !== subPageRoot.chain.candidates[0])
                         out.push({ "icon": "swap_vert", "text": Translation.tr("%1 is above %2 in the list but is not installed, so it is skipped.")
