@@ -19,7 +19,16 @@ ConfigSlider {
     property bool integer: false
     property int decimals: 2
 
-    readonly property var optionState: HyprlandGui.resolve(root.optionKey)
+    /**
+     * What the row needs, split by what it depends on.
+     *
+     * `resolve()` bundles all five layers into one object, so a control bound to it was rebuilt
+     * whenever anything anywhere in the config changed - and with six tabs open that is every
+     * control on the page, on every edit. Ownership never changes at all, and "has Hyprland
+     * answered yet" changes once; only the value really moves.
+     */
+    readonly property bool locked: HyprlandGui.shellOwned(root.optionKey) !== ""
+    readonly property bool known: HyprlandGui.effective[root.optionKey] !== undefined
     readonly property real optionValue: {
         const value = Number(HyprlandGui.displayValue(root.optionKey, root.defaultValue));
         return isNaN(value) ? root.defaultValue : value;
@@ -37,7 +46,7 @@ ConfigSlider {
     property real reported: NaN
 
     usePercentTooltip: false
-    enabled: root.optionState.shellOwnedBy === ""
+    enabled: !root.locked
     // A real binding, so the slider follows the option until the first drag replaces it; from
     // then on onOptionValueChanged keeps the two in step by hand.
     value: root.optionValue
@@ -50,16 +59,41 @@ ConfigSlider {
         return Math.min(root.to, Math.max(root.from, value));
     }
 
-    function push() {
-        if (!root.armed || !root.optionState.known) return;
-        if (root.committedValue() === root.optionValue) return;
+    function wouldWrite(): bool {
+        if (!root.armed || !root.known) return false;
+        if (root.committedValue() === root.optionValue) return false;
         // A value that differs only because this control clamped or rounded what Hyprland
         // reported is not an edit, and writing it would change the setting just by looking.
-        if (isFinite(root.reported) && root.value === root.clamped(root.reported)) return;
+        if (isFinite(root.reported) && root.value === root.clamped(root.reported)) return false;
+        return true;
+    }
+
+    function push() {
+        if (!root.wouldWrite()) return;
         HyprlandGui.setKey(root.optionKey, root.committedValue());
     }
 
-    onValueChanged: root.push()
+    /**
+     * While the handle is down, the value goes to the compositor and nowhere else.
+     *
+     * Writing on every frame of a drag meant staging an edit sixty times a second, and each
+     * one rebuilt every map the page reads. The drag is still live - the compositor gets each
+     * value as it passes - but only the value it is left on is written.
+     */
+    function preview() {
+        if (!root.wouldWrite()) return;
+        HyprlandGui.previewKey(root.optionKey, root.committedValue());
+    }
+
+    onValueChanged: {
+        if (root.pressed) root.preview();
+        else root.push();
+    }
+
+    onPressedChanged: {
+        if (root.pressed) return;
+        root.push();
+    }
     onOptionValueChanged: {
         if (root.pressed) return;
         root.reported = root.optionValue;
@@ -68,14 +102,14 @@ ConfigSlider {
 
     Component.onCompleted: {
         HyprlandGui.watch([root.optionKey]);
-        if (root.optionState.known) {
+        if (root.known) {
             root.reported = root.optionValue;
             Qt.callLater(() => root.armed = true);
         }
     }
 
-    onOptionStateChanged: {
-        if (root.armed || !root.optionState.known) return;
+    onKnownChanged: {
+        if (root.armed || !root.known) return;
         root.reported = root.optionValue;
         Qt.callLater(() => root.armed = true);
     }
