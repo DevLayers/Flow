@@ -653,20 +653,43 @@ Item {
                 }
             }
 
-            ConfigSwitch {
-                buttonIcon: "view_quilt"
-                text: Translation.tr("Islands style")
-                checked: Config.options.dock.islandsStyle ?? false
-                onCheckedChanged: {
-                    Config.options.dock.islandsStyle = checked;
-                }
-                StyledToolTip {
-                    text: Translation.tr("Separate apps, widgets and utilities into independent dock surfaces. Drag an island by its outer edge to reorder it.")
+            ContentSubsection {
+                enabled: Config.options.dock.enable
+                visible: Config.options.dock.enable
+                title: Translation.tr("Dock style")
+                icon: "view_quilt"
+                Layout.fillWidth: true
+                tooltip: Translation.tr("Choose between a floating pill dock, separated island surfaces, a hug dock attached to the screen edge, or a dynamic island with concave corners.")
+
+                ConfigSelectionArray {
+                    currentValue: {
+                        const st = Config.options.dock.dockStyle;
+                        if (st === "islands" || st === "dynamic_island" || st === "hug" || st === "floating")
+                            return st;
+                        return (Config.options.dock.islandsStyle ?? false) ? "islands" : "floating";
+                    }
+                    onSelected: newValue => {
+                        Config.options.dock.dockStyle = newValue;
+                        Config.options.dock.islandsStyle = (newValue === "islands");
+                    }
+                    options: [
+                        { displayName: Translation.tr("Floating"), icon: "dock", value: "floating" },
+                        { displayName: Translation.tr("Islands"), icon: "grid_view", value: "islands" },
+                        { displayName: Translation.tr("Hug"), icon: "line_curve", value: "hug" },
+                        { displayName: Translation.tr("Dynamic Island"), icon: "dock_to_bottom", value: "dynamic_island" }
+                    ]
                 }
             }
 
             ConfigSlider {
-                visible: Config.options.dock.islandsStyle ?? false
+                enabled: Config.options.dock.enable
+                visible: {
+                    if (!Config.options.dock.enable) return false;
+                    const st = Config.options.dock.dockStyle;
+                    if (st === "islands" || st === "dynamic_island" || st === "hug" || st === "floating")
+                        return st === "islands";
+                    return Config.options.dock.islandsStyle ?? false;
+                }
                 Layout.fillWidth: true
                 text: Translation.tr("Island spacing")
                 value: Config.options.dock.islandSpacing ?? 8

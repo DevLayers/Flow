@@ -3324,6 +3324,7 @@ Singleton {
                 property string magnificationCurve: "cosine"
                 property string magnificationMotion: "balanced"
                 property bool magnificationDynamicSpacing: true
+                property string dockStyle: "floating"
                 property bool islandsStyle: false
                 property real islandSpacing: 8
                 property bool enableAppGroups: true
