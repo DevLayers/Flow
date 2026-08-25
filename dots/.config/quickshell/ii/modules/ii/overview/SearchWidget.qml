@@ -457,7 +457,7 @@ Item {
                 // Wipe stale results immediately so panel opens empty (no ghost expansion)
                 resultModel.clear();
                 root.loadedResultsCount = root.resultPageSize;
-                if (root.alwaysListAppsMode) {
+                if (root.alwaysListAppsMode || root.showIdleNowPlaying) {
                     Qt.callLater(() => {
                         appResults.applyResultDiff(root.processResults(LauncherSearch.results));
                         root.focusFirstItem();
@@ -1541,7 +1541,11 @@ Item {
                         ? searchSkeletons.implicitHeight + (GlobalStates.searchConnectActive ? 12 : 16)
                         : (root.showEmptySearchState
                             ? emptySearchState.implicitHeight
-                            : Math.min(root.maxResultsHeight, appResults.contentHeight + appResults.topMargin + appResults.bottomMargin)))
+                            // View margins decorate actual rows; they are not
+                            // content and must not grow an empty search surface.
+                            : (appResults.count === 0
+                                ? 0
+                                : Math.min(root.maxResultsHeight, appResults.contentHeight + appResults.topMargin + appResults.bottomMargin))))
 
                 Behavior on opacity {
                     NumberAnimation {
@@ -1937,11 +1941,15 @@ Item {
                                 return;
                             root.loadedResultsCount = root.resultPageSize;
 
+                            // Derive the decision from this signal's current payload.
+                            // showIdleNowPlaying is a binding over the same payload and
+                            // can still expose its previous value while resultsChanged
+                            // is being delivered, leaving an active but empty surface.
+                            const nextRows = root.processResults(LauncherSearch.results);
+
                             // An empty query only means an empty list when nothing
-                            // else claims the idle surface. Clearing unconditionally
-                            // wiped the always-list-apps grid and the now-playing row
-                            // the moment their own results arrived.
-                            if (root.searchingText === "" && !root.alwaysListAppsMode && !root.showIdleNowPlaying) {
+                            // actually produced rows for the idle surface.
+                            if (root.searchingText === "" && !root.alwaysListAppsMode && nextRows.length === 0) {
                                 root.suppressItemTransitions = true;
                                 resultModel.clear();
                                 return;
@@ -1951,7 +1959,7 @@ Item {
                             // then the full list 150ms later made every keystroke add,
                             // remove and re-add the same rows — the churn the reorder
                             // animation was then asked to render.
-                            appResults.applyResultDiff(root.processResults(LauncherSearch.results));
+                            appResults.applyResultDiff(nextRows);
                             if (root.selectionAnchorQuery !== root.searchingText) {
                                 root.selectionAnchorQuery = root.searchingText;
                                 root.focusFirstItem();

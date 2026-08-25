@@ -570,6 +570,24 @@ class SearchRaycastContractTests(unittest.TestCase):
         self.assertIn("showIdleNowPlaying", widget)
         self.assertNotIn('searchingText === "" && LauncherSearch.results.length > 0', widget)
         self.assertIn("Layout.bottomMargin: root.isAiMode ? 0 : verticalPadding", widget)
+        # ListView margins are viewport decoration, not content. When the model
+        # is empty they must not create a results surface of their own.
+        self.assertIn("appResults.count === 0", widget)
+        # Opening clears the local ListModel. An already-running MPRIS player
+        # must hydrate it again; otherwise resultsActive reserves only the
+        # ListView's bottom margin and the collapsed pill grows by 10px.
+        self.assertIn(
+            "if (root.alwaysListAppsMode || root.showIdleNowPlaying)", widget
+        )
+        results_changed = widget.split("function onResultsChanged()", 1)[1].split(
+            "model: ListModel", 1
+        )[0]
+        self.assertIn(
+            "const nextRows = root.processResults(LauncherSearch.results);",
+            results_changed,
+        )
+        self.assertIn("nextRows.length === 0", results_changed)
+        self.assertIn("appResults.applyResultDiff(nextRows)", results_changed)
 
     def test_calendar_has_upcoming_agenda_and_real_create_form(self):
         panel = source("modules/ii/overview/CalendarPanel.qml")
@@ -809,4 +827,3 @@ class SearchRaycastContractTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-
