@@ -41,25 +41,6 @@ RippleButton {
     property bool blurImage: entry?.blurImage ?? false
     readonly property bool hasInlineSwitch: entry?.controlKind === "switch"
 
-    readonly property string artUrl: MprisController.artUrl || ""
-    readonly property bool isLocalArt: artUrl.startsWith("file://")
-    property string artDownloadLocation: Directories.coverArt
-    property string artFileName: Qt.md5(artUrl)
-    property string artFilePath: `${artDownloadLocation}/${artFileName}`
-
-    // Art is downloaded by SearchWidget. We just reference the cached file path.
-    readonly property string artSource: {
-        if (!artUrl)
-            return "";
-        if (isLocalArt)
-            return artUrl;
-        return Qt.resolvedUrl(artFilePath); // SearchWidget ensures this exists
-    }
-
-    onArtFilePathChanged: {
-        // Art downloading is managed by SearchWidget
-    }
-
     function formatMathResult(raw) {
         if (!raw)
             return {
@@ -89,7 +70,6 @@ RippleButton {
     }
 
     property bool actionPanelOpen: false
-    readonly property bool isNowPlaying: root.itemType === Translation.tr("Now Playing")
     readonly property bool isBuiltinItem: (root.entry?.key?.startsWith("mock:") || root.entry?.key?.startsWith("shortcut:")) || !!root.entry?.isBuiltin
     readonly property var entryActions: entry?.actions ?? []
     readonly property bool hasCustomActions: root.entryActions.length > 0
@@ -156,7 +136,7 @@ RippleButton {
     property int actionSelectedIndex: 0
 
     property real normalHeight: 52
-    readonly property real rowHeight: root.isNowPlaying ? 80 : 52
+    readonly property real rowHeight: 52
     property bool _animateWidthChange: false
     onActionPanelOpenChanged: {
         if (actionPanelOpen) {
@@ -181,13 +161,7 @@ RippleButton {
             allActionItems[actionSelectedIndex].execute();
     }
 
-    implicitHeight: {
-        if (isNowPlaying)
-            return nowPlayingLoader.item ? nowPlayingLoader.item.implicitHeight + buttonVerticalPadding * 2 : 80;
-        if (root.actionPanelOpen)
-            return normalHeight;
-        return root.rowHeight;
-    }
+    implicitHeight: root.actionPanelOpen ? normalHeight : root.rowHeight
     implicitWidth: contentRow.implicitWidth + root.buttonHorizontalPadding * 2
 
     Behavior on implicitHeight {
@@ -395,7 +369,6 @@ RippleButton {
                     anchors.fill: parent
                     anchors.leftMargin: root.buttonHorizontalPadding
                     anchors.rightMargin: root.buttonHorizontalPadding
-                    visible: !root.isNowPlaying
 
                     Item {
                         id: iconContainer
@@ -739,97 +712,6 @@ RippleButton {
                         }
                     }
                 }
-
-                Loader {
-                    id: nowPlayingLoader
-                    active: root.isNowPlaying
-                    visible: root.isNowPlaying
-                    anchors.fill: parent
-                    anchors.leftMargin: root.buttonHorizontalPadding
-                    anchors.rightMargin: root.buttonHorizontalPadding
-                    anchors.topMargin: root.buttonVerticalPadding
-                    anchors.bottomMargin: root.buttonVerticalPadding
-
-                    sourceComponent: RowLayout {
-                        spacing: 14
-
-                        Item {
-                            Layout.preferredWidth: 56
-                            Layout.preferredHeight: 56
-
-                            Rectangle {
-                                anchors.fill: parent
-                                radius: Appearance.rounding.large
-                                color: Appearance.colors.colSurfaceContainerHighest
-                            }
-
-                            Image {
-                                anchors.fill: parent
-                                source: root.artSource
-                                fillMode: Image.PreserveAspectCrop
-                                smooth: true
-                                visible: source !== ""
-                                layer.enabled: true
-                                layer.effect: OpacityMask {
-                                    maskSource: Rectangle {
-                                        width: 56
-                                        height: 56
-                                        radius: Appearance.rounding.large
-                                    }
-                                }
-                            }
-
-                            MaterialSymbol {
-                                anchors.centerIn: parent
-                                text: "music_note"
-                                iconSize: 28
-                                color: Appearance.colors.colOnSurfaceVariant
-                                visible: root.artSource === ""
-                            }
-                        }
-
-                        ColumnLayout {
-                            Layout.fillWidth: true
-                            spacing: 2
-                            StyledText {
-                                text: MprisController.activePlayer?.trackTitle || Translation.tr("Nothing playing")
-                                font.pixelSize: Appearance.font.pixelSize.small
-                                font.weight: Font.DemiBold
-                                font.family: Appearance.font.family.main
-                                color: root.colForeground
-                                elide: Text.ElideRight
-                                Layout.fillWidth: true
-                            }
-                            StyledText {
-                                text: MprisController.activePlayer?.trackArtist || ""
-                                font.pixelSize: Appearance.font.pixelSize.smaller
-                                font.family: Appearance.font.family.main
-                                color: root.isSelected ? Appearance.colors.colOnPrimary : Appearance.colors.colSubtext
-                                opacity: root.isSelected ? 0.7 : 1.0
-                                elide: Text.ElideRight
-                                Layout.fillWidth: true
-                                visible: text !== ""
-                            }
-                        }
-
-                        RippleButton {
-                            implicitWidth: 44
-                            implicitHeight: 44
-                            buttonRadius: Appearance.rounding.full
-                            colBackground: Appearance.colors.colPrimary
-                            colBackgroundHover: Appearance.colors.colPrimaryHover
-                            colRipple: Appearance.colors.colPrimaryActive
-                            visible: !root.actionPanelOpen
-                            contentItem: MaterialSymbol {
-                                anchors.centerIn: parent
-                                text: MprisController.isPlaying ? "pause" : "play_arrow"
-                                iconSize: 26
-                                color: Appearance.m3colors.m3onPrimary
-                            }
-                            onClicked: MprisController.togglePlaying()
-                        }
-                    }
-                }
             }
 
             Repeater {
@@ -969,10 +851,6 @@ RippleButton {
     onClicked: {
         if (root.actionPanelOpen) {
             root.actionPanelOpen = false;
-            return;
-        }
-        if (root.isNowPlaying) {
-            MprisController.togglePlaying();
             return;
         }
 

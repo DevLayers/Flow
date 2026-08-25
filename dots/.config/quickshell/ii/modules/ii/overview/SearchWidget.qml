@@ -93,10 +93,11 @@ Item {
     function getFilteredResultsCount() {
         const results = LauncherSearch.results;
         const q = LauncherSearch.query.trim().toLowerCase();
+        const showNowPlaying = Config.options.search.nowPlaying?.enable ?? Config.options.search.showNowPlayingBubble;
         let count = 0;
         for (let i = 0; i < results.length; i++) {
             const item = results[i];
-            if (!item || ((Config.options.search.alwaysListApps || q !== "" || !Config.options.search.showNowPlayingBubble) && item.key === "mpris:now-playing"))
+            if (!item || ((Config.options.search.alwaysListApps || q !== "" || !showNowPlaying) && item.key === "mpris:now-playing"))
                 continue;
             const sectionId = root.resultSectionId(item);
             if (sectionId === "continue" && !root.queryHasAnyPrefix && !root.showContinuationRows)
@@ -368,7 +369,7 @@ Item {
     readonly property bool showIdleNowPlaying: searchingText === ""
         && !isAnySpecialMode
         && !alwaysListAppsMode
-        && Config.options.search.showNowPlayingBubble
+        && (Config.options.search.nowPlaying?.enable ?? Config.options.search.showNowPlayingBubble)
         && LauncherSearch.results.some(result => String(result?.key ?? "") === "mpris:now-playing")
     property bool showResults: searchingText !== "" || isAnySpecialMode || alwaysListAppsMode || showIdleNowPlaying
     property string overviewPosition: (Config.options.bar?.bottom ? "bottom" : (Config.options.overview?.position ?? ""))
@@ -818,7 +819,7 @@ Item {
         { id: "apps", label: Translation.tr("Apps"), icon: "apps", sections: ["apps"] },
         { id: "controls", label: Translation.tr("Controls"), icon: "tune", sections: ["controls"] },
         { id: "tools", label: Translation.tr("Tools"), icon: "widgets", sections: ["tools", "actions"] },
-        { id: "content", label: Translation.tr("Content"), icon: "article", sections: ["content", "files"] },
+        { id: "content", label: Translation.tr("Content"), icon: "article", sections: ["content", "files", "sites"] },
         { id: "media", label: Translation.tr("Media"), icon: "music_note", sections: ["media"] },
         { id: "settings", label: Translation.tr("Settings"), icon: "settings", sections: ["settings"] },
         { id: "other", label: Translation.tr("Other"), icon: "more_horiz", sections: ["other"] }
@@ -896,6 +897,8 @@ Item {
             return "continue";
         if (key.startsWith("app:") || item?.type === Translation.tr("App Alias"))
             return "apps";
+        if (key.startsWith("site:"))
+            return "sites";
         // The idle now-playing bubble is the only media row, and it used to land
         // in "More results" — a caption that says nothing about it.
         if (key.startsWith("mpris:"))
@@ -1100,7 +1103,8 @@ Item {
 
     function processResults(results) {
         const q = LauncherSearch.query.trim().toLowerCase();
-        const excludeMpris = Config.options.search.alwaysListApps || q !== "" || !Config.options.search.showNowPlayingBubble;
+        const showNowPlaying = Config.options.search.nowPlaying?.enable ?? Config.options.search.showNowPlayingBubble;
+        const excludeMpris = Config.options.search.alwaysListApps || q !== "" || !showNowPlaying;
         const filtered = [];
         for (let i = 0; i < results.length; i++) {
             const item = results[i];
@@ -1976,6 +1980,8 @@ Item {
                                 return sectionCaption;
                             if (resultDelegate.modelData.isHero === true)
                                 return bestMatchRow;
+                            if (resultDelegate.modelData.modelRef?.key === "mpris:now-playing")
+                                return nowPlayingRow;
                             return resultDelegate.modelData.modelRef?.settingRef ? settingResultCard : normalSearchItem;
                         }
                         onLoaded: root.refreshSelectedResultNavigation()
@@ -2130,6 +2136,46 @@ Item {
                                     listCurrentIndex: appResults.currentIndex
                                     groupFirst: resultDelegate.modelData.isFirst === true
                                     groupLast: resultDelegate.modelData.isLast === true
+                                }
+                            }
+                        }
+
+                        Component {
+                            id: nowPlayingRow
+
+                            Item {
+                                implicitHeight: nowPlayingItem.implicitHeight
+                                readonly property bool supportsHorizontalNavigation: nowPlayingItem.supportsHorizontalNavigation
+
+                                function activate(): bool {
+                                    return nowPlayingItem.activate();
+                                }
+
+                                function clicked(): bool {
+                                    return nowPlayingItem.clicked();
+                                }
+
+                                function navigateLeft(): bool {
+                                    return nowPlayingItem.navigateLeft();
+                                }
+
+                                function navigateRight(): bool {
+                                    return nowPlayingItem.navigateRight();
+                                }
+
+                                SearchNowPlaying {
+                                    id: nowPlayingItem
+                                    anchors.left: parent.left
+                                    anchors.right: parent.right
+                                    anchors.leftMargin: root.rowSideMargin
+                                    anchors.rightMargin: root.rowSideMargin
+                                    entry: resultDelegate.modelData.modelRef
+                                    listIndex: resultDelegate.index
+                                    listCount: appResults.count
+                                    listCurrentIndex: appResults.currentIndex
+                                    isFirst: resultDelegate.modelData.isFirst === true
+                                    isLast: resultDelegate.modelData.isLast === true
+                                    onResultExecuted: feedbackText => root.showActionFeedback(feedbackText)
                                 }
                             }
                         }
