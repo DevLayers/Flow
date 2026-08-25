@@ -354,7 +354,10 @@ Singleton {
             const nextDetails = Object.assign({}, root.eventDetailsByUid);
             nextDetails[String(reply.event.uid)] = reply.event;
             root.eventDetailsByUid = nextDetails;
-        } else if (current?.payload?.op === "save" || current?.payload?.op === "deleteSeries" || current?.payload?.op === "deleteOccurrence" || current?.payload?.op === "overrideOccurrence" || current?.payload?.op === "splitSeries" || current?.payload?.op === "truncateSeries" || current?.payload?.op === "setCalendarColor") {
+        } else if ([
+            "save", "deleteSeries", "deleteOccurrence", "overrideOccurrence",
+            "splitSeries", "truncateSeries", "setCalendarColor", "importIcs"
+        ].includes(String(current?.payload?.op ?? ""))) {
             root.eventDetailsByUid = ({});
             vdirsyncerProcess.running = true;
             root.loadEvents();
@@ -535,43 +538,27 @@ Singleton {
         root.saveEventFields(event, fields, scope);
     }
 
-    Process {
-        id: icsImportProcess
-        property string targetPath: ""
-        command: ["python3", Directories.scriptPath + "/email/import_ics.py", targetPath]
-        stdout: StdioCollector {
-            onStreamFinished: {
-                try {
-                    const data = JSON.parse(this.text);
-                    if (data.success) {
-                        console.log("[CalendarService] ICS imported successfully, events:", data.event_count);
-                        refreshTimer.start();
-                    } else {
-                        console.warn("[CalendarService] ICS import failed:", data.error);
-                    }
-                } catch (e) {
-                    console.warn("[CalendarService] ICS import response parse error:", e, this.text);
-                }
-            }
+    function importFromIcs(path, autoDelete = false, calendar = "", callback = null) {
+        const sourcePath = String(path ?? "").trim();
+        if (!root.khalAvailable) {
+            const reply = { ok: false, error: Translation.tr("Calendar service unavailable.") };
+            if (typeof callback === "function")
+                callback(reply);
+            return false;
         }
-    }
-
-    Timer {
-        id: refreshTimer
-        interval: 1500
-        repeat: false
-        onTriggered: {
-            vdirsyncerProcess.running = true;
-            root.loadEvents();
+        if (!sourcePath) {
+            const reply = { ok: false, error: Translation.tr("Choose an ICS file to import.") };
+            if (typeof callback === "function")
+                callback(reply);
+            return false;
         }
-    }
-
-    function importFromIcs(path, autoDelete) {
-        if (!root.khalAvailable)
-            return;
-        console.log("[CalendarService] Importing ICS:", path, "autoDelete:", !!autoDelete);
-        icsImportProcess.command = ["python3", Directories.scriptPath + "/email/import_ics.py", path, autoDelete ? "true" : "false"];
-        icsImportProcess.running = true;
+        root.enqueueCalendarRequest({
+            op: "importIcs",
+            path: sourcePath,
+            deleteSource: Boolean(autoDelete),
+            calendar: String(calendar ?? "")
+        }, callback);
+        return true;
     }
 
 }

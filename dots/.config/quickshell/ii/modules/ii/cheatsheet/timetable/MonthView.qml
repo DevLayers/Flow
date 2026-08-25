@@ -67,6 +67,7 @@ Item {
     readonly property date viewAnchorDate: new Date(root.viewYear, root.viewMonth, 1)
 
     signal weekViewRequested
+    signal importsRequested
 
     function filteredEvents(events) {
         if (!root.categoryFilter)
@@ -690,6 +691,29 @@ Item {
                         text: "chevron_right"
                         iconSize: Appearance.font.pixelSize.huge
                         color: Appearance.colors.colOnSurface
+                    }
+                }
+
+                RippleButton {
+                    id: calendarSourcesButton
+                    implicitWidth: 42
+                    implicitHeight: 42
+                    buttonRadius: Appearance.rounding.full
+                    colBackground: Appearance.colors.colLayer2
+                    colBackgroundHover: Appearance.colors.colLayer2Hover
+                    colBackgroundActive: Appearance.colors.colLayer2Active
+                    onClicked: root.importsRequested()
+
+                    contentItem: MaterialSymbol {
+                        anchors.centerIn: parent
+                        text: "calendar_add_on"
+                        iconSize: Appearance.font.pixelSize.larger
+                        color: Appearance.colors.colOnSurface
+                    }
+
+                    StyledToolTip {
+                        extraVisibleCondition: calendarSourcesButton.hovered
+                        text: Translation.tr("Calendar sources")
                     }
                 }
 

@@ -14,8 +14,10 @@ from __future__ import annotations
 
 import argparse
 import copy
+import hashlib
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -42,6 +44,8 @@ CALENDAR_COLOR_VALUES = {
     "light cyan",
     "yellow",
 }
+ICS_IMPORT_MAX_BYTES = 1024 * 1024
+ICS_IMPORT_MAX_EVENTS = 1000
 
 
 class CalendarError(RuntimeError):
@@ -421,6 +425,74 @@ def _import(store: CalendarStore, calendar: CalendarInfo, container: Calendar) -
         raise CalendarError(message or "khal could not import the event.")
 
 
+def _read_ics_import(request: dict[str, Any]) -> tuple[Calendar, str, Path | None]:
+    """Read a bounded local ICS file and return its normalized calendar."""
+    source_value = request.get("path")
+    source_path = Path(str(source_value or "")).expanduser() if source_value else None
+    if source_path is None or not str(source_path):
+        raise CalendarError("An ICS file path is required.")
+    if source_path.suffix.lower() not in {".ics", ".ical"}:
+        raise CalendarError("Choose an .ics or .ical calendar file.")
+    if not source_path.is_file():
+        raise CalendarError("ICS file was not found.")
+    if source_path.stat().st_size > ICS_IMPORT_MAX_BYTES:
+        raise CalendarError("ICS file is too large to import.")
+    raw = source_path.read_bytes()
+    normalized = re.sub(rb"\r(?!\n)", b"", raw.replace(b"\r\r\n", b"\r\n"))
+    try:
+        calendar = Calendar.from_ical(normalized)
+    except Exception as error:
+        raise CalendarError("ICS file could not be parsed.") from error
+    return calendar, hashlib.sha256(normalized).hexdigest(), source_path
+
+
+def _import_ics(store: CalendarStore, request: dict[str, Any]) -> dict[str, Any]:
+    """Import VEVENTs without changing their UIDs or duplicating replays."""
+    target = store.calendar_for(request.get("calendar"))
+    if target.read_only:
+        raise CalendarError(f'Calendar "{target.name}" is read-only.')
+    source, source_digest, source_path = _read_ics_import(request)
+    events = [component for component in source.subcomponents if component.name == "VEVENT"]
+    if not events:
+        raise CalendarError("ICS file contains no events.")
+    if len(events) > ICS_IMPORT_MAX_EVENTS:
+        raise CalendarError("ICS file contains too many events.")
+
+    # Keep calendar-level metadata and time zones, but send khal only the events
+    # that do not already exist in one of the configured calendars.
+    imported_calendar = copy.deepcopy(source)
+    imported_calendar.subcomponents = [
+        copy.deepcopy(component) for component in source.subcomponents
+        if component.name != "VEVENT"
+    ]
+    seen_source_keys: set[str] = set()
+    imported = 0
+    skipped = 0
+    for index, original in enumerate(events):
+        component = copy.deepcopy(original)
+        uid = str(component.get("UID") or "").strip()
+        if not uid:
+            uid = str(uuid.uuid5(uuid.NAMESPACE_URL, f"ii-timetable-ics:{source_digest}:{index}"))
+            component.add("UID", uid)
+        recurrence_id = _as_iso(_decoded(component, "RECURRENCE-ID"))
+        source_key = uid + "|" + recurrence_id
+        if source_key in seen_source_keys or store.find(uid) is not None:
+            skipped += 1
+            continue
+        seen_source_keys.add(source_key)
+        imported_calendar.add_component(component)
+        imported += 1
+
+    if imported:
+        _import(store, target, imported_calendar)
+    if request.get("deleteSource") and source_path is not None:
+        try:
+            source_path.unlink()
+        except OSError:
+            pass
+    return {"ok": True, "imported": imported, "skipped": skipped}
+
+
 def _write_in_place(stored: StoredEvent) -> None:
     """Rewrite an existing event's own file, keeping its href and reindexing.
 
@@ -672,6 +744,7 @@ def handle(store: CalendarStore, request: dict[str, Any]) -> dict[str, Any]:
         "expand": _expand,
         "calendars": _calendar_list,
         "setCalendarColor": _set_calendar_color,
+        "importIcs": _import_ics,
     }
     operation = str(request.get("op") or "")
     handler = operations.get(operation)

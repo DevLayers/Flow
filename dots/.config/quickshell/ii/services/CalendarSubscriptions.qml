@@ -32,9 +32,14 @@ Singleton {
     property bool syncInProgress: false
     property bool applyQueued: false
     property var managedCalendars: []
+    readonly property bool importsEnabled: Config.options?.calendar?.timetable?.imports?.enable ?? false
 
     function subscriptionUrls() {
         return Array.from(Config.options?.calendar?.timetable?.subscriptions ?? []);
+    }
+
+    function effectiveSubscriptionUrls() {
+        return root.importsEnabled ? root.subscriptionUrls() : [];
     }
 
     function normalizeUrl(value) {
@@ -81,7 +86,7 @@ Singleton {
             "khalConfigPath": root.khalConfigPath,
             "statusPath": root.vdirsyncerStatusPath,
             "subscriptionRoot": root.subscriptionRoot,
-            "subscriptions": root.subscriptionUrls()
+            "subscriptions": root.effectiveSubscriptionUrls()
         };
     }
 
@@ -123,6 +128,14 @@ Singleton {
         target: Config.options?.calendar?.timetable
 
         function onSubscriptionsChanged() {
+            root.requestApply();
+        }
+    }
+
+    Connections {
+        target: Config.options?.calendar?.timetable?.imports
+
+        function onEnableChanged() {
             root.requestApply();
         }
     }

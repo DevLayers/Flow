@@ -3149,6 +3149,11 @@ Singleton {
                 }
                 property JsonObject timetable: JsonObject {
                     property list<string> subscriptions: []
+                    property JsonObject imports: JsonObject {
+                        // Local ICS files and remote read-only subscriptions
+                        // are inactive until the user enables calendar sources.
+                        property bool enable: false
+                    }
                     // ESPN games stay outside khal and are displayed only when
                     // explicitly requested in the Timetable.
                     property bool sportsEvents: false

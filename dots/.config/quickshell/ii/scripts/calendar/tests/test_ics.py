@@ -221,6 +221,58 @@ class IcsHelperTests(unittest.TestCase):
         self.assertFalse(self.request({"op": "setCalendarColor", "calendar": "work", "color": "#123456"})["ok"])
         self.assertFalse(self.request({"op": "setCalendarColor", "calendar": "readonly", "color": "light red"})["ok"])
 
+    def test_import_ics_preserves_uids_and_skips_replays(self) -> None:
+        source = self.root / "class-schedule.ics"
+        source.write_text(
+            "\r\n".join([
+                "BEGIN:VCALENDAR",
+                "VERSION:2.0",
+                "BEGIN:VEVENT",
+                "UID:lecture-1@example.test",
+                "SUMMARY:Distributed systems",
+                "DTSTART:20260916T140000",
+                "DTEND:20260916T150000",
+                "END:VEVENT",
+                "BEGIN:VEVENT",
+                "SUMMARY:Missing UID receives a stable generated UID",
+                "DTSTART:20260917T140000",
+                "DTEND:20260917T150000",
+                "END:VEVENT",
+                "END:VCALENDAR",
+                "",
+            ]),
+            encoding="utf-8",
+        )
+
+        first = self.request({"op": "importIcs", "path": str(source)})
+        self.assertEqual(first["ok"], True)
+        self.assertEqual(first["imported"], 2)
+        self.assertEqual(first["skipped"], 0)
+        self.assertIn("lecture-1@example.test", self.listed_uids())
+        self.assertEqual(len(self.listed_uids()), 2)
+
+        second = self.request({"op": "importIcs", "path": str(source)})
+        self.assertEqual(second, {"ok": True, "imported": 0, "skipped": 2})
+        self.assertEqual(len(self.listed_uids()), 2)
+
+    def test_import_ics_rejects_read_only_calendars_and_large_inputs(self) -> None:
+        source = self.root / "readonly.ics"
+        source.write_text(
+            "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:readonly@example.test\r\n"
+            "SUMMARY:Read only\r\nDTSTART:20260916T140000\r\nDTEND:20260916T150000\r\n"
+            "END:VEVENT\r\nEND:VCALENDAR\r\n",
+            encoding="utf-8",
+        )
+        blocked = self.request({"op": "importIcs", "calendar": "readonly", "path": str(source)})
+        self.assertEqual(blocked["ok"], False)
+        self.assertIn("read-only", blocked["error"])
+
+        oversized = self.root / "too-large.ics"
+        oversized.write_bytes(b"X" * (1024 * 1024 + 1))
+        rejected = self.request({"op": "importIcs", "path": str(oversized)})
+        self.assertEqual(rejected["ok"], False)
+        self.assertIn("too large", rejected["error"])
+
     def test_occurrence_operations_and_read_only_guard(self) -> None:
         created = self.request({"op": "save", "calendar": "work", "event": self.event()})
         uid = created["uid"]
