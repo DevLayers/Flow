@@ -470,6 +470,7 @@ Item {
         }
 
         WindowDialogParagraph {
+            Layout.fillWidth: true
             text: Translation.tr("The block this page writes is deleted from every file in ~/.config/hypr/custom/. Your own Lua above it is left alone, and each file is backed up first.")
         }
 
