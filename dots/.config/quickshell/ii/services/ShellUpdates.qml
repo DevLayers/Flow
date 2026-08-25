@@ -39,6 +39,8 @@ Singleton {
 
     readonly property int autoCheckPeriodMs: {
         switch (Config.options?.update?.autoCheckInterval ?? "daily") {
+        case "10min":
+            return 10 * 60 * 1000;
         case "hourly":
             return 60 * 60 * 1000;
         case "daily":
@@ -49,6 +51,12 @@ Singleton {
             return 0; // disabled
         }
     }
+
+    // A check shortly after the shell starts ignores the configured period: on a
+    // weekly setting the bar would otherwise stay blank for days after a
+    // restart. The floor is only there so a burst of restarts cannot turn into
+    // a burst of requests.
+    readonly property int startupGraceMs: 5 * 60 * 1000
 
     // Whether the state read currently in flight should chain into the network
     // probe. Re-reading state after an update action must not spend a request.
@@ -74,12 +82,15 @@ Singleton {
         stateReadProc.running = true;
     }
 
-    function maybeAutoCheck() {
+    // minAgeMs overrides how stale the last check must be to earn a new one;
+    // it defaults to the configured period.
+    function maybeAutoCheck(minAgeMs) {
         if (root.autoCheckPeriodMs <= 0) return;
+        const age = minAgeMs ?? root.autoCheckPeriodMs;
         const now = Date.now();
         // A timestamp in the future (clock jump, hand-edited config) would
         // otherwise wedge the check until real time caught up with it.
-        if (root.lastCheck <= now && now - root.lastCheck < root.autoCheckPeriodMs) return;
+        if (root.lastCheck <= now && now - root.lastCheck < age) return;
         root.refresh();
     }
 
@@ -190,16 +201,19 @@ Singleton {
     }
 
     // Read the local state right away so the bar is correct either way, but
-    // give the shell time to finish starting before spending a network probe.
+    // give the shell a few seconds to finish starting before spending a
+    // network probe on it.
     Timer {
         running: Config.ready
-        interval: 20000
-        onTriggered: root.maybeAutoCheck()
+        interval: 8000
+        onTriggered: root.maybeAutoCheck(root.startupGraceMs)
     }
 
+    // Ticks far more often than any period, since it only compares timestamps;
+    // the shortest setting is 10 minutes and would drift badly on a coarse tick.
     Timer {
         running: Config.ready && root.autoCheckPeriodMs > 0
-        interval: 5 * 60 * 1000
+        interval: 60 * 1000
         repeat: true
         onTriggered: root.maybeAutoCheck()
     }

@@ -3723,7 +3723,7 @@ Singleton {
                 // to setup-ii-p3drovfx.sh). See AboutConfig.qml.
                 property bool replaceHyprConfig: true
                 // How often ShellUpdates probes the fork's remote for new
-                // commits: "disabled" | "hourly" | "daily" | "weekly".
+                // commits: "disabled" | "10min" | "hourly" | "daily" | "weekly".
                 property string autoCheckInterval: "daily"
                 // Epoch ms of the last completed automatic check. Persisted so a
                 // daily/weekly period is not restarted from zero on every shell
