@@ -10,6 +10,7 @@ ContentPage {
     forceWidth: false
     property bool showBackButton: false
     property string subscriptionDraft: ""
+    property string outlookClientIdDraft: ""
     signal goBack()
 
     function toggleOffset(offset, checked) {
@@ -20,6 +21,21 @@ ContentPage {
         if (!checked && index >= 0)
             current.splice(index, 1);
         Config.options.calendar.timetable.notifications.offsets = current;
+    }
+
+    function connectOutlook() {
+        OutlookService.beginAuthorization(root.outlookClientIdDraft);
+    }
+
+    Component.onCompleted: root.outlookClientIdDraft = OutlookService.clientId
+
+    Connections {
+        target: OutlookService
+
+        function onClientIdChanged() {
+            if (!outlookClientIdInput.textField.activeFocus)
+                root.outlookClientIdDraft = OutlookService.clientId;
+        }
     }
 
     RowLayout {
@@ -509,6 +525,160 @@ ContentPage {
             wrapMode: Text.Wrap
         }
 
+        NoticeBox {
+            Layout.fillWidth: true
+            visible: Config.options.calendar.timetable.imports.enable
+                && Config.options.calendar.timetable.imports.outlook.enable
+            materialIcon: "info"
+            text: Translation.tr("To get a client ID, open Microsoft Entra admin center, register an application, select the account types you need, then copy its Application (client) ID from Overview.")
+        }
+
+        RippleButtonWithIcon {
+            Layout.alignment: Qt.AlignRight
+            implicitHeight: 40
+            visible: Config.options.calendar.timetable.imports.enable
+                && Config.options.calendar.timetable.imports.outlook.enable
+            centerContent: true
+            materialIcon: "open_in_new"
+            mainText: Translation.tr("Open Microsoft Entra")
+            colText: Appearance.colors.colOnSecondaryContainer
+            colBackground: Appearance.colors.colSecondaryContainer
+            colBackgroundHover: Appearance.colors.colSecondaryContainerHover
+            colRipple: Appearance.colors.colSecondaryContainerActive
+            onClicked: Qt.openUrlExternally("https://entra.microsoft.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade")
+        }
+
+        NoticeBox {
+            Layout.fillWidth: true
+            visible: Config.options.calendar.timetable.imports.enable
+                && Config.options.calendar.timetable.imports.outlook.enable
+            materialIcon: "security"
+            text: Translation.tr("Enable public client flows under Authentication for this Device Code sign-in. Do not create or paste a client secret: II stores only the public client ID and encrypted refresh token in the system keyring.")
+        }
+
+        ConfigTextField {
+            id: outlookClientIdInput
+            Layout.fillWidth: true
+            visible: Config.options.calendar.timetable.imports.enable
+                && Config.options.calendar.timetable.imports.outlook.enable
+                && !OutlookService.deviceFlowActive
+            enabled: !OutlookService.authenticating
+            icon: "key"
+            text: Translation.tr("Microsoft application (client) ID")
+            placeholderText: Translation.tr("Paste the public client ID from Microsoft Entra")
+            inputText: root.outlookClientIdDraft
+            textField.onTextChanged: root.outlookClientIdDraft = textField.text
+        }
+
+        RowLayout {
+            Layout.fillWidth: true
+            visible: Config.options.calendar.timetable.imports.enable
+                && Config.options.calendar.timetable.imports.outlook.enable
+                && !OutlookService.deviceFlowActive
+            spacing: 8
+
+            RippleButtonWithIcon {
+                Layout.fillWidth: true
+                implicitHeight: 40
+                centerContent: true
+                materialIcon: OutlookService.authenticated ? "person_add" : "login"
+                mainText: OutlookService.authenticated ? Translation.tr("Reconnect Outlook") : Translation.tr("Connect Outlook")
+                enabled: !OutlookService.authenticating && root.outlookClientIdDraft.trim().length > 0
+                colText: Appearance.colors.colOnSecondaryContainer
+                colBackground: Appearance.colors.colSecondaryContainer
+                colBackgroundHover: Appearance.colors.colSecondaryContainerHover
+                colRipple: Appearance.colors.colSecondaryContainerActive
+                onClicked: root.connectOutlook()
+            }
+
+            RippleButtonWithIcon {
+                implicitHeight: 40
+                visible: OutlookService.authenticated
+                centerContent: true
+                materialIcon: "link_off"
+                mainText: Translation.tr("Disconnect")
+                enabled: !OutlookCalendarImport.syncing
+                colText: Appearance.colors.colOnErrorContainer
+                colBackground: Appearance.colors.colErrorContainer
+                colBackgroundHover: Appearance.colors.colErrorContainerHover
+                colRipple: Appearance.colors.colErrorContainerActive
+                onClicked: OutlookService.disconnect()
+            }
+        }
+
+        ColumnLayout {
+            Layout.fillWidth: true
+            visible: Config.options.calendar.timetable.imports.enable
+                && Config.options.calendar.timetable.imports.outlook.enable
+                && OutlookService.deviceFlowActive
+            spacing: 6
+
+            NoticeBox {
+                Layout.fillWidth: true
+                materialIcon: "phonelink_lock"
+                text: OutlookService.deviceMessage || Translation.tr("Open Microsoft sign-in and enter this code:")
+            }
+
+            StyledText {
+                Layout.fillWidth: true
+                text: OutlookService.userCode
+                font.pixelSize: Appearance.font.pixelSize.large
+                font.weight: Font.Bold
+                color: Appearance.colors.colPrimary
+                horizontalAlignment: Text.AlignHCenter
+            }
+
+            RippleButtonWithIcon {
+                Layout.fillWidth: true
+                implicitHeight: 40
+                centerContent: true
+                materialIcon: "open_in_new"
+                mainText: Translation.tr("Open Microsoft sign-in")
+                colText: Appearance.colors.colOnPrimaryContainer
+                colBackground: Appearance.colors.colPrimaryContainer
+                colBackgroundHover: Appearance.colors.colPrimaryContainerHover
+                colRipple: Appearance.colors.colPrimaryContainerActive
+                onClicked: Qt.openUrlExternally(OutlookService.verificationUri)
+            }
+        }
+
+        RippleButtonWithIcon {
+            Layout.alignment: Qt.AlignRight
+            implicitHeight: 40
+            visible: Config.options.calendar.timetable.imports.enable
+                && Config.options.calendar.timetable.imports.outlook.enable
+                && OutlookService.authenticated
+                && !OutlookService.deviceFlowActive
+            centerContent: true
+            materialIcon: OutlookCalendarImport.syncing ? "sync" : "refresh"
+            mainText: OutlookCalendarImport.syncing ? Translation.tr("Synchronizing Outlook…") : Translation.tr("Sync Outlook now")
+            enabled: !OutlookCalendarImport.syncing
+            colText: Appearance.colors.colOnSecondaryContainer
+            colBackground: Appearance.colors.colSecondaryContainer
+            colBackgroundHover: Appearance.colors.colSecondaryContainerHover
+            colRipple: Appearance.colors.colSecondaryContainerActive
+            onClicked: OutlookCalendarImport.syncNow()
+        }
+
+        WarningBox {
+            Layout.fillWidth: true
+            visible: OutlookService.lastError.length > 0 || OutlookCalendarImport.lastError.length > 0
+            text: OutlookService.lastError.length > 0 ? OutlookService.lastError : OutlookCalendarImport.lastError
+        }
+
+        StyledText {
+            Layout.fillWidth: true
+            visible: OutlookService.authenticated || OutlookCalendarImport.lastStatus.length > 0
+            text: OutlookCalendarImport.lastStatus.length > 0
+                ? OutlookCalendarImport.lastStatus
+                : (OutlookService.activeAccountEmail.length > 0
+                    ? OutlookService.activeAccountEmail
+                    : Translation.tr("Outlook is connected."))
+            font.pixelSize: Appearance.font.pixelSize.small
+            color: Appearance.colors.colOnLayer1
+            wrapMode: Text.Wrap
+        }
+
         ConfigSwitch {
             enabled: Config.options.calendar.timetable.imports.enable
                 && Config.options.calendar.timetable.imports.outlook.enable
@@ -524,6 +694,39 @@ ContentPage {
             font.pixelSize: Appearance.font.pixelSize.small
             color: Appearance.colors.colOnLayer1
             opacity: Config.options.calendar.timetable.imports.outlook.icsAttachments.enable ? 1 : 0.7
+            wrapMode: Text.Wrap
+        }
+
+        RippleButtonWithIcon {
+            Layout.alignment: Qt.AlignRight
+            implicitHeight: 40
+            visible: Config.options.calendar.timetable.imports.enable
+                && Config.options.calendar.timetable.imports.outlook.enable
+                && OutlookService.authenticated
+            centerContent: true
+            materialIcon: OutlookIcsImport.scanning ? "sync" : "refresh"
+            mainText: OutlookIcsImport.scanning ? Translation.tr("Checking Outlook…") : Translation.tr("Check Outlook attachments")
+            enabled: Config.options.calendar.timetable.imports.outlook.icsAttachments.enable
+                && !OutlookIcsImport.scanning
+            colText: Appearance.colors.colOnSecondaryContainer
+            colBackground: Appearance.colors.colSecondaryContainer
+            colBackgroundHover: Appearance.colors.colSecondaryContainerHover
+            colRipple: Appearance.colors.colSecondaryContainerActive
+            onClicked: OutlookIcsImport.scanNow()
+        }
+
+        WarningBox {
+            Layout.fillWidth: true
+            visible: OutlookIcsImport.lastError.length > 0
+            text: OutlookIcsImport.lastError
+        }
+
+        StyledText {
+            Layout.fillWidth: true
+            visible: OutlookIcsImport.lastStatus.length > 0
+            text: OutlookIcsImport.lastStatus
+            font.pixelSize: Appearance.font.pixelSize.small
+            color: Appearance.colors.colOnLayer1
             wrapMode: Text.Wrap
         }
     }
