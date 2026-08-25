@@ -30,6 +30,12 @@ PanelWindow {
     exclusionMode: ExclusionMode.Ignore
     WlrLayershell.layer: WlrLayer.Bottom
     WlrLayershell.namespace: "quickshell:backgroundWidgets"
+    // Wayland gives no client the global key stream: without keyboard focus,
+    // Qt's modifier state stays empty and mouse.modifiers is always 0, which
+    // makes the Ctrl-to-bypass-snap drag gesture undetectable. While a widget
+    // drag is active we take OnDemand focus so real modifier events flow in;
+    // dropping it on release hands focus back to the previously focused app.
+    WlrLayershell.keyboardFocus: widgetCanvas.draggingActive ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
     color: "transparent"
 
     anchors {

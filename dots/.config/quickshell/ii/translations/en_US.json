@@ -3613,6 +3613,7 @@
     "Light Drizzle": "Light Drizzle",
     "Overview Configuration": "Overview Configuration",
     "Enable layout snap alignment": "Enable layout snap alignment",
+    "Hold Ctrl while dragging a widget to temporarily disable the alignment grid and snap for pixel-perfect placement": "Hold Ctrl while dragging a widget to temporarily disable the alignment grid and snap for pixel-perfect placement",
     "Enable the Bluetooth Fill Cards widget in Desktop Widgets settings to use this page.": "Enable the Bluetooth Fill Cards widget in Desktop Widgets settings to use this page.",
     "Camera error: %1": "Camera error: %1",
     "Widgets & layout": "Widgets & layout",

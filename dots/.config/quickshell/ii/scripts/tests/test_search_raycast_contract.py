@@ -821,6 +821,30 @@ class SearchRaycastContractTests(unittest.TestCase):
         self.assertIn("targetStrip", panel)
         self.assertIn("WindowActionRegistry.execute", panel)
 
+    def test_window_target_chip_sizes_its_image_through_the_layout(self):
+        panel = source("modules/ii/overview/WindowManagementPanel.qml")
+        target_chip = panel.split("id: targetChipContent", 1)[1].split("StyledText {", 1)[0]
+
+        # StyledImage inherits Image, whose implicit dimensions are read-only.
+        # The target strip is a RowLayout, so it must receive an explicit layout
+        # size rather than attempting to overwrite Image.implicitHeight.
+        self.assertIn("Layout.preferredWidth: Appearance.font.pixelSize.normal", target_chip)
+        self.assertIn("Layout.preferredHeight: Appearance.font.pixelSize.normal", target_chip)
+        self.assertNotIn("implicitHeight:", target_chip)
+
+    def test_window_action_cards_fit_their_grid_cells_without_stacked_hints(self):
+        panel = source("modules/ii/overview/WindowManagementPanel.qml")
+        action_grid = panel.split("id: actionGrid", 1)[1].split("ColumnLayout {\n                    anchors.centerIn", 1)[0]
+
+        self.assertIn(
+            "readonly property real actionCardHeight: Appearance.sizes.elevationMargin * 5.5",
+            panel,
+        )
+        self.assertIn("cellHeight: root.actionCardHeight", action_grid)
+        self.assertIn("RowLayout {", action_grid)
+        self.assertNotIn("ColumnLayout {", action_grid)
+        self.assertIn("modelData.keyHint.length === 0", action_grid)
+
     def test_generators_have_a_panel_preview_and_feedback(self):
         registry = source("modules/common/SearchPanelRegistry.qml")
         panel = source("modules/ii/overview/ToolsPanel.qml")

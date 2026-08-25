@@ -22,6 +22,9 @@ Item {
 
     readonly property bool supportsSectionToggle: true
     readonly property int actionColumns: Math.max(1, Config.options.search.modules.windowManagement.columns)
+    // Five rows must fit beside the target picker and the footer. The compact
+    // action row keeps its icon, name and one hint on a single baseline.
+    readonly property real actionCardHeight: Appearance.sizes.elevationMargin * 5.5
     readonly property var categories: [
         { id: "all", label: Translation.tr("All"), icon: "apps" },
         { id: "tiling", label: Translation.tr("Tiling"), icon: "grid_view" },
@@ -362,8 +365,8 @@ Item {
                         anchors.centerIn: parent
                         spacing: Appearance.sizes.elevationMargin / 2
                         StyledImage {
-                            implicitWidth: Appearance.font.pixelSize.normal
-                            implicitHeight: implicitWidth
+                            Layout.preferredWidth: Appearance.font.pixelSize.normal
+                            Layout.preferredHeight: Appearance.font.pixelSize.normal
                             source: Quickshell.iconPath(AppSearch.guessIcon(String(modelData.class ?? "")), "image-missing")
                             fillMode: Image.PreserveAspectFit
                         }
@@ -425,7 +428,7 @@ Item {
                 Layout.fillHeight: true
                 clip: true
                 cellWidth: width / root.actionColumns
-                cellHeight: Appearance.sizes.elevationMargin * 6
+                cellHeight: root.actionCardHeight
                 model: root.rows
 
                 delegate: Item {
@@ -451,10 +454,10 @@ Item {
                         }
                         onDoubleClicked: root.activateSelected()
 
-                        ColumnLayout {
+                        RowLayout {
                             anchors.fill: parent
                             anchors.margins: Appearance.sizes.elevationMargin
-                            spacing: Appearance.sizes.elevationMargin / 4
+                            spacing: Appearance.sizes.elevationMargin / 2
                             MaterialSymbol {
                                 text: modelData.icon
                                 iconSize: Appearance.font.pixelSize.large
@@ -467,7 +470,6 @@ Item {
                                 font.weight: Font.DemiBold
                                 color: root.selectedIndex === index ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnSurface
                             }
-                            Item { Layout.fillHeight: true }
                             KeyHint {
                                 visible: modelData.keyHint.length > 0
                                 keys: modelData.keyHint
@@ -476,7 +478,12 @@ Item {
                             }
 
                             ConfiguredKeyHint {
-                                visible: root.selectedIndex === index && Config.options.search.appearance.showKeyHints
+                                // Native action shortcuts already occupy the row. Enter is
+                                // shown here only for actions without one (and in the footer
+                                // for every selected action), so hints cannot overlap.
+                                visible: modelData.keyHint.length === 0
+                                    && root.selectedIndex === index
+                                    && Config.options.search.appearance.showKeyHints
                                 actionId: "activate"
                                 fallbackKeys: ["↵"]
                                 surface: Appearance.colors.colPrimaryContainer

@@ -3613,6 +3613,7 @@
     "Light Drizzle": "Chuvisco Leve",
     "Overview Configuration": "Configuração da Visão Geral",
     "Enable layout snap alignment": "Ativar alinhamento de encaixe de layout",
+    "Hold Ctrl while dragging a widget to temporarily disable the alignment grid and snap for pixel-perfect placement": "Segure Ctrl ao arrastar um widget para desativar temporariamente a grade de alinhamento e o encaixe, permitindo posicionamento preciso",
     "Enable the Bluetooth Fill Cards widget in Desktop Widgets settings to use this page.": "Ative o widget Cartões de Preenchimento Bluetooth nas configurações de Widgets da Área de Trabalho para usar esta página.",
     "Camera error: %1": "Erro da câmera: %1",
     "Widgets & layout": "Widgets e layout",

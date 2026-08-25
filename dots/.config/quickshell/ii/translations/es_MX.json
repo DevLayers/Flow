@@ -3601,6 +3601,7 @@
     "Light Drizzle": "Llovizna Ligera",
     "Overview Configuration": "Configuración de Vista General",
     "Enable layout snap alignment": "Habilitar alineación de ajuste de diseño",
+    "Hold Ctrl while dragging a widget to temporarily disable the alignment grid and snap for pixel-perfect placement": "Mantén presionado Ctrl al arrastrar un widget para desactivar temporalmente la cuadrícula de alineación y el ajuste, permitiendo una colocación precisa",
     "Enable the Bluetooth Fill Cards widget in Desktop Widgets settings to use this page.": "Habilita el widget de Tarjetas de Relleno Bluetooth en la configuración de Widgets de Escritorio para usar esta página.",
     "Camera error: %1": "Error de cámara: %1",
     "Widgets & layout": "Widgets y diseño",

@@ -191,6 +191,10 @@ AbstractWidget {
     property real _snapLockYTarget: 0
     property real _snapGuideY: -1
 
+    // Ctrl held during a drag bypasses grid and snap for precise placement.
+    // Tracked per pointer event because modifiers may change mid-gesture.
+    property bool _ctrlHeld: false
+
     // ── Grid anchor state ─────────────────────────────────────────────────────
     // Grid cells are 10px wide. The anchor stores the raw pointer position at the
     // time of the last cell commit. A new cell is committed only when raw has
@@ -273,6 +277,26 @@ AbstractWidget {
         }
     }
 
+    function setCtrlBypass(ctrlNow) {
+        if (ctrlNow === _ctrlHeld)
+            return;
+        _ctrlHeld = ctrlNow;
+        if (ctrlNow) {
+            // Entering free placement: drop any active snap locks and guides.
+            _snapLockX = false;
+            _snapLockY = false;
+            _snapGuideX = -1;
+            _snapGuideY = -1;
+        } else {
+            // Re-anchor the grid accumulator at the current raw position so
+            // resuming the grid does not fling the widget across several cells.
+            _gridAnchorX = _rawDragX;
+            _gridAnchorY = _rawDragY;
+            _lastGridX = Math.max(0, Math.min(Math.round(_rawDragX / _gridStep) * _gridStep, gridMaximumX()));
+            _lastGridY = Math.max(0, Math.min(Math.round(_rawDragY / _gridStep) * _gridStep, gridMaximumY()));
+        }
+    }
+
     function beginPointerGesture(mouse) {
         if (!draggable)
             return;
@@ -287,6 +311,7 @@ AbstractWidget {
 
         const pointer = root.mapToItem(canvas, mouse.x, mouse.y);
         _pointerGestureReady = true;
+        setCtrlBypass(Boolean(mouse.modifiers & Qt.ControlModifier));
         _dragMovementActive = false;
         isDraggingOrSettling = true;
         _pressCanvasX = pointer.x;
@@ -328,6 +353,7 @@ AbstractWidget {
 
         _rawDragX = WidgetDragMath.clamp(_dragOriginX + deltaX, 0, dragMaximumX());
         _rawDragY = WidgetDragMath.clamp(_dragOriginY + deltaY, 0, dragMaximumY());
+        setCtrlBypass(Boolean(mouse.modifiers & Qt.ControlModifier));
         root.x = applyGridAndSnapX(_rawDragX, _rawDragY);
         root.y = applyGridAndSnapY(_rawDragY, _rawDragX);
     }
@@ -415,63 +441,85 @@ AbstractWidget {
     }
 
     function snapCandidateX(rawX, rawY) {
-        if (!widgetListModel)
-            return null;
-
         const candidates = [];
-        for (let i = 0; i < widgetListModel.count; i++) {
-            const widget = widgetListModel.get(i);
-            if (widgetInstance && widget.instanceId === widgetInstance.id)
-                continue;
-            if (Math.abs(rawY - widget.widgetY) >= _snapOrthogonalRange)
-                continue;
 
-            const widgetId = widget.instanceId || widget.id;
-            const widgetWidth = (widgetSizes && widgetSizes[widgetId] && widgetSizes[widgetId].width > 0)
-                ? widgetSizes[widgetId].width
-                : root.width;
-            const otherLeft = widget.widgetX;
-            const otherRight = widget.widgetX + widgetWidth;
+        if (widgetListModel) {
+            for (let i = 0; i < widgetListModel.count; i++) {
+                const widget = widgetListModel.get(i);
+                if (widgetInstance && widget.instanceId === widgetInstance.id)
+                    continue;
+                if (Math.abs(rawY - widget.widgetY) >= _snapOrthogonalRange)
+                    continue;
 
-            candidates.push({ "target": otherLeft, "guide": otherLeft, "distance": Math.abs(rawX - otherLeft) });
-            candidates.push({ "target": otherRight - root.width, "guide": otherRight, "distance": Math.abs(rawX + root.width - otherRight) });
-            candidates.push({ "target": otherRight, "guide": otherRight, "distance": Math.abs(rawX - otherRight) });
-            candidates.push({ "target": otherLeft - root.width, "guide": otherLeft, "distance": Math.abs(rawX + root.width - otherLeft) });
+                const widgetId = widget.instanceId || widget.id;
+                const widgetWidth = (widgetSizes && widgetSizes[widgetId] && widgetSizes[widgetId].width > 0)
+                    ? widgetSizes[widgetId].width
+                    : root.width;
+                const otherLeft = widget.widgetX;
+                const otherRight = widget.widgetX + widgetWidth;
+
+                candidates.push({ "target": otherLeft, "guide": otherLeft, "distance": Math.abs(rawX - otherLeft) });
+                candidates.push({ "target": otherRight - root.width, "guide": otherRight, "distance": Math.abs(rawX + root.width - otherRight) });
+                candidates.push({ "target": otherRight, "guide": otherRight, "distance": Math.abs(rawX - otherRight) });
+                candidates.push({ "target": otherLeft - root.width, "guide": otherLeft, "distance": Math.abs(rawX + root.width - otherLeft) });
+            }
         }
+
+        // Monitor-centre constraint: aligns the widget's centre with the vertical centre line.
+        const screenCenterX = root.scaledScreenWidth / 2;
+        candidates.push({
+            "target": screenCenterX - root.width / 2,
+            "guide": screenCenterX,
+            "distance": Math.abs((rawX + root.width / 2) - screenCenterX)
+        });
 
         return WidgetDragMath.nearestValidCandidate(candidates, 0, dragMaximumX(), _snapEnter);
     }
 
     function snapCandidateY(rawY, rawX) {
-        if (!widgetListModel)
-            return null;
-
         const candidates = [];
-        for (let i = 0; i < widgetListModel.count; i++) {
-            const widget = widgetListModel.get(i);
-            if (widgetInstance && widget.instanceId === widgetInstance.id)
-                continue;
-            if (Math.abs(rawX - widget.widgetX) >= _snapOrthogonalRange)
-                continue;
 
-            const widgetId = widget.instanceId || widget.id;
-            const widgetHeight = (widgetSizes && widgetSizes[widgetId] && widgetSizes[widgetId].height > 0)
-                ? widgetSizes[widgetId].height
-                : root.height;
-            const otherTop = widget.widgetY;
-            const otherBottom = widget.widgetY + widgetHeight;
+        if (widgetListModel) {
+            for (let i = 0; i < widgetListModel.count; i++) {
+                const widget = widgetListModel.get(i);
+                if (widgetInstance && widget.instanceId === widgetInstance.id)
+                    continue;
+                if (Math.abs(rawX - widget.widgetX) >= _snapOrthogonalRange)
+                    continue;
 
-            candidates.push({ "target": otherTop, "guide": otherTop, "distance": Math.abs(rawY - otherTop) });
-            candidates.push({ "target": otherBottom - root.height, "guide": otherBottom, "distance": Math.abs(rawY + root.height - otherBottom) });
-            candidates.push({ "target": otherBottom, "guide": otherBottom, "distance": Math.abs(rawY - otherBottom) });
-            candidates.push({ "target": otherTop - root.height, "guide": otherTop, "distance": Math.abs(rawY + root.height - otherTop) });
+                const widgetId = widget.instanceId || widget.id;
+                const widgetHeight = (widgetSizes && widgetSizes[widgetId] && widgetSizes[widgetId].height > 0)
+                    ? widgetSizes[widgetId].height
+                    : root.height;
+                const otherTop = widget.widgetY;
+                const otherBottom = widget.widgetY + widgetHeight;
+
+                candidates.push({ "target": otherTop, "guide": otherTop, "distance": Math.abs(rawY - otherTop) });
+                candidates.push({ "target": otherBottom - root.height, "guide": otherBottom, "distance": Math.abs(rawY + root.height - otherBottom) });
+                candidates.push({ "target": otherBottom, "guide": otherBottom, "distance": Math.abs(rawY - otherBottom) });
+                candidates.push({ "target": otherTop - root.height, "guide": otherTop, "distance": Math.abs(rawY + root.height - otherTop) });
+            }
         }
+
+        // Monitor-centre constraint: aligns the widget's centre with the horizontal centre line.
+        const screenCenterY = root.scaledScreenHeight / 2;
+        candidates.push({
+            "target": screenCenterY - root.height / 2,
+            "guide": screenCenterY,
+            "distance": Math.abs((rawY + root.height / 2) - screenCenterY)
+        });
 
         return WidgetDragMath.nearestValidCandidate(candidates, 0, dragMaximumY(), _snapEnter);
     }
 
     function applyGridAndSnapX(rawX, rawY) {
         const canvas = findCanvas(root.parent);
+        if (_ctrlHeld) {
+            // Precise placement: raw position only, no grid, no snap guides.
+            if (canvas)
+                canvas.snapLineX = -1;
+            return rawX;
+        }
         let targetXVal = (Config.options.background.widgets.enableGrid ?? false) ? advanceGridX(rawX) : rawX;
         let snapped = false;
 
@@ -501,6 +549,12 @@ AbstractWidget {
 
     function applyGridAndSnapY(rawY, rawX) {
         const canvas = findCanvas(root.parent);
+        if (_ctrlHeld) {
+            // Precise placement: raw position only, no grid, no snap guides.
+            if (canvas)
+                canvas.snapLineY = -1;
+            return rawY;
+        }
         let targetYVal = (Config.options.background.widgets.enableGrid ?? false) ? advanceGridY(rawY) : rawY;
         let snapped = false;
 
@@ -535,7 +589,8 @@ AbstractWidget {
     animateXPos: !isDragging && !isDraggingOrSettling && (visibleWhenLocked || !GlobalStates.screenLocked)
     animateYPos: !isDragging && !isDraggingOrSettling && (visibleWhenLocked || !GlobalStates.screenLocked)
 
-    onReleased: {
+    onReleased: mouse => {
+        setCtrlBypass(Boolean(mouse.modifiers & Qt.ControlModifier));
         if (!_pointerGestureReady) {
             isDraggingOrSettling = false;
             return;
