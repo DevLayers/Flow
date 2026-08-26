@@ -348,15 +348,14 @@ class SearchRaycastContractTests(unittest.TestCase):
         # Length invariant: nothing may survive past the end of the new rows.
         self.assertIn("while (resultModel.count > rows.length)", widget)
 
-    def test_file_search_can_run_without_a_prefix_and_stays_bounded(self):
+    def test_file_search_can_run_without_a_prefix_and_keeps_complete_matches(self):
         launcher = source("services/LauncherSearch.qml")
         widget = source("modules/ii/overview/SearchWidget.qml")
         config = source("modules/common/Config.qml")
 
-        # The toggle, and the levers that keep it affordable.
+        # The toggle, preview limit, and threaded worker control the cost.
         self.assertIn("property bool inlineResults: false", config)
         self.assertIn("property int minimumQueryLength: 3", config)
-        self.assertIn("property int walkLimit: 60", config)
         self.assertIn("property int threads: 4", config)
 
         # The walk must never sit on the keystroke path, and must never start
@@ -365,9 +364,11 @@ class SearchRaycastContractTests(unittest.TestCase):
         self.assertIn("function fileSearchExpression(query: string): string", launcher)
         self.assertIn("root.queryUsesPrefix(query) || root.isMathQuery(query)", launcher)
 
-        # `--max-results` is what makes fd quit early instead of walking the
-        # whole tree; without it a keystroke costs a full traversal.
-        self.assertIn('"--max-results", String(walkLimit)', launcher)
+        # A result cap before ranking silently drops relevant files. The normal
+        # Search surface gets a preview slice only after the complete ranking.
+        self.assertNotIn('"--max-results"', launcher)
+        self.assertIn("root.allFileResults = root.rankFilePaths(lines, root._fileQuery, 0)", launcher)
+        self.assertIn("root.fileResults = root.allFileResults.slice(0, limit)", launcher)
         self.assertIn('command.push("--threads", String(threads))', launcher)
 
         # A query is user text, not a regex: an unescaped bracket would make fd
@@ -381,6 +382,31 @@ class SearchRaycastContractTests(unittest.TestCase):
         self.assertIn('return "files"', widget)
         self.assertIn('id: "files"', registry)
         self.assertIn('title: qsTr("Files & folders")', registry)
+
+    def test_file_results_can_be_browsed_in_full_and_folders_pinned_from_search(self):
+        actions = source("modules/common/SearchResultActions.qml")
+        launcher = source("services/LauncherSearch.qml")
+        states = source("GlobalStates.qml")
+        taskbar = source("services/TaskbarApps.qml")
+        browser = source("modules/ii/overview/FileBrowserPanel.qml")
+
+        # Search rows need the real absolute path, not their shortened display
+        # name, when toggling a dock folder.
+        self.assertIn("const folderPath = String(entry.filePath ?? itemName)", actions)
+        self.assertIn("TaskbarApps.togglePinnedFile(folderPath)", actions)
+        self.assertIn("function togglePinnedFile(path)", taskbar)
+
+        # The short result list is only a preview. The complete ranked snapshot
+        # is passed to the hosted File Browser by an ephemeral global intent.
+        self.assertIn("property var allFileResults: []", launcher)
+        self.assertIn("root.fileResults = root.allFileResults.slice", launcher)
+        self.assertIn("GlobalStates.openFileBrowserResults", actions)
+        self.assertIn("function openFileBrowserResults(paths, query, monitorName)", states)
+        self.assertIn("property var fileBrowserSearchResults: []", states)
+        self.assertIn("function consumeGlobalSearchResults", browser)
+        self.assertIn("readonly property var displayedEntries", browser)
+        self.assertIn('id: "pin-folder"', browser)
+        self.assertIn("function togglePinnedFolder", browser)
 
     def test_result_group_priority_is_user_orderable(self):
         registry = source("modules/common/SearchResultSectionRegistry.qml")
@@ -1058,6 +1084,32 @@ class SearchRaycastContractTests(unittest.TestCase):
         self.assertIn("property bool tintFromArtwork: false", config)
         self.assertIn("property bool showPlayerName: true", config)
         self.assertIn("Config.options.search.nowPlaying?.enable", app_search_config)
+
+    def test_search_appearance_settings_drive_the_rendered_surface(self):
+        launcher_config = source("modules/settings/configs/LauncherConfig.qml")
+        appearance_config = source("modules/settings/configs/widgets/LauncherAppearanceConfig.qml")
+        widget = source("modules/ii/overview/SearchWidget.qml")
+
+        # Centered Search has a persisted vertical placement control, and it is
+        # unavailable while the center positioning mode itself is inactive.
+        self.assertIn('text: Translation.tr("Centered search vertical position")', launcher_config)
+        self.assertIn("Config.options.search.centerVerticalRatio = value / 100", launcher_config)
+        self.assertIn('enabled: Config.options.search.positionStyle === "center"', launcher_config)
+
+        # The accent settings must affect every hosted keyword panel, including
+        # Clipboard and Translator, rather than only the registry subset marked
+        # with accent: true.
+        self.assertIn("readonly property bool showPanelAccent: root.activePanelUsesHost", widget)
+        self.assertIn("root.showPanelAccent ? Appearance.colors.colBackgroundSurfaceContainerAccent", widget)
+        self.assertIn("Config.options.search.appearance.accentPanels", appearance_config)
+        self.assertIn("Config.options.search.appearance.accentStrength", appearance_config)
+
+        # The max-height control limits the normal result list as a complete
+        # Search surface (bar plus results) and applies live after a slider edit.
+        self.assertIn("readonly property real normalSearchChromeHeight", widget)
+        self.assertIn("Config.options.search.baseHeight", widget)
+        self.assertIn("onMaxResultsHeightChanged", widget)
+        self.assertNotIn("readonly property real maxResultsHeight: 600", widget)
 
 
 if __name__ == "__main__":

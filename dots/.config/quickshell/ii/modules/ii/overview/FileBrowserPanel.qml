@@ -40,9 +40,14 @@ Item {
     property string editorTargetPath: ""
     property var pendingTrashPaths: []
     property int trashPresentedCount: 0
+    property bool globalSearchMode: false
+    property string globalSearchQuery: ""
+    property var globalSearchEntries: []
+    property int consumedGlobalSearchRequest: -1
     readonly property bool supportsSectionToggle: true
     readonly property bool keepAlive: backend.loading || backend.inspecting || backend.operating
-    readonly property bool contentReady: !backend.loading && backend.currentPath.length > 0
+    readonly property bool listLoading: backend.loading && !root.globalSearchMode
+    readonly property bool contentReady: root.globalSearchMode || (!backend.loading && backend.currentPath.length > 0)
 
     signal requestSetSearchQuery(string query)
     signal requestFocusSearchInput()
@@ -61,6 +66,7 @@ Item {
     }
 
     readonly property string homePath: FileUtils.trimFileProtocol(Directories.home).replace(/\/$/, "")
+    readonly property var displayedEntries: root.globalSearchMode ? root.globalSearchEntries : backend.entries
     readonly property var filteredEntries: root.filterEntries()
     readonly property var selectedEntry: root.selectedIndex >= 0 && root.selectedIndex < root.filteredEntries.length
         ? root.filteredEntries[root.selectedIndex]
@@ -72,7 +78,9 @@ Item {
         ? root.noticeText
         : backend.operating
             ? Translation.tr("Working on files…")
-            : backend.loading
+            : root.globalSearchMode
+            ? Translation.tr("%1 results for %2").arg(String(root.filteredEntries.length)).arg(root.globalSearchQuery)
+            : root.listLoading
             ? Translation.tr("Reading %1…").arg(root.displayPath(backend.pendingListPath))
             : backend.errorText.length > 0
                 ? backend.errorText
@@ -170,7 +178,7 @@ Item {
     }
 
     function filterEntries(): var {
-        const rows = Array.from(backend.entries ?? []);
+        const rows = Array.from(root.displayedEntries ?? []);
         const terms = root.searchQuery.trim().toLocaleLowerCase().split(/\s+/).filter(term => term.length > 0);
         if (terms.length === 0)
             return rows;
@@ -204,16 +212,17 @@ Item {
             { id: "external", label: Translation.tr("Open externally"), icon: "launch", actionId: "secondary", keys: ["Ctrl", "↵"], enabled: canUseEntry },
             { id: "mark", label: root.isMarked(root.selectedEntry?.path) ? Translation.tr("Unmark item") : Translation.tr("Mark item"), icon: "select_check_box", actionId: "select", keys: ["Ctrl", "Space"], enabled: canUseEntry },
             { id: "copy-path", label: Translation.tr("Copy path"), icon: "content_copy", actionId: "copy", keys: ["Ctrl", "C"], enabled: canUseEntry },
+            { id: "pin-folder", label: root.isPinnedFolder(root.selectedEntry?.path) ? Translation.tr("Unpin folder from Dock") : Translation.tr("Pin folder to Dock"), icon: root.isPinnedFolder(root.selectedEntry?.path) ? "folder_off" : "create_new_folder", enabled: canUseEntry && root.selectedEntry?.isDir },
             { id: "stage-copy", label: Translation.tr("Copy for paste"), icon: "file_copy", actionId: "stageCopy", keys: ["Ctrl", "Shift", "C"], enabled: canUseEntry },
             { id: "cut", label: Translation.tr("Cut for paste"), icon: "content_cut", actionId: "cut", keys: ["Ctrl", "X"], enabled: canUseEntry },
-            { id: "paste", label: Translation.tr("Paste here"), icon: "content_paste", actionId: "paste", keys: ["Ctrl", "V"], enabled: root.contentReady && !backend.operating && root.stagedPaths.length > 0 },
+            { id: "paste", label: Translation.tr("Paste here"), icon: "content_paste", actionId: "paste", keys: ["Ctrl", "V"], enabled: root.contentReady && !root.globalSearchMode && !backend.operating && root.stagedPaths.length > 0 },
             { id: "rename", label: Translation.tr("Rename"), icon: "drive_file_rename_outline", actionId: "edit", keys: ["Ctrl", "E"], enabled: canMutateEntry },
             { id: "duplicate", label: Translation.tr("Duplicate"), icon: "control_point_duplicate", actionId: "duplicate", keys: ["Ctrl", "D"], enabled: canMutateEntry },
-            { id: "new-file", label: Translation.tr("New file"), icon: "note_add", actionId: "create", keys: ["Ctrl", "N"], enabled: root.contentReady && !backend.operating },
-            { id: "new-folder", label: Translation.tr("New folder"), icon: "create_new_folder", actionId: "createFolder", keys: ["Ctrl", "Shift", "N"], enabled: root.contentReady && !backend.operating },
+            { id: "new-file", label: Translation.tr("New file"), icon: "note_add", actionId: "create", keys: ["Ctrl", "N"], enabled: root.contentReady && !root.globalSearchMode && !backend.operating },
+            { id: "new-folder", label: Translation.tr("New folder"), icon: "create_new_folder", actionId: "createFolder", keys: ["Ctrl", "Shift", "N"], enabled: root.contentReady && !root.globalSearchMode && !backend.operating },
             { id: "hidden", label: root.showHidden ? Translation.tr("Hide dotfiles") : Translation.tr("Show dotfiles"), icon: root.showHidden ? "visibility_off" : "visibility", actionId: "toggleHidden", keys: ["Ctrl", "H"], enabled: true },
             { id: "sort", label: Translation.tr("Change sort order"), icon: "sort", actionId: "sortFiles", keys: ["Ctrl", "Shift", "S"], enabled: true },
-            { id: "home", label: Translation.tr("Go home"), icon: "home", actionId: "goHome", keys: ["Ctrl", "Home"], enabled: backend.currentPath !== root.homePath },
+            { id: "home", label: Translation.tr("Go home"), icon: "home", actionId: "goHome", keys: ["Ctrl", "Home"], enabled: root.globalSearchMode || backend.currentPath !== root.homePath },
             { id: "forward", label: Translation.tr("Go forward"), icon: "arrow_forward", actionId: "forward", keys: ["Alt", "→"], enabled: root.forwardHistory.length > 0 },
             { id: "refresh", label: Translation.tr("Refresh directory"), icon: "refresh", actionId: "refresh", keys: ["Ctrl", "R"], enabled: true },
             { id: "trash", label: Translation.tr("Move to Trash"), icon: "delete", actionId: "delete", keys: ["Shift", "Del"], enabled: canMutateEntry }
@@ -245,10 +254,76 @@ Item {
         return true;
     }
 
+    function searchEntryFromPath(rawPath): var {
+        const sourcePath = String(rawPath ?? "");
+        const isDir = sourcePath.endsWith("/");
+        const path = isDir ? sourcePath.slice(0, -1) : sourcePath;
+        if (path.length === 0)
+            return null;
+        const separator = path.lastIndexOf("/");
+        const name = separator >= 0 ? path.slice(separator + 1) : path;
+        const parent = separator > 0 ? path.slice(0, separator) : "/";
+        const dot = name.lastIndexOf(".");
+        return {
+            path: path,
+            name: name,
+            parent: parent,
+            isDir: isDir,
+            isSymlink: false,
+            isImage: false,
+            isVideo: false,
+            isAudio: false,
+            isPdf: false,
+            isText: false,
+            executable: false,
+            extension: !isDir && dot > 0 ? name.slice(dot + 1) : "",
+            mime: isDir ? "inode/directory" : "",
+            size: 0,
+            modifiedMs: 0,
+            createdMs: 0,
+            createdIsChangeTime: false,
+            permissions: "—",
+            mode: "",
+            owner: "—",
+            group: "—"
+        };
+    }
+
+    function consumeGlobalSearchResults(): void {
+        const request = Number(GlobalStates.fileBrowserSearchRequest ?? 0);
+        if (request === root.consumedGlobalSearchRequest)
+            return;
+        root.consumedGlobalSearchRequest = request;
+        const entries = Array.from(GlobalStates.fileBrowserSearchResults ?? [])
+            .map(path => root.searchEntryFromPath(path))
+            .filter(entry => entry !== null);
+        root.globalSearchEntries = entries;
+        root.globalSearchQuery = String(GlobalStates.fileBrowserSearchQuery ?? "");
+        root.globalSearchMode = entries.length > 0;
+        root.markedPaths = ({});
+        root.confirmTrash = false;
+        root.actionMenuOpen = false;
+        root.selectedIndex = entries.length > 0 ? 0 : -1;
+        if (root.globalSearchMode)
+            root.clampSelection();
+    }
+
+    function leaveGlobalSearchResults(): bool {
+        if (!root.globalSearchMode)
+            return false;
+        root.globalSearchMode = false;
+        root.globalSearchEntries = [];
+        root.globalSearchQuery = "";
+        root.markedPaths = ({});
+        root.selectedIndex = -1;
+        return true;
+    }
+
     function enterDirectory(path, remember = true): bool {
         const target = String(path ?? "").replace(/\/$/, "") || "/";
         if (target.length === 0)
             return false;
+        root.leaveGlobalSearchResults();
         if (remember && backend.currentPath.length > 0 && target !== backend.currentPath) {
             root.backHistory = root.backHistory.concat([{ path: backend.currentPath, index: root.selectedIndex }]);
             root.forwardHistory = [];
@@ -263,6 +338,13 @@ Item {
     function navigateBack(): bool {
         if (root.handleEscape())
             return true;
+        if (root.globalSearchMode) {
+            root.leaveGlobalSearchResults();
+            root.backHistory = [];
+            root.forwardHistory = [];
+            backend.listDirectory(root.homePath, root.showHidden, root.sortMode, root.sortDescending);
+            return true;
+        }
         if (root.backHistory.length > 0) {
             const item = root.backHistory[root.backHistory.length - 1];
             root.backHistory = root.backHistory.slice(0, -1);
@@ -442,6 +524,21 @@ Item {
         return true;
     }
 
+    function isPinnedFolder(path): bool {
+        return TaskbarApps.isPinnedFile(String(path ?? ""));
+    }
+
+    function togglePinnedFolder(): bool {
+        const entry = root.selectedEntry;
+        if (!entry?.isDir)
+            return false;
+        TaskbarApps.togglePinnedFile(entry.path);
+        root.showNotice(TaskbarApps.isPinnedFile(entry.path)
+            ? Translation.tr("Folder pinned to Dock")
+            : Translation.tr("Folder unpinned from Dock"));
+        return true;
+    }
+
     function operationTargets(): var {
         if (!root.contentReady)
             return [];
@@ -541,6 +638,10 @@ Item {
     }
 
     function refreshDirectory(): bool {
+        if (root.globalSearchMode) {
+            backend.inspect(String(root.selectedEntry?.path ?? ""));
+            return true;
+        }
         if (backend.currentPath.length === 0)
             return false;
         backend.listDirectory(backend.currentPath, root.showHidden, root.sortMode, root.sortDescending);
@@ -548,6 +649,13 @@ Item {
     }
 
     function goHome(): bool {
+        if (root.globalSearchMode) {
+            root.leaveGlobalSearchResults();
+            root.backHistory = [];
+            root.forwardHistory = [];
+            backend.listDirectory(root.homePath, root.showHidden, root.sortMode, root.sortDescending);
+            return true;
+        }
         return backend.currentPath === root.homePath ? false : root.enterDirectory(root.homePath, true);
     }
 
@@ -602,6 +710,7 @@ Item {
         case "external": return root.secondaryActivateSelected();
         case "mark": return root.toggleSelection();
         case "copy-path": return root.copySelected();
+        case "pin-folder": return root.togglePinnedFolder();
         case "stage-copy": return root.stageCopy();
         case "cut": return root.cutSelected();
         case "paste": return root.pasteClipboard();
@@ -635,7 +744,9 @@ Item {
     }
 
     Component.onCompleted: {
-        backend.listDirectory(root.homePath, root.showHidden, root.sortMode, root.sortDescending);
+        root.consumeGlobalSearchResults();
+        if (!root.globalSearchMode)
+            backend.listDirectory(root.homePath, root.showHidden, root.sortMode, root.sortDescending);
     }
 
     Timer {
@@ -753,8 +864,10 @@ Item {
         target: backend
 
         function onDirectoryLoaded(path) {
-            root.selectedIndex = backend.entries.length > 0
-                ? Math.max(0, Math.min(root.pendingSelectionIndex < 0 ? 0 : root.pendingSelectionIndex, backend.entries.length - 1))
+            if (root.globalSearchMode)
+                return;
+            root.selectedIndex = root.filteredEntries.length > 0
+                ? Math.max(0, Math.min(root.pendingSelectionIndex < 0 ? 0 : root.pendingSelectionIndex, root.filteredEntries.length - 1))
                 : -1;
             root.pendingSelectionIndex = -1;
             root.clampSelection();
@@ -776,6 +889,14 @@ Item {
                 if (changedAnything)
                     root.refreshDirectory();
             }
+        }
+    }
+
+    Connections {
+        target: GlobalStates
+
+        function onFileBrowserSearchRequestChanged() {
+            root.consumeGlobalSearchResults();
         }
     }
 
@@ -970,7 +1091,7 @@ Item {
                                 Layout.fillWidth: true
                                 Layout.fillHeight: true
                                 model: root.filteredEntries
-                                visible: !backend.loading && root.filteredEntries.length > 0
+                                visible: !root.listLoading && root.filteredEntries.length > 0
                                 clip: true
                                 spacing: Appearance.sizes.elevationMargin / 3
                                 boundsBehavior: Flickable.StopAtBounds
@@ -993,8 +1114,7 @@ Item {
                                     colBackground: selected ? Appearance.colors.colPrimaryContainer : Appearance.colors.colSurfaceContainerHigh
                                     colBackgroundHover: selected ? Appearance.colors.colPrimaryContainerHover : Appearance.colors.colSurfaceContainerHighestHover
                                     colRipple: selected ? Appearance.colors.colPrimaryContainerActive : Appearance.colors.colSurfaceContainerHighestActive
-                                    onClicked: root.selectedIndex = index
-                                    onDoubleClicked: { root.selectedIndex = index; root.activateSelected(); }
+                                    onClicked: { root.selectedIndex = index; root.activateSelected(); }
                                     onHoveredChanged: if (hovered) root.selectedIndex = index
 
                                     RowLayout {
@@ -1070,7 +1190,7 @@ Item {
                             Item {
                                 Layout.fillWidth: true
                                 Layout.fillHeight: true
-                                visible: !backend.loading && root.filteredEntries.length === 0
+                                visible: !root.listLoading && root.filteredEntries.length === 0
                                 ColumnLayout {
                                     anchors.centerIn: parent
                                     spacing: Appearance.sizes.elevationMargin
@@ -1089,7 +1209,7 @@ Item {
                             Item {
                                 Layout.fillWidth: true
                                 Layout.fillHeight: true
-                                visible: backend.loading
+                                visible: root.listLoading
                                 ColumnLayout {
                                     anchors.centerIn: parent
                                     spacing: Appearance.sizes.elevationMargin

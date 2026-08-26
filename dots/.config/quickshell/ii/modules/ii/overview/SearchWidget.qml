@@ -68,13 +68,22 @@ Item {
     // Rows a single section may claim before every other section has had its
     // turn at the page budget. Its long tail comes back on the second pass.
     readonly property int sectionPageLimit: 8
-    // Tallest the result list is allowed to get before it starts scrolling.
-    readonly property real maxResultsHeight: 600
+    // `baseHeight` describes the complete normal Search surface, not only its
+    // rows. Reserve the field's own chrome so changing the Settings slider
+    // immediately changes where the regular result list begins scrolling.
+    readonly property real normalSearchChromeHeight: searchBar.implicitHeight + searchBar.verticalPadding * 2
+    readonly property real maxResultsHeight: Math.max(0,
+        (Config.options.search.baseHeight ?? 500) - root.normalSearchChromeHeight)
     property int loadedResultsCount: root.resultPageSize
     // Left/Right stays available to edit the query unless the selected row is
     // one of the Settings controls that can consume a horizontal adjustment.
     property bool selectedResultHandlesHorizontalNavigation: false
     property string actionFeedbackText: ""
+
+    onMaxResultsHeightChanged: {
+        if (appResults)
+            appResults.updateMeasuredContentExtent();
+    }
 
     function showActionFeedback(message) {
         const text = String(message ?? "").trim();
@@ -168,6 +177,7 @@ Item {
     // declared panel width remains the usable width, not the clipped width.
     readonly property real hostedPanelSideMargin: Appearance.sizes.elevationMargin
     readonly property bool activePanelUsesHost: root.activePanel?.hosted === true
+    readonly property bool showPanelAccent: root.activePanelUsesHost
     readonly property bool isClipboardMode: root.activePanelId === "clipboard"
     readonly property bool isBluetoothMode: root.activePanelId === "bluetooth"
     readonly property bool isTranslatorMode: root.activePanelId === "translator"
@@ -314,6 +324,8 @@ Item {
         if (prefix.length === 0)
             return false;
         root.requestedPanelId = panel.id;
+        if (panel.id === "fileBrowser")
+            GlobalStates.clearFileBrowserSearchResults();
         root.setSearchingText(root.searchingText.slice(prefix.length));
         return true;
     }
@@ -1324,9 +1336,12 @@ Item {
             const t = Math.max(0, Math.min(1, grown / searchWidgetContent.cornerBlendDistance));
             return pill + (panel - pill) * t;
         }
+        // The appearance setting is for every panel routed from Search. Some
+        // older registry entries opted out individually, making the control
+        // look broken for common prefixes such as Clipboard and Translator.
         color: GlobalStates.searchConnectActive ? "transparent"
-             : (root.activePanel?.accent ? Appearance.colors.colBackgroundSurfaceContainerAccent
-                                        : Appearance.colors.colBackgroundSurfaceContainer)
+             : (root.showPanelAccent ? Appearance.colors.colBackgroundSurfaceContainerAccent
+                                     : Appearance.colors.colBackgroundSurfaceContainer)
 
         Behavior on color {
             ColorAnimation {

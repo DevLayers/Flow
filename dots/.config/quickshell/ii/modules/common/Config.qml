@@ -3883,16 +3883,11 @@ Singleton {
                     // One or two letters match a large share of a home directory.
                     // The walk is only worth starting once the query narrows.
                     property int minimumQueryLength: 3
+                    // This caps only Search's inline preview. Every matching
+                    // path is still ranked and can be opened in File Browser.
                     property int maxResults: 8
-                    // `fd --max-results` makes the walk quit as soon as it has
-                    // this many hits instead of traversing the whole tree — the
-                    // difference between ~9ms and ~290ms on a real home
-                    // directory. Ranking then reorders whatever came back, so
-                    // this is a walk budget, not the number of rows shown.
-                    property int walkLimit: 60
-                    // A query that matches almost nothing never fills the walk
-                    // budget, so it pays for the whole tree — the worst case.
-                    // Depth bounds that walk; 0 leaves it unbounded.
+                    // Depth limits the complete traversal; 0 leaves it
+                    // unbounded inside the configured search directory.
                     property int maxDepth: 0
                     // fd saturates every core by default. On a 16-core machine
                     // that measured 1351% CPU and 0.70s of CPU time for one

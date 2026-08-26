@@ -301,20 +301,6 @@ Item {
                     }
 
                     ConfigSpinBox {
-                        icon: "speed"
-                        text: Translation.tr("Walk budget")
-                        value: Config.options.search.fileSearch.walkLimit
-                        from: 20
-                        to: 400
-                        stepSize: 10
-                        enabled: Config.options.search.fileSearch.inlineResults
-                        onValueChanged: Config.options.search.fileSearch.walkLimit = value
-                        StyledToolTip {
-                            text: Translation.tr("How many matches the walk collects before it stops. This is what decides how long a search costs — the results shown above are ranked out of this pool.")
-                        }
-                    }
-
-                    ConfigSpinBox {
                         icon: "account_tree"
                         text: Translation.tr("Maximum folder depth (0 = unlimited)")
                         value: Config.options.search.fileSearch.maxDepth
@@ -324,7 +310,7 @@ Item {
                         enabled: Config.options.search.fileSearch.inlineResults
                         onValueChanged: Config.options.search.fileSearch.maxDepth = value
                         StyledToolTip {
-                            text: Translation.tr("A query matching almost nothing never fills the walk budget, so it pays for the whole tree. Capping the depth bounds that worst case, at the cost of missing files buried deeper. The prefix always searches to full depth.")
+                            text: Translation.tr("Capping depth shortens a complete filesystem search, at the cost of omitting files buried deeper. The file-search prefix always searches to full depth.")
                         }
                     }
                 }

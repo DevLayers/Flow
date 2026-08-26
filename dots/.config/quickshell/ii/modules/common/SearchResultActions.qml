@@ -118,21 +118,32 @@ Singleton {
         if (contentType === "filepath" || itemType === Translation.tr("Directory") || itemType === Translation.tr("Folder Alias")) {
             const isDir = itemType === Translation.tr("Directory") || itemType === Translation.tr("Folder Alias");
             if (isDir) {
-                const pinnedFiles = Config.options?.dock?.pinnedFiles ?? [];
-                const cleanPath = itemName.replace(/^file:\/\//, "");
-                const isPinned = pinnedFiles.includes(cleanPath);
+                // File-search rows deliberately display just the basename. Pinning
+                // that label used to create an unusable relative dock entry; the
+                // canonical result path is the only stable dock identity.
+                const folderPath = String(entry.filePath ?? itemName);
+                const isPinned = TaskbarApps.isPinnedFile(folderPath);
                 items.push({
                     name: isPinned ? Translation.tr("Unpin folder from Dock") : Translation.tr("Pin folder to Dock"),
                     icon: isPinned ? "folder_off" : "create_new_folder",
                     execute: () => {
-                        if (isPinned)
-                            TaskbarApps.removePinnedFile(itemName);
-                        else
-                            TaskbarApps.addPinnedFile(itemName);
+                        TaskbarApps.togglePinnedFile(folderPath);
                         done();
                     }
                 });
             }
+        }
+
+        if (key.startsWith("fsearch:") && LauncherSearch.allFileResults.length > 0) {
+            const resultCount = LauncherSearch.allFileResults.length;
+            items.push({
+                name: Translation.tr("Browse %1 results in File Browser").arg(String(resultCount)),
+                icon: "folder_search",
+                execute: () => {
+                    GlobalStates.openFileBrowserResults(LauncherSearch.allFileResults, LauncherSearch.fileSearchQuery);
+                    done();
+                }
+            });
         }
 
         return items;

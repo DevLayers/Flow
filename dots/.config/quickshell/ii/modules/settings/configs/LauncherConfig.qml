@@ -126,6 +126,17 @@ Item {
                     onCheckedChanged: Config.options.search.positionStyle = checked ? "center" : "default"
                 }
                 ConfigSlider {
+                    buttonIcon: "vertical_align_center"
+                    text: Translation.tr("Centered search vertical position")
+                    value: Config.options.search.centerVerticalRatio * 100
+                    from: 10
+                    to: 90
+                    stepSize: 1
+                    usePercentTooltip: true
+                    enabled: Config.options.search.positionStyle === "center"
+                    onValueChanged: Config.options.search.centerVerticalRatio = value / 100
+                }
+                ConfigSlider {
                     buttonIcon: "search"
                     text: Translation.tr("Search base width (px)")
                     value: Config.options.search.baseWidth

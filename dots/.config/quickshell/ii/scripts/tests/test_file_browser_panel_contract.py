@@ -55,6 +55,20 @@ class FileBrowserPanelContractTests(unittest.TestCase):
         panel = source("modules/ii/overview/FileBrowserPanel.qml")
         self.assertIn("ScrollEdgeFade {\n                                    target: fileList", panel)
 
+    def test_file_rows_activate_on_single_click(self):
+        panel = source("modules/ii/overview/FileBrowserPanel.qml")
+        ripple_button = source("modules/common/widgets/RippleButton.qml")
+
+        # The File Browser chooses direct activation: a click selects the row
+        # and opens its file or directory in the same gesture.
+        self.assertIn("onClicked: { root.selectedIndex = index; root.activateSelected(); }", panel)
+        self.assertNotIn("onDoubleClicked: { root.selectedIndex = index; root.activateSelected(); }", panel)
+
+        # RippleButton still forwards the native double-click signal for the
+        # other panels that intentionally use the conventional interaction.
+        self.assertIn("onDoubleClicked: event =>", ripple_button)
+        self.assertIn("root.doubleClicked()", ripple_button)
+
     def test_panel_motion_spacing_and_size_controls_are_explicit(self):
         panel = source("modules/ii/overview/FileBrowserPanel.qml")
         settings = source("modules/settings/configs/widgets/LauncherModulesConfig.qml")

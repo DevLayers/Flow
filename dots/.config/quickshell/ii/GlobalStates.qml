@@ -281,6 +281,12 @@ Singleton {
     property string searchPendingPanel: ""
     property string searchPendingPanelQuery: ""
     property int searchPanelNavigationRequest: 0
+    // A search result snapshot belongs to the File Browser surface, not to a
+    // second LauncherSearch provider. The monotonically increasing request lets
+    // a kept-alive panel consume each transient handoff exactly once.
+    property var fileBrowserSearchResults: []
+    property string fileBrowserSearchQuery: ""
+    property int fileBrowserSearchRequest: 0
     property bool searchDropActive: false
     property real searchDropExclusionX: 0
     property real searchDropExclusionY: 0
@@ -897,8 +903,29 @@ Singleton {
         const requested = String(panelId ?? "").trim();
         if (requested.length === 0)
             return;
+        if (requested === "fileBrowser")
+            root.clearFileBrowserSearchResults();
         root.searchPendingPanel = requested;
         root.searchPendingPanelQuery = String(initialQuery ?? "");
+        root.searchPanelNavigationRequest++;
+        root.openSearch(monitorName);
+    }
+
+    function clearFileBrowserSearchResults() {
+        root.fileBrowserSearchResults = [];
+        root.fileBrowserSearchQuery = "";
+        root.fileBrowserSearchRequest++;
+    }
+
+    function openFileBrowserResults(paths, query, monitorName) {
+        const results = Array.from(paths ?? []).filter(path => String(path ?? "").length > 0);
+        if (results.length === 0)
+            return;
+        root.fileBrowserSearchResults = results;
+        root.fileBrowserSearchQuery = String(query ?? "");
+        root.fileBrowserSearchRequest++;
+        root.searchPendingPanel = "fileBrowser";
+        root.searchPendingPanelQuery = "";
         root.searchPanelNavigationRequest++;
         root.openSearch(monitorName);
     }

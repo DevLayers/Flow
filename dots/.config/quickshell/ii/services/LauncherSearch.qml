@@ -1019,6 +1019,7 @@ Singleton {
     onQueryChanged: {
         root.selectedResult = null;
         root.processConfirmKey = "";
+        root._fileSearchGeneration++;
         fileProc.running = false;
         mathProc.running = false; // Stop active math calculation instantly to resolve race conditions and QML coalescing
 
@@ -1031,6 +1032,10 @@ Singleton {
             ? 2
             : Math.max(2, Config.options.search.fileSearch?.minimumQueryLength ?? 3);
         if (fileExpression.length >= fileMinimum) {
+            if (root._fileQuery !== fileExpression) {
+                root.fileResults = [];
+                root.allFileResults = [];
+            }
             root._fileQuery = fileExpression;
             fileSearchDebounce.restart();
         } else {
@@ -1038,6 +1043,8 @@ Singleton {
             root._fileQuery = "";
             if (root.fileResults.length > 0)
                 root.fileResults = [];
+            if (root.allFileResults.length > 0)
+                root.allFileResults = [];
         }
 
         if (!root.isMathQuery(root.query)) {
@@ -1081,9 +1088,14 @@ Singleton {
     // out and walks a directory tree, so it is the only one that has to stay
     // off the keystroke path entirely: the query queues a walk, the rest of the
     // results render immediately, and the list simply grows when files arrive.
+    // Keep the complete ranked snapshot as well: the Search surface uses its
+    // configured preview length, while File Browser can present every match.
     property var fileResults: []
+    property var allFileResults: []
     property string _fileQuery: ""
     property bool _fileQueryPrefixed: false
+    property int _fileSearchGeneration: 0
+    readonly property string fileSearchQuery: root._fileQuery
 
     readonly property bool fileSearchInlineEnabled: Config.options.search.modules.fileSearch
         && (Config.options.search.fileSearch?.inlineResults ?? false)
@@ -1111,8 +1123,7 @@ Singleton {
     }
 
     /**
-     * `fd --max-results` returns what it found first, not what fits best, so the
-     * ordering has to be rebuilt here.
+     * fd's traversal order is not relevance order, so ordering is rebuilt here.
      *
      * A hit on the entry's own name is what the user meant; one that exists only
      * somewhere up the path is a weak fallback. Shallow beats deep — "downloads"
@@ -1121,7 +1132,7 @@ Singleton {
     function rankFilePaths(paths, query, limit): var {
         const tokens = String(query).toLowerCase().split(/\s+/).filter(token => token.length > 0);
         if (tokens.length === 0)
-            return paths.slice(0, limit);
+            return limit > 0 ? paths.slice(0, limit) : paths.slice();
 
         const scored = [];
         for (let i = 0; i < paths.length; i++) {
@@ -1153,7 +1164,8 @@ Singleton {
         scored.sort((a, b) => b.score - a.score);
 
         const ranked = [];
-        for (let i = 0; i < scored.length && i < limit; i++)
+        const count = limit > 0 ? Math.min(scored.length, limit) : scored.length;
+        for (let i = 0; i < count; i++)
             ranked.push(scored[i].path);
         return ranked;
     }
@@ -1243,11 +1255,12 @@ Singleton {
         // starts one walk instead of one per letter.
         interval: 200
         repeat: false
-        onTriggered: fileProc.searchFiles(root._fileQuery)
+        onTriggered: fileProc.searchFiles(root._fileQuery, root._fileSearchGeneration)
     }
 
     Process {
         id: fileProc
+        property int activeSearchGeneration: 0
 
         /**
          * Whitespace-separated tokens become an ordered "contains" pattern, so
@@ -1262,26 +1275,16 @@ Singleton {
                 .join(".*");
         }
 
-        function searchFiles(expression) {
+        function searchFiles(expression, generation) {
             const pattern = fileProc.searchPattern(expression);
             if (pattern.length === 0)
                 return;
             const settings = Config.options.search.fileSearch;
-            const budget = Math.max(20, settings?.walkLimit ?? 60);
-            // An explicit `,` query asked for files and nothing else, so it can
-            // afford a wider walk than one riding along with an ordinary query.
-            const walkLimit = root._fileQueryPrefixed ? budget * 4 : budget;
-
-            // `--max-results` is the first half of the performance story: fd
-            // quits as soon as it has enough instead of traversing the tree —
-            // ~9ms against ~290ms on a real home directory.
-            //
-            // The second half is the query that matches almost nothing, which
-            // never fills that budget and so pays for the whole walk anyway.
-            // `--threads` bounds what that costs: measured on 16 cores, the
-            // default saturated every one of them for 0.70s of CPU time, while
-            // four threads did the same walk for 0.28s and 50ms more wall time.
-            const command = ["fd", "--color", "never", "--absolute-path", "--max-results", String(walkLimit)];
+            // Completeness matters before ranking: capping fd makes exact
+            // matches disappear simply because unrelated paths were emitted
+            // first. Threads still bound the desktop impact and the debounce
+            // keeps this full traversal out of the keystroke path.
+            const command = ["fd", "--color", "never", "--absolute-path"];
             const threads = Math.max(0, settings?.threads ?? 4);
             if (threads > 0)
                 command.push("--threads", String(threads));
@@ -1300,6 +1303,7 @@ Singleton {
             command.push(pattern, Config.options.search.fileSearchDirectory);
 
             fileProc.running = false;
+            fileProc.activeSearchGeneration = generation;
             fileProc.command = command;
             fileProc.running = true;
         }
@@ -1307,10 +1311,15 @@ Singleton {
         stdout: StdioCollector {
             id: fileCollector
             onStreamFinished: {
+                if (fileProc.activeSearchGeneration !== root._fileSearchGeneration)
+                    return;
                 const lines = fileCollector.text.split("\n").filter(line => line.length > 0);
                 const settings = Config.options.search.fileSearch;
-                const limit = root._fileQueryPrefixed ? 60 : Math.max(1, settings?.maxResults ?? 8);
-                root.fileResults = root.rankFilePaths(lines, root._fileQuery, limit);
+                root.allFileResults = root.rankFilePaths(lines, root._fileQuery, 0);
+                const limit = root._fileQueryPrefixed
+                    ? root.allFileResults.length
+                    : Math.max(1, settings?.maxResults ?? 8);
+                root.fileResults = root.allFileResults.slice(0, limit);
             }
         }
     }

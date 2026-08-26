@@ -322,6 +322,12 @@ Button {
                 return;
             rippleFadeAnim.restart();
         }
+        // The MouseArea replaces Button's built-in pointer handling, so its
+        // double-click must be forwarded explicitly just like clicked above.
+        onDoubleClicked: event => {
+            if (event.button === Qt.LeftButton)
+                root.doubleClicked();
+        }
         onPositionChanged: event => {
             if (root.positionChangedAction)
                 root.positionChangedAction(event);

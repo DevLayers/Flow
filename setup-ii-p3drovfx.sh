@@ -70,6 +70,10 @@
 # unattended and must not rewrite Hyprland underneath you. --hypr is the way to
 # ask for it in a script.
 #
+# Every successful config deployment opens the in-shell Welcome over IPC except
+# `update`. This does not depend on installing the fork's Hyprland files; their
+# Welcome rule only controls whether the compositor floats the window.
+#
 # Options take --flag=value as well as --flag value, and everything after a
 # bare -- is passed through to hyprset/hyprmerge.
 #
@@ -1499,7 +1503,7 @@ open_welcome_after_start() {
     elif have quickshell; then
         ipc_bin="quickshell"
     else
-        ui_warn "Welcome couldn't be opened via IPC, you can open it using SUPER + ALT + SHIFT + /."
+        ui_warn "Welcome couldn't be opened because neither qs nor quickshell is on PATH."
         return 0
     fi
 
@@ -1510,7 +1514,7 @@ open_welcome_after_start() {
         sleep 0.2
     done
 
-    ui_warn "Welcome couldn't be opened via IPC, you can open it using SUPER + ALT + SHIFT + /."
+    ui_warn "Welcome couldn't be opened yet. Once Quickshell is ready, run: $ipc_bin -c ii ipc call welcome open"
     return 0
 }
 
@@ -1749,19 +1753,6 @@ install_hypr_config() {
 apply_config() {
     local url="$1" branch="$2" fork="$3" verb="$4"
     local head="" source_dir="" dirty=""
-    local target_managed=false
-    if [[ -e "$TARGET_DIR" || -L "$TARGET_DIR" ]]; then
-        # The directory may already exist because the base installer created
-        # it, or because the user copied a fork over it by hand.  Neither case
-        # proves that this setup script has deployed this tree before.  Only
-        # our deployment markers are reliable evidence of a managed target.
-        if [[ -f "$TARGET_DIR/.active-fork" ||
-            -f "$TARGET_DIR/.active-remote" ||
-            -f "$TARGET_DIR/.active-local" ||
-            -f "$TARGET_DIR/.active-commit" ]]; then
-            target_managed=true
-        fi
-    fi
 
     if [[ -n "$LOCAL_SRC" ]]; then
         # A local deploy has no remote to speak of, so everything the state
@@ -1888,16 +1879,13 @@ apply_config() {
 
     handle_base_config "$verb"
 
-    # A fresh install is opened explicitly through the running shell's IPC.
-    # Updates and fork switches keep the Welcome closed.
-    local fresh_deploy=false
-    if [[ "$verb" == "install" || ( "$verb" == "apply" && "$target_managed" != true ) ]]; then
-        fresh_deploy=true
-    fi
-
     start_quickshell
 
-    if [[ "$fresh_deploy" == true ]]; then
+    # Applying again is still an installation experience, and switching a fork
+    # introduces a potentially different shell. Only an in-place update should
+    # preserve the current session without reopening onboarding. `fork` and
+    # `branch` are normalized to `switch` before reaching this function.
+    if [[ "$verb" != "update" ]]; then
         open_welcome_after_start
     fi
 
@@ -2323,6 +2311,9 @@ show_help() {
     printf '  %sconfig on ~/.config/hypr, leaving custom/ and anything the repo does%s\n' "$C_SUB" "$C_RST"
     printf '  %snot ship alone. -y answers that question no, not yes; --hypr is the%s\n' "$C_SUB" "$C_RST"
     printf '  %sexplicit yes and --no-hypr the permanent no.%s\n' "$C_SUB" "$C_RST"
+    printf '  %sEvery successful apply, install or switch opens Welcome through the shell;%s\n' "$C_SUB" "$C_RST"
+    printf '  %supdate is the only deployment that keeps it closed. Hyprland files are%s\n' "$C_SUB" "$C_RST"
+    printf '  %soptional: their rule only makes the Welcome window float.%s\n' "$C_SUB" "$C_RST"
     printf '  %sOptions take --flag=value as well as --flag value, and everything after%s\n' "$C_SUB" "$C_RST"
     printf '  %sa bare -- is passed through to hyprset/hyprmerge.%s\n' "$C_SUB" "$C_RST"
     printf '  %sAliases: --no-confirm/--noconfirm (-y), --preserve-config (--keep-config),%s\n' "$C_SUB" "$C_RST"
