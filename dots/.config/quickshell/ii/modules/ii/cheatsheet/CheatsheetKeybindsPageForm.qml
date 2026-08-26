@@ -138,6 +138,18 @@ Item {
     signal pageChosen(string pageId)
     signal closeRequested
 
+    Connections {
+        target: KeybindsService
+        function onOperationFinished(success, message, pageId) {
+            if (!root.isOpen)
+                return;
+            if (success && pageId) {
+                root.pageChosen(pageId);
+                root.startClose();
+            }
+        }
+    }
+
     function openCreate(): void {
         root.mode = "create";
         root.editPageId = "";
@@ -147,6 +159,9 @@ Item {
         root.selectedProgramId = "";
         root.useProgramIcon = false;
         root.isOpen = true;
+        if (!KeybindsService.hasScanned && !KeybindsService.scanning && KeybindsService.detectedSources.length === 0) {
+            KeybindsService.scanKnownPrograms();
+        }
     }
 
     function openEdit(pageId): void {
@@ -370,149 +385,46 @@ Item {
                         anchors.margins: 16
                         spacing: 12
 
-                        StyledText {
-                            text: Translation.tr("Blank page")
-                            font.pixelSize: Appearance.font.pixelSize.large
-                            font.weight: Font.Bold
-                            color: Appearance.colors.colOnSurface
-                        }
-
-                        StyledText {
-                            text: Translation.tr("Only the page name is required. A program label helps identify where the shortcuts belong.")
+                        StyledFlickable {
+                            id: blankPageFlickable
                             Layout.fillWidth: true
-                            wrapMode: Text.Wrap
-                            font.pixelSize: Appearance.font.pixelSize.small
-                            color: Appearance.colors.colOnSurfaceVariant
-                        }
-
-                        MaterialTextField {
-                            id: nameField
-                            Layout.fillWidth: true
-                            placeholderText: Translation.tr("Page name · required")
-                            selectByMouse: true
-                            onTextChanged: error = false
-                            onAccepted: programSelector.forceActiveFocus()
-                        }
-
-                        StyledText {
-                            Layout.fillWidth: true
-                            text: Translation.tr("Page icon")
-                            font.pixelSize: Appearance.font.pixelSize.small
-                            font.weight: Font.Bold
-                            color: Appearance.colors.colOnSurface
-                        }
-
-                        StyledText {
-                            Layout.fillWidth: true
-                            text: Translation.tr("Choose a symbol for this collection")
-                            font.pixelSize: Appearance.font.pixelSize.smallest
-                            color: Appearance.colors.colOnSurfaceVariant
-                        }
-
-                        Flow {
-                            Layout.fillWidth: true
-                            Layout.preferredHeight: implicitHeight
-                            spacing: 6
-
-                            Repeater {
-                                model: root.availableIconChoices
-
-                                delegate: RippleButton {
-                                    required property string modelData
-                                    implicitWidth: 38
-                                    implicitHeight: 34
-                                    buttonRadius: Appearance.rounding.full
-                                    toggled: root.selectedIcon === modelData
-                                    colBackground: toggled ? Appearance.colors.colSecondaryContainer : Appearance.colors.colLayer3
-                                    colBackgroundHover: toggled ? Appearance.colors.colSecondaryContainerHover : Appearance.colors.colLayer3Hover
-                                    colBackgroundActive: toggled ? Appearance.colors.colSecondaryContainerActive : Appearance.colors.colLayer3Active
-                                    Accessible.name: Translation.tr("Page icon") + ": " + modelData
-                                    Accessible.checked: toggled
-                                    onClicked: root.selectedIcon = modelData
-
-                                    contentItem: MaterialSymbol {
-                                        anchors.centerIn: parent
-                                        text: modelData
-                                        iconSize: Appearance.font.pixelSize.normal
-                                        fill: root.selectedIcon === modelData ? 1 : 0
-                                        color: root.selectedIcon === modelData ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colOnSurfaceVariant
-                                    }
-                                }
-                            }
-                        }
-
-                        StyledText {
-                            Layout.fillWidth: true
-                            text: Translation.tr("Related program · optional")
-                            font.pixelSize: Appearance.font.pixelSize.small
-                            font.weight: Font.Bold
-                            color: Appearance.colors.colOnSurface
-                        }
-
-                        StyledText {
-                            Layout.fillWidth: true
-                            text: Translation.tr("Choose an installed app to show its icon in the page rail")
-                            wrapMode: Text.Wrap
-                            font.pixelSize: Appearance.font.pixelSize.smallest
-                            color: Appearance.colors.colOnSurfaceVariant
-                        }
-
-                        StyledComboBox {
-                            id: programSelector
-                            Layout.fillWidth: true
-                            implicitHeight: 46
-                            popupWidth: Math.min(420, pageSurface.width - 64)
-                            model: root.programChoices
-                            textRole: "name"
-                            iconSourceRole: "iconSource"
-                            currentIndex: root.selectedProgramIndex
-                            Accessible.name: Translation.tr("Related program")
-                            onActivated: index => {
-                                const choice = root.programChoices[index];
-                                root.selectedProgram = String(choice?.value ?? "").trim();
-                                root.selectedProgramId = String(choice?.programId ?? choice?.id ?? "").trim();
-                                if (!root.selectedProgramIcon)
-                                    root.useProgramIcon = false;
-                            }
-                        }
-
-                        RowLayout {
-                            Layout.fillWidth: true
-                            visible: Boolean(root.selectedProgram)
-                            spacing: 10
-
-                            Loader {
-                                Layout.preferredWidth: 32
-                                Layout.preferredHeight: 32
-                                active: root.selectedProgramIcon.length > 0
-                                visible: active
-                                sourceComponent: IconImage {
-                                    source: Quickshell.iconPath(root.selectedProgramIcon, "image-missing")
-                                }
-                            }
-
-                            MaterialShape {
-                                visible: !root.selectedProgramIcon
-                                implicitSize: 32
-                                shape: MaterialShape.Shape.Cookie9Sided
-                                color: Appearance.colors.colLayer3
-
-                                MaterialSymbol {
-                                    anchors.centerIn: parent
-                                    text: "apps"
-                                    iconSize: Appearance.font.pixelSize.normal
-                                    color: Appearance.colors.colOnSurfaceVariant
-                                }
-                            }
+                            Layout.fillHeight: true
+                            clip: true
+                            contentWidth: width
+                            contentHeight: blankPageColumn.implicitHeight + 4
 
                             ColumnLayout {
-                                Layout.fillWidth: true
-                                spacing: 0
+                                id: blankPageColumn
+                                width: blankPageFlickable.width
+                                spacing: 12
+
+                                StyledText {
+                                    text: Translation.tr("Blank page")
+                                    font.pixelSize: Appearance.font.pixelSize.large
+                                    font.weight: Font.Bold
+                                    color: Appearance.colors.colOnSurface
+                                }
+
+                                StyledText {
+                                    text: Translation.tr("Only the page name is required. A program label helps identify where the shortcuts belong.")
+                                    Layout.fillWidth: true
+                                    wrapMode: Text.Wrap
+                                    font.pixelSize: Appearance.font.pixelSize.small
+                                    color: Appearance.colors.colOnSurfaceVariant
+                                }
+
+                                MaterialTextField {
+                                    id: nameField
+                                    Layout.fillWidth: true
+                                    placeholderText: Translation.tr("Page name · required")
+                                    selectByMouse: true
+                                    onTextChanged: error = false
+                                    onAccepted: programSelector.forceActiveFocus()
+                                }
 
                                 StyledText {
                                     Layout.fillWidth: true
-                                    text: root.selectedProgram
-                                    elide: Text.ElideRight
+                                    text: Translation.tr("Page icon")
                                     font.pixelSize: Appearance.font.pixelSize.small
                                     font.weight: Font.Bold
                                     color: Appearance.colors.colOnSurface
@@ -520,84 +432,200 @@ Item {
 
                                 StyledText {
                                     Layout.fillWidth: true
-                                    text: root.selectedProgramIcon
-                                        ? Translation.tr("Application icon detected")
-                                        : Translation.tr("No application icon found")
-                                    elide: Text.ElideRight
+                                    text: Translation.tr("Choose a symbol for this collection")
                                     font.pixelSize: Appearance.font.pixelSize.smallest
-                                    color: root.selectedProgramIcon
-                                        ? Appearance.colors.colOnSurfaceVariant
-                                        : Appearance.colors.colError
-                                }
-                            }
-                        }
-
-                        Rectangle {
-                            Layout.fillWidth: true
-                            visible: Boolean(root.selectedProgram)
-                            implicitHeight: 48
-                            radius: Appearance.rounding.normal
-                            color: root.useProgramIcon
-                                ? Appearance.colors.colSecondaryContainer
-                                : Appearance.colors.colLayer3
-
-                            Behavior on color {
-                                animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
-                            }
-
-                            RowLayout {
-                                anchors.fill: parent
-                                anchors.leftMargin: 12
-                                anchors.rightMargin: 10
-                                spacing: 10
-
-                                MaterialSymbol {
-                                    text: "sidebar"
-                                    iconSize: Appearance.font.pixelSize.normal
-                                    color: root.useProgramIcon
-                                        ? Appearance.colors.colOnSecondaryContainer
-                                        : Appearance.colors.colOnSurfaceVariant
+                                    color: Appearance.colors.colOnSurfaceVariant
                                 }
 
-                                ColumnLayout {
+                                Flow {
                                     Layout.fillWidth: true
-                                    spacing: 0
+                                    Layout.preferredHeight: implicitHeight
+                                    spacing: 6
 
-                                    StyledText {
-                                        Layout.fillWidth: true
-                                        text: Translation.tr("Use app icon in sidebar")
-                                        elide: Text.ElideRight
-                                        font.pixelSize: Appearance.font.pixelSize.small
-                                        font.weight: Font.Bold
-                                        color: root.useProgramIcon
-                                            ? Appearance.colors.colOnSecondaryContainer
-                                            : Appearance.colors.colOnSurface
-                                    }
+                                    Repeater {
+                                        model: root.availableIconChoices
 
-                                    StyledText {
-                                        Layout.fillWidth: true
-                                        text: Translation.tr("Show the related program instead of the page symbol")
-                                        elide: Text.ElideRight
-                                        font.pixelSize: Appearance.font.pixelSize.smallest
-                                        color: root.useProgramIcon
-                                            ? Appearance.colors.colOnSecondaryContainer
-                                            : Appearance.colors.colOnSurfaceVariant
+                                        delegate: RippleButton {
+                                            required property string modelData
+                                            implicitWidth: 38
+                                            implicitHeight: 34
+                                            buttonRadius: Appearance.rounding.full
+                                            toggled: root.selectedIcon === modelData
+                                            colBackground: toggled ? Appearance.colors.colSecondaryContainer : Appearance.colors.colLayer3
+                                            colBackgroundHover: toggled ? Appearance.colors.colSecondaryContainerHover : Appearance.colors.colLayer3Hover
+                                            colBackgroundActive: toggled ? Appearance.colors.colSecondaryContainerActive : Appearance.colors.colLayer3Active
+                                            Accessible.name: Translation.tr("Page icon") + ": " + modelData
+                                            Accessible.checked: toggled
+                                            onClicked: root.selectedIcon = modelData
+
+                                            contentItem: MaterialSymbol {
+                                                anchors.centerIn: parent
+                                                text: modelData
+                                                iconSize: Appearance.font.pixelSize.normal
+                                                fill: root.selectedIcon === modelData ? 1 : 0
+                                                color: root.selectedIcon === modelData ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colOnSurfaceVariant
+                                            }
+                                        }
                                     }
                                 }
 
-                                StyledSwitch {
-                                    id: useProgramIconSwitch
-                                    sizeScale: 1
-                                    checked: root.useProgramIcon
-                                    enabled: root.selectedProgramIcon.length > 0
-                                    Accessible.name: Translation.tr("Use app icon in sidebar")
-                                    Accessible.checked: checked
-                                    onClicked: root.useProgramIcon = checked
+                                StyledText {
+                                    Layout.fillWidth: true
+                                    text: Translation.tr("Related program · optional")
+                                    font.pixelSize: Appearance.font.pixelSize.small
+                                    font.weight: Font.Bold
+                                    color: Appearance.colors.colOnSurface
+                                }
+
+                                StyledText {
+                                    Layout.fillWidth: true
+                                    text: Translation.tr("Choose an installed app to show its icon in the page rail")
+                                    wrapMode: Text.Wrap
+                                    font.pixelSize: Appearance.font.pixelSize.smallest
+                                    color: Appearance.colors.colOnSurfaceVariant
+                                }
+
+                                StyledComboBox {
+                                    id: programSelector
+                                    Layout.fillWidth: true
+                                    implicitHeight: 46
+                                    popupWidth: Math.min(420, pageSurface.width - 64)
+                                    model: root.programChoices
+                                    textRole: "name"
+                                    iconSourceRole: "iconSource"
+                                    currentIndex: root.selectedProgramIndex
+                                    Accessible.name: Translation.tr("Related program")
+                                    onActivated: index => {
+                                        const choice = root.programChoices[index];
+                                        root.selectedProgram = String(choice?.value ?? "").trim();
+                                        root.selectedProgramId = String(choice?.programId ?? choice?.id ?? "").trim();
+                                        if (!root.selectedProgramIcon)
+                                            root.useProgramIcon = false;
+                                    }
+                                }
+
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    visible: Boolean(root.selectedProgram)
+                                    spacing: 10
+
+                                    Loader {
+                                        Layout.preferredWidth: 32
+                                        Layout.preferredHeight: 32
+                                        active: root.selectedProgramIcon.length > 0
+                                        visible: active
+                                        sourceComponent: IconImage {
+                                            source: Quickshell.iconPath(root.selectedProgramIcon, "image-missing")
+                                        }
+                                    }
+
+                                    MaterialShape {
+                                        visible: !root.selectedProgramIcon
+                                        implicitSize: 32
+                                        shape: MaterialShape.Shape.Cookie9Sided
+                                        color: Appearance.colors.colLayer3
+
+                                        MaterialSymbol {
+                                            anchors.centerIn: parent
+                                            text: "apps"
+                                            iconSize: Appearance.font.pixelSize.normal
+                                            color: Appearance.colors.colOnSurfaceVariant
+                                        }
+                                    }
+
+                                    ColumnLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 0
+
+                                        StyledText {
+                                            Layout.fillWidth: true
+                                            text: root.selectedProgram
+                                            elide: Text.ElideRight
+                                            font.pixelSize: Appearance.font.pixelSize.small
+                                            font.weight: Font.Bold
+                                            color: Appearance.colors.colOnSurface
+                                        }
+
+                                        StyledText {
+                                            Layout.fillWidth: true
+                                            text: root.selectedProgramIcon
+                                                ? Translation.tr("Application icon detected")
+                                                : Translation.tr("No application icon found")
+                                            elide: Text.ElideRight
+                                            font.pixelSize: Appearance.font.pixelSize.smallest
+                                            color: root.selectedProgramIcon
+                                                ? Appearance.colors.colOnSurfaceVariant
+                                                : Appearance.colors.colError
+                                        }
+                                    }
+                                }
+
+                                Rectangle {
+                                    Layout.fillWidth: true
+                                    visible: Boolean(root.selectedProgram)
+                                    implicitHeight: 48
+                                    radius: Appearance.rounding.normal
+                                    color: root.useProgramIcon
+                                        ? Appearance.colors.colSecondaryContainer
+                                        : Appearance.colors.colLayer3
+
+                                    Behavior on color {
+                                        animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
+                                    }
+
+                                    RowLayout {
+                                        anchors.fill: parent
+                                        anchors.leftMargin: 12
+                                        anchors.rightMargin: 10
+                                        spacing: 10
+
+                                        MaterialSymbol {
+                                            text: "view_sidebar"
+                                            iconSize: Appearance.font.pixelSize.normal
+                                            color: root.useProgramIcon
+                                                ? Appearance.colors.colOnSecondaryContainer
+                                                : Appearance.colors.colOnSurfaceVariant
+                                        }
+
+                                        ColumnLayout {
+                                            Layout.fillWidth: true
+                                            spacing: 0
+
+                                            StyledText {
+                                                Layout.fillWidth: true
+                                                text: Translation.tr("Use app icon in sidebar")
+                                                elide: Text.ElideRight
+                                                font.pixelSize: Appearance.font.pixelSize.small
+                                                font.weight: Font.Bold
+                                                color: root.useProgramIcon
+                                                    ? Appearance.colors.colOnSecondaryContainer
+                                                    : Appearance.colors.colOnSurface
+                                            }
+
+                                            StyledText {
+                                                Layout.fillWidth: true
+                                                text: Translation.tr("Show the related program instead of the page symbol")
+                                                elide: Text.ElideRight
+                                                font.pixelSize: Appearance.font.pixelSize.smallest
+                                                color: root.useProgramIcon
+                                                    ? Appearance.colors.colOnSecondaryContainer
+                                                    : Appearance.colors.colOnSurfaceVariant
+                                            }
+                                        }
+
+                                        StyledSwitch {
+                                            id: useProgramIconSwitch
+                                            sizeScale: 1
+                                            checked: root.useProgramIcon
+                                            enabled: root.selectedProgramIcon.length > 0
+                                            Accessible.name: Translation.tr("Use app icon in sidebar")
+                                            Accessible.checked: checked
+                                            onClicked: root.useProgramIcon = checked
+                                        }
+                                    }
                                 }
                             }
                         }
-
-                        Item { Layout.fillHeight: true }
 
                         RippleButtonWithIcon {
                             Layout.fillWidth: true
@@ -631,7 +659,6 @@ Item {
                             Layout.fillWidth: true
 
                             ColumnLayout {
-                                Layout.fillWidth: true
                                 spacing: 0
 
                                 StyledText {
@@ -648,6 +675,8 @@ Item {
                                 }
                             }
 
+                            Item { Layout.fillWidth: true }
+
                             RippleButtonWithIcon {
                                 implicitHeight: 38
                                 implicitWidth: contentImplicitWidth + 24
@@ -659,13 +688,13 @@ Item {
                                 colBackgroundHover: Appearance.colors.colSecondaryContainerHover
                                 colText: Appearance.colors.colOnSecondaryContainer
                                 onClicked: {
-                                    root.startClose();
                                     KeybindsService.openImportDialog();
                                 }
                             }
                         }
 
                         Flow {
+                            id: flowContainer
                             Layout.fillWidth: true
                             Layout.preferredHeight: implicitHeight
                             spacing: 8
@@ -676,9 +705,9 @@ Item {
                                 delegate: RippleButton {
                                     id: templateButton
                                     required property var modelData
-                                    width: Math.max(150, (parent.width - 16) / 3)
-                                    implicitHeight: 112
-                                    buttonRadius: Appearance.rounding.large
+                                    width: Math.max(150, Math.floor((flowContainer.width - 16) / 3))
+                                    height: 50
+                                    buttonRadius: Appearance.rounding.normal
                                     colBackground: Appearance.colors.colLayer3
                                     colBackgroundHover: Appearance.colors.colLayer3Hover
                                     colBackgroundActive: Appearance.colors.colLayer3Active
@@ -690,31 +719,41 @@ Item {
                                         }
                                     }
 
-                                    contentItem: ColumnLayout {
+                                    contentItem: RowLayout {
                                         anchors.fill: parent
-                                        anchors.margins: 12
-                                        spacing: 5
+                                        anchors.leftMargin: 10
+                                        anchors.rightMargin: 10
+                                        spacing: 10
 
                                         MaterialSymbol {
+                                            Layout.alignment: Qt.AlignVCenter
                                             text: String(templateButton.modelData.icon ?? "keyboard")
-                                            iconSize: Appearance.font.pixelSize.huge
+                                            iconSize: Appearance.font.pixelSize.larger
                                             fill: 1
                                             color: Appearance.colors.colPrimary
                                         }
 
-                                        StyledText {
+                                        ColumnLayout {
                                             Layout.fillWidth: true
-                                            text: String(templateButton.modelData.name ?? "")
-                                            elide: Text.ElideRight
-                                            font.pixelSize: Appearance.font.pixelSize.small
-                                            font.weight: Font.Bold
-                                            color: Appearance.colors.colOnSurface
-                                        }
+                                            Layout.alignment: Qt.AlignVCenter
+                                            spacing: 0
 
-                                        StyledText {
-                                            text: Translation.tr("%1 shortcuts").arg(String((templateButton.modelData.keybinds ?? []).length))
-                                            font.pixelSize: Appearance.font.pixelSize.smallest
-                                            color: Appearance.colors.colOnSurfaceVariant
+                                            StyledText {
+                                                Layout.fillWidth: true
+                                                text: String(templateButton.modelData.name ?? "")
+                                                elide: Text.ElideRight
+                                                font.pixelSize: Appearance.font.pixelSize.small
+                                                font.weight: Font.Bold
+                                                color: Appearance.colors.colOnSurface
+                                            }
+
+                                            StyledText {
+                                                Layout.fillWidth: true
+                                                text: Translation.tr("%1 shortcuts").arg(String((templateButton.modelData.keybinds ?? []).length))
+                                                elide: Text.ElideRight
+                                                font.pixelSize: Appearance.font.pixelSize.smallest
+                                                color: Appearance.colors.colOnSurfaceVariant
+                                            }
                                         }
                                     }
                                 }
@@ -770,77 +809,89 @@ Item {
                             StyledListView {
                                 id: detectedList
                                 anchors.fill: parent
-                                clip: true
+                                anchors.leftMargin: 2
+                                anchors.rightMargin: 2
+                                clip: false
                                 spacing: 6
-                                model: KeybindsService.detectedSources
+                                model: ScriptModel {
+                                    values: KeybindsService.detectedSources
+                                }
 
-                                delegate: RippleButton {
-                                    id: detectedButton
+                                delegate: Item {
+                                    id: detectedDelegate
                                     required property var modelData
                                     width: detectedList.width
-                                    implicitHeight: 62
-                                    buttonRadius: Appearance.rounding.large
-                                    colBackground: Appearance.colors.colLayer3
-                                    colBackgroundHover: Appearance.colors.colLayer3Hover
-                                    enabled: !KeybindsService.importing && Number(modelData.count ?? 0) > 0
-                                    onClicked: {
-                                        KeybindsService.importDetectedSource(modelData);
-                                        root.startClose();
-                                    }
+                                    height: 58
 
-                                    contentItem: RowLayout {
+                                    RippleButton {
+                                        id: detectedButton
                                         anchors.fill: parent
-                                        anchors.leftMargin: 12
-                                        anchors.rightMargin: 12
-                                        spacing: 10
-
-                                        MaterialSymbol {
-                                            text: String(detectedButton.modelData.icon ?? "keyboard")
-                                            iconSize: Appearance.font.pixelSize.larger
-                                            color: Appearance.colors.colPrimary
+                                        anchors.margins: 1
+                                        buttonRadius: Appearance.rounding.normal
+                                        colBackground: Appearance.colors.colLayer3
+                                        colBackgroundHover: Appearance.colors.colLayer3Hover
+                                        enabled: !KeybindsService.importing && Number(detectedDelegate.modelData.count ?? 0) > 0
+                                        onClicked: {
+                                            KeybindsService.importDetectedSource(detectedDelegate.modelData);
                                         }
 
-                                        ColumnLayout {
-                                            Layout.fillWidth: true
-                                            spacing: 0
+                                        contentItem: RowLayout {
+                                            anchors.fill: parent
+                                            anchors.leftMargin: 12
+                                            anchors.rightMargin: 12
+                                            spacing: 10
 
-                                            StyledText {
-                                                Layout.fillWidth: true
-                                                text: String(detectedButton.modelData.name ?? "")
-                                                elide: Text.ElideRight
-                                                font.pixelSize: Appearance.font.pixelSize.small
-                                                font.weight: Font.Bold
-                                                color: Appearance.colors.colOnSurface
+                                            MaterialSymbol {
+                                                Layout.alignment: Qt.AlignVCenter
+                                                text: String(detectedDelegate.modelData.icon ?? "keyboard")
+                                                iconSize: Appearance.font.pixelSize.larger
+                                                color: Appearance.colors.colPrimary
                                             }
 
-                                            StyledText {
+                                            ColumnLayout {
                                                 Layout.fillWidth: true
-                                                text: String(detectedButton.modelData.detail ?? "")
-                                                elide: Text.ElideRight
-                                                font.pixelSize: Appearance.font.pixelSize.smallest
-                                                color: Appearance.colors.colOnSurfaceVariant
+                                                Layout.alignment: Qt.AlignVCenter
+                                                spacing: 0
+
+                                                StyledText {
+                                                    Layout.fillWidth: true
+                                                    text: String(detectedDelegate.modelData.name ?? "")
+                                                    elide: Text.ElideRight
+                                                    font.pixelSize: Appearance.font.pixelSize.small
+                                                    font.weight: Font.Bold
+                                                    color: Appearance.colors.colOnSurface
+                                                }
+
+                                                StyledText {
+                                                    Layout.fillWidth: true
+                                                    text: String(detectedDelegate.modelData.detail ?? "")
+                                                    elide: Text.ElideRight
+                                                    font.pixelSize: Appearance.font.pixelSize.smallest
+                                                    color: Appearance.colors.colOnSurfaceVariant
+                                                }
                                             }
-                                        }
 
-                                        Rectangle {
-                                            implicitWidth: detectedCount.implicitWidth + 16
-                                            implicitHeight: 26
-                                            radius: Appearance.rounding.full
-                                            color: detectedButton.modelData.confidence === "partial"
-                                                ? Appearance.colors.colTertiaryContainer
-                                                : Appearance.colors.colPrimaryContainer
+                                            Rectangle {
+                                                Layout.alignment: Qt.AlignVCenter
+                                                implicitWidth: detectedCount.implicitWidth + 16
+                                                implicitHeight: 26
+                                                radius: Appearance.rounding.full
+                                                color: detectedDelegate.modelData.confidence === "partial"
+                                                    ? Appearance.colors.colTertiaryContainer
+                                                    : Appearance.colors.colPrimaryContainer
 
-                                            StyledText {
-                                                id: detectedCount
-                                                anchors.centerIn: parent
-                                                text: detectedButton.modelData.confidence === "partial"
-                                                    ? Translation.tr("%1 found · partial").arg(String(detectedButton.modelData.count ?? 0))
-                                                    : Translation.tr("%1 found").arg(String(detectedButton.modelData.count ?? 0))
-                                                font.pixelSize: Appearance.font.pixelSize.smallest
-                                                font.weight: Font.Bold
-                                                color: detectedButton.modelData.confidence === "partial"
-                                                    ? Appearance.colors.colOnTertiaryContainer
-                                                    : Appearance.colors.colOnPrimaryContainer
+                                                StyledText {
+                                                    id: detectedCount
+                                                    anchors.centerIn: parent
+                                                    text: detectedDelegate.modelData.confidence === "partial"
+                                                        ? Translation.tr("%1 found · partial").arg(String(detectedDelegate.modelData.count ?? 0))
+                                                        : Translation.tr("%1 found").arg(String(detectedDelegate.modelData.count ?? 0))
+                                                    font.pixelSize: Appearance.font.pixelSize.smallest
+                                                    font.weight: Font.Bold
+                                                    color: detectedDelegate.modelData.confidence === "partial"
+                                                        ? Appearance.colors.colOnTertiaryContainer
+                                                        : Appearance.colors.colOnPrimaryContainer
+                                                }
                                             }
                                         }
                                     }
@@ -850,12 +901,27 @@ Item {
                             PagePlaceholder {
                                 shown: !KeybindsService.scanning && KeybindsService.detectedSources.length === 0
                                 anchors.fill: parent
-                                icon: "manage_search"
-                                title: Translation.tr("Nothing scanned yet")
-                                description: Translation.tr("Find reads local config files only. It never launches an editor.")
+                                icon: KeybindsService.hasScanned ? "search_off" : "manage_search"
+                                title: KeybindsService.hasScanned
+                                    ? Translation.tr("No shortcut sources found")
+                                    : Translation.tr("Nothing scanned yet")
+                                description: KeybindsService.hasScanned
+                                    ? Translation.tr("No supported configurations with keybindings were detected.")
+                                    : Translation.tr("Find reads local config files only. It never launches an editor.")
                                 titlePixelSize: Appearance.font.pixelSize.normal
                                 descriptionPixelSize: Appearance.font.pixelSize.smallest
                                 animateIconOnShow: false
+                            }
+
+                            PagePlaceholder {
+                                shown: KeybindsService.scanning
+                                anchors.fill: parent
+                                icon: "progress_activity"
+                                title: Translation.tr("Scanning installed apps...")
+                                description: Translation.tr("Checking config files for Neovim, Kitty, Tmux, VS Code, and others.")
+                                titlePixelSize: Appearance.font.pixelSize.normal
+                                descriptionPixelSize: Appearance.font.pixelSize.smallest
+                                animateIconOnShow: true
                             }
                         }
                     }

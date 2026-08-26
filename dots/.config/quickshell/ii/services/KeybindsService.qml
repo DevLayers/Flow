@@ -18,11 +18,12 @@ import qs.modules.common.functions
 Singleton {
     id: root
 
-    readonly property int schemaVersion: 1
+    readonly property int schemaVersion: 2
     readonly property int maxPages: 500
     readonly property int maxKeybindsPerPage: 10000
     readonly property string filePath: Directories.keybindsPath
     readonly property string importerPath: Directories.keybindImporterPath
+    readonly property string aiCategorizerPath: Directories.keybindAiCategorizerPath
 
     property var pages: []
     property var templates: []
@@ -33,6 +34,9 @@ Singleton {
     property bool writing: false
     property bool importing: false
     property bool scanning: false
+    property bool hasScanned: false
+    property bool aiCategorizing: false
+    property string aiCategorizingPageId: ""
     property bool hasLoadedStore: false
     property bool storePresent: false
     property bool externalReload: false
@@ -80,16 +84,22 @@ Singleton {
         const description = root.oneLine(source.description ?? source.comment ?? source.label, "", 320);
         if (!keys || !description)
             return null;
+        const canonicalKeys = KeybindTokenizer.canonical(keys) || keys;
         return {
             id: preserveId && root.oneLine(source.id, "", 120) ? root.oneLine(source.id, "", 120) : root.uniqueId("keybind"),
-            keys: keys,
+            keys: canonicalKeys,
             description: description,
             category: root.oneLine(source.category ?? source.section, "", 100),
             context: root.oneLine(source.context ?? source.when ?? source.mode, "", 180),
             notes: String(source.notes ?? source.command ?? "").replace(/[\r\n]+/g, " ").trim().slice(0, 1000),
             // Optional Material Symbol name shown before the key chips.
             // Accept common aliases so older/manual JSON stays portable.
-            icon: root.oneLine(source.icon ?? source.symbol ?? source.materialIcon ?? source.iconName, "", 80)
+            icon: root.oneLine(source.icon ?? source.symbol ?? source.materialIcon ?? source.iconName, "", 80),
+            isBase: Boolean(source.isBase),
+            isCustom: source.isCustom !== undefined ? Boolean(source.isCustom) : true,
+            disabled: Boolean(source.disabled),
+            created_at: Number(source.created_at) || Date.now(),
+            updated_at: Number(source.updated_at) || Date.now()
         };
     }
 
@@ -121,8 +131,48 @@ Singleton {
             sourceKind: root.oneLine(source.sourceKind ?? source.source, "manual", 60),
             sourcePath: String(source.sourcePath ?? "").trim().slice(0, 1000),
             importNote: root.oneLine(source.importNote, "", 320),
+            pinned: Boolean(source.pinned),
+            order: Number.isInteger(source.order) ? source.order : 0,
+            baseId: root.oneLine(source.baseId, "", 120),
+            isUserOverride: Boolean(source.isUserOverride),
             keybinds: entries
         };
+    }
+
+    function detectConflicts(pageId, newKeys, excludeEntryId = ""): var {
+        const page = root.pageById(pageId);
+        if (!page || !newKeys)
+            return [];
+        const canonicalTarget = KeybindTokenizer.canonical(newKeys);
+        if (!canonicalTarget)
+            return [];
+        const conflicts = [];
+        for (const entry of page.keybinds ?? []) {
+            if (excludeEntryId && entry.id === excludeEntryId)
+                continue;
+            const canonicalEntry = KeybindTokenizer.canonical(entry.keys);
+            if (canonicalEntry === canonicalTarget) {
+                conflicts.push(entry);
+            }
+        }
+        return conflicts;
+    }
+
+    function searchMatches(entry, query): bool {
+        if (!entry || !query)
+            return false;
+        if (KeybindTokenizer.matchQuery(entry.keys, query))
+            return true;
+        const q = String(query).toLowerCase().trim();
+        if (String(entry.description ?? "").toLowerCase().includes(q))
+            return true;
+        if (String(entry.category ?? "").toLowerCase().includes(q))
+            return true;
+        if (String(entry.context ?? "").toLowerCase().includes(q))
+            return true;
+        if (String(entry.notes ?? "").toLowerCase().includes(q))
+            return true;
+        return false;
     }
 
     function normalizedDocument(value, preserveIds = true): var {
@@ -379,6 +429,15 @@ Singleton {
         return root.schedule({ schemaVersion: root.schemaVersion, pages: pages });
     }
 
+    function setPageKeybinds(pageId, keybinds): bool {
+        const pages = root.clone(root.pages) ?? [];
+        const index = pages.findIndex(page => page.id === pageId);
+        if (index < 0)
+            return false;
+        pages[index].keybinds = (keybinds ?? []).map(entry => root.normalizedEntry(entry, Boolean(entry?.id))).filter(Boolean);
+        return root.schedule({ schemaVersion: root.schemaVersion, pages: pages });
+    }
+
     function deletePage(pageId): bool {
         const pages = root.clone(root.pages) ?? [];
         const index = pages.findIndex(page => page.id === pageId);
@@ -578,8 +637,32 @@ Singleton {
         if (root.importing || !source)
             return;
         root.importing = true;
+        detectedImportProcess.running = false;
         detectedImportProcess.command = ["python3", root.importerPath, "import", String(source.kind ?? ""), String(source.path ?? "")];
         detectedImportProcess.running = true;
+    }
+
+    function aiCategorizePage(pageId, modelId = "", lang = ""): void {
+        if (root.aiCategorizing || !pageId)
+            return;
+        const page = root.pageById(pageId);
+        if (!page || (page.keybinds ?? []).length === 0)
+            return;
+        root.aiCategorizing = true;
+        root.aiCategorizingPageId = String(pageId);
+        const activeModel = String(modelId || (typeof Ai !== "undefined" ? Ai.currentModelId : "")).trim();
+        const activeLang = String(lang || (typeof Translation !== "undefined" ? Translation.languageCode : "")).trim();
+        const cmd = ["python3", root.aiCategorizerPath, String(pageId), "--file", root.filePath];
+        if (activeModel) {
+            cmd.push("--model", activeModel);
+        }
+        if (activeLang) {
+            cmd.push("--lang", activeLang);
+        }
+        aiCategorizeTimeoutTimer.restart();
+        aiCategorizeProcess.running = false;
+        aiCategorizeProcess.command = cmd;
+        aiCategorizeProcess.running = true;
     }
 
     Timer {
@@ -764,8 +847,9 @@ Singleton {
     Process {
         id: importPickerProcess
         stdout: StdioCollector {
+            id: pickerCollector
             onStreamFinished: {
-                const selectedPath = String(this.text ?? "").trim();
+                const selectedPath = String(pickerCollector.text ?? "").trim();
                 if (!selectedPath)
                     return;
                 importFile.path = selectedPath;
@@ -777,16 +861,23 @@ Singleton {
     Process {
         id: scanProcess
         stdout: StdioCollector {
-            onStreamFinished: {
-                root.scanning = false;
-                try {
-                    const reply = JSON.parse(this.text || "{}");
-                    root.detectedSources = Array.isArray(reply.sources) ? reply.sources : [];
-                    if (!reply.ok)
-                        root.operationFinished(false, String(reply.error ?? Translation.tr("Could not scan applications.")), "");
-                } catch (error) {
-                    root.operationFinished(false, Translation.tr("Could not read scan results: %1").arg(String(error)), "");
-                }
+            id: scanCollector
+        }
+        stderr: StdioCollector {
+            id: scanErrorCollector
+        }
+        onExited: (exitCode, exitStatus) => {
+            root.scanning = false;
+            root.hasScanned = true;
+            try {
+                const raw = (scanCollector.text || "").trim();
+                const reply = JSON.parse(raw || "{}");
+                root.detectedSources = Array.isArray(reply.sources) ? reply.sources : [];
+                if (!reply.ok)
+                    root.operationFinished(false, String(reply.error ?? Translation.tr("Could not scan applications.")), "");
+            } catch (error) {
+                console.error("[KeybindsService] scan error:", error, scanErrorCollector.text, scanCollector.text);
+                root.operationFinished(false, Translation.tr("Could not read scan results: %1").arg(String(error)), "");
             }
         }
     }
@@ -794,18 +885,92 @@ Singleton {
     Process {
         id: detectedImportProcess
         stdout: StdioCollector {
-            onStreamFinished: {
-                root.importing = false;
-                try {
-                    const reply = JSON.parse(this.text || "{}");
-                    if (!reply.ok) {
-                        root.operationFinished(false, String(reply.error ?? Translation.tr("Automatic import failed.")), "");
-                        return;
-                    }
-                    root.importPayload({ page: reply.page }, String(reply.page?.name ?? Translation.tr("Imported shortcuts")));
-                } catch (error) {
-                    root.operationFinished(false, Translation.tr("Could not read import results: %1").arg(String(error)), "");
+            id: importCollector
+        }
+        stderr: StdioCollector {
+            id: importErrorCollector
+        }
+        onExited: (exitCode, exitStatus) => {
+            root.importing = false;
+            try {
+                const raw = (importCollector.text || "").trim();
+                const reply = JSON.parse(raw || "{}");
+                if (!reply.ok) {
+                    root.operationFinished(false, String(reply.error ?? Translation.tr("Automatic import failed.")), "");
+                    return;
                 }
+                root.importPayload({ page: reply.page }, String(reply.page?.name ?? Translation.tr("Imported shortcuts")));
+            } catch (error) {
+                console.error("[KeybindsService] import error:", error, importErrorCollector.text, importCollector.text);
+                root.operationFinished(false, Translation.tr("Could not read import results: %1").arg(String(error)), "");
+            }
+        }
+    }
+
+    Timer {
+        id: aiCategorizeTimeoutTimer
+        interval: 180000 // 3 minutes timeout
+        repeat: false
+        onTriggered: {
+            if (root.aiCategorizing) {
+                const targetPageId = root.aiCategorizingPageId;
+                root.aiCategorizing = false;
+                root.aiCategorizingPageId = "";
+                aiCategorizeProcess.running = false;
+                const pageName = root.pageById(targetPageId)?.name || Translation.tr("Shortcuts");
+                const errMsg = Translation.tr("AI request timed out after 3 minutes. The model did not respond.");
+                root.operationFinished(false, errMsg, targetPageId);
+                Quickshell.execDetached(["notify-send", Translation.tr("Keybinding categorization failed"), pageName + ": " + errMsg, "-a", "Cheatsheet", "-i", "error", "-u", "critical"]);
+            }
+        }
+    }
+
+    Process {
+        id: aiCategorizeProcess
+        stdout: StdioCollector {
+            id: aiCategorizeCollector
+        }
+        stderr: StdioCollector {
+            id: aiCategorizeErrorCollector
+        }
+        onExited: (exitCode, exitStatus) => {
+            aiCategorizeTimeoutTimer.stop();
+            const targetPageId = root.aiCategorizingPageId;
+            root.aiCategorizing = false;
+            root.aiCategorizingPageId = "";
+            const pageName = root.pageById(targetPageId)?.name || Translation.tr("Shortcuts");
+            try {
+                const raw = (aiCategorizeCollector.text || "").trim();
+                const reply = JSON.parse(raw || "{}");
+                if (!reply.ok) {
+                    const errMsg = String(reply.error ?? aiCategorizeErrorCollector.text ?? Translation.tr("AI categorization failed."));
+                    root.operationFinished(false, errMsg, targetPageId);
+                    Quickshell.execDetached(["notify-send", Translation.tr("Keybinding categorization failed"), pageName + ": " + errMsg, "-a", "Cheatsheet", "-i", "error", "-u", "critical"]);
+                    return;
+                }
+                const updatedKeybinds = Array.isArray(reply.keybinds) ? reply.keybinds : [];
+                if (targetPageId && updatedKeybinds.length > 0) {
+                    const saved = root.setPageKeybinds(targetPageId, updatedKeybinds);
+                    if (saved) {
+                        root.flush();
+                        const successMsg = Translation.tr("Shortcuts categorized into %1 groups with AI.").arg(String(reply.categoryCount ?? 1));
+                        root.operationFinished(true, successMsg, targetPageId);
+                        Quickshell.execDetached(["notify-send", Translation.tr("Keybindings categorized"), Translation.tr("Successfully organized shortcuts for %1 with AI (%2 categories).").arg(pageName).arg(String(reply.categoryCount ?? 1)), "-a", "Cheatsheet", "-i", "keyboard"]);
+                    } else {
+                        const errMsg = Translation.tr("Failed to save categorized shortcuts.");
+                        root.operationFinished(false, errMsg, targetPageId);
+                        Quickshell.execDetached(["notify-send", Translation.tr("Keybinding categorization failed"), pageName + ": " + errMsg, "-a", "Cheatsheet", "-i", "error", "-u", "critical"]);
+                    }
+                } else {
+                    const errMsg = Translation.tr("No keybindings returned by AI.");
+                    root.operationFinished(false, errMsg, targetPageId);
+                    Quickshell.execDetached(["notify-send", Translation.tr("Keybinding categorization failed"), pageName + ": " + errMsg, "-a", "Cheatsheet", "-i", "error", "-u", "critical"]);
+                }
+            } catch (error) {
+                console.error("[KeybindsService] AI categorize error:", error, aiCategorizeErrorCollector.text, aiCategorizeCollector.text);
+                const errMsg = String(error) + (aiCategorizeErrorCollector.text ? (" - " + aiCategorizeErrorCollector.text) : "");
+                root.operationFinished(false, Translation.tr("AI error: %1").arg(errMsg), targetPageId);
+                Quickshell.execDetached(["notify-send", Translation.tr("Keybinding categorization failed"), pageName + ": " + errMsg, "-a", "Cheatsheet", "-i", "error", "-u", "critical"]);
             }
         }
     }

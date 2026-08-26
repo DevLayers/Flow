@@ -27,8 +27,7 @@ Item {
         const grouped = [];
         const byName = {};
         for (const entry of root.page?.keybinds ?? []) {
-            const blob = [entry.keys, entry.description, entry.category, entry.context, entry.notes, entry.icon].join(" ").toLowerCase();
-            if (query && !blob.includes(query))
+            if (query && !KeybindsService.searchMatches(entry, query))
                 continue;
             const name = String(entry.category ?? "").trim() || Translation.tr("General");
             if (!byName[name]) {
@@ -91,15 +90,21 @@ Item {
         return "keyboard_command_key";
     }
 
+    function hasContext(context): bool {
+        const value = String(context ?? "").trim();
+        return value.length > 0 && value.toLowerCase() !== "general" && value.toLowerCase() !== "global";
+    }
+
     function contextIcon(context): string {
-        const value = String(context ?? "").toLowerCase();
-        if (value.includes("normal")) return "arrow_selector_tool";
-        if (value.includes("insert") || value.includes("edit")) return "edit";
-        if (value.includes("visual") || value.includes("select")) return "select";
-        if (value.includes("command") || value.includes("terminal")) return "terminal";
+        const value = String(context ?? "").toLowerCase().trim();
+        if (!value) return "";
+        if (value.includes("normal") || value === "n mode" || value === "n") return "arrow_selector_tool";
+        if (value.includes("insert") || value.includes("edit") || value === "i mode" || value === "i") return "edit";
+        if (value.includes("visual") || value.includes("select") || value === "v mode" || value === "v") return "select";
+        if (value.includes("command") || value.includes("terminal") || value === "c mode" || value === "c") return "terminal";
         if (value.includes("debug")) return "bug_report";
         if (value.includes("editor")) return "code_blocks";
-        return "adjust";
+        return "label";
     }
 
     function bumpLayout(): void {
@@ -220,6 +225,57 @@ Item {
             filterField.forceActiveFocus();
     }
 
+    property bool aiSuccess: false
+    readonly property bool isCategorizing: KeybindsService.aiCategorizing && KeybindsService.aiCategorizingPageId === root.pageId
+    property int aiProgressStep: 0
+
+    Timer {
+        id: aiProgressTimer
+        interval: 2200
+        repeat: true
+        running: root.isCategorizing
+        onTriggered: root.aiProgressStep = (root.aiProgressStep + 1) % 3
+        onRunningChanged: {
+            if (running) root.aiProgressStep = 0;
+        }
+    }
+
+    function aiProgressMessage(): string {
+        switch (root.aiProgressStep) {
+        case 0:
+            return Translation.tr("Analyzing %1 shortcuts and context...").arg(String((root.page?.keybinds ?? []).length));
+        case 1:
+            return Translation.tr("Clustering into intelligent semantic categories with AI...");
+        case 2:
+            return Translation.tr("Refining action descriptions and reorganizing layout...");
+        default:
+            return Translation.tr("Categorizing with AI...");
+        }
+    }
+
+    Timer {
+        id: aiSuccessTimer
+        interval: 3500
+        repeat: false
+        onTriggered: root.aiSuccess = false
+    }
+
+    Connections {
+        target: KeybindsService
+
+        function onOperationFinished(success, message, pageId) {
+            if (pageId === root.pageId) {
+                if (success) {
+                    root.aiSuccess = true;
+                    aiSuccessTimer.restart();
+                } else {
+                    root.aiSuccess = false;
+                    aiSuccessTimer.stop();
+                }
+            }
+        }
+    }
+
     Timer {
         id: deleteConfirmationTimer
         interval: 5000
@@ -234,44 +290,56 @@ Item {
         onTriggered: groupsArea.layoutRevision++
     }
 
-    component KeybindRow: RippleButton {
+    component KeybindRow: Item {
         id: keybindRow
         required property var entry
         property string categoryName: ""
+        property bool isEditing: false
+
+        readonly property bool isEditAreaHovered: (descriptionMouseArea.containsMouse || modeOrEditButton.hovered) && !keybindRow.isEditing
+
         readonly property string accessibleSummary: [
             String(keybindRow.entry.keys ?? ""),
             String(keybindRow.entry.description ?? ""),
             String(keybindRow.entry.context ?? ""),
             String(keybindRow.entry.notes ?? "")
         ].filter(value => value.trim().length > 0).join(" · ")
+
         Layout.fillWidth: true
-        implicitHeight: Math.max(28, rowContent.implicitHeight)
-        buttonRadius: Appearance.rounding.normal
-        // The category card is the grouping surface; each shortcut sits directly
-        // on it so the eye scans a single list instead of nested cards.
-        colBackground: ColorUtils.transparentize(Appearance.colors.colLayer1, 1)
-        colBackgroundHover: ColorUtils.transparentize(Appearance.colors.colLayer1, 1)
-        colBackgroundActive: ColorUtils.transparentize(Appearance.colors.colLayer1, 1)
-        Accessible.name: keybindRow.accessibleSummary
-        onClicked: root.editEntry(keybindRow.entry)
+        implicitHeight: Math.max(34, rowContent.implicitHeight + 6)
 
-        readonly property real keybindReserveWidth: endIcon.implicitWidth
-            + rowContent.spacing * (2 + (shortcutIcon.visible ? 1 : 0) + (contextIcon.visible ? 1 : 0))
+        Rectangle {
+            id: rowBackground
+            anchors.fill: parent
+            radius: Appearance.rounding.small
+            color: keybindRowHoverHandler.hovered && !keybindRow.isEditing
+                ? ColorUtils.transparentize(Appearance.colors.colOnSurface, 0.94)
+                : (keybindRow.isEditing ? ColorUtils.transparentize(Appearance.colors.colOnSurface, 0.90) : "transparent")
+
+            Behavior on color {
+                animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(rowBackground)
+            }
+        }
+
+        HoverHandler {
+            id: keybindRowHoverHandler
+        }
+
+        readonly property real keybindReserveWidth: (keybindRow.isEditing ? editActionsRow.implicitWidth : normalActionsRow.implicitWidth)
+            + rowContent.spacing * (2 + (shortcutIcon.visible ? 1 : 0) + (!keybindRow.isEditing && modeOrEditButton.visible ? 1 : 0))
             + (shortcutIcon.visible ? shortcutIcon.implicitWidth : 0)
-            + (contextIcon.visible ? contextIcon.implicitWidth : 0)
+            + (!keybindRow.isEditing && modeOrEditButton.visible ? modeOrEditButton.implicitWidth : 0)
 
-        contentItem: RowLayout {
+        RowLayout {
             id: rowContent
             anchors.fill: parent
-            anchors.leftMargin: 0
-            anchors.rightMargin: 0
-            spacing: 12
+            anchors.leftMargin: 6
+            anchors.rightMargin: 4
+            spacing: 8
 
             KeybindShortcutSequence {
                 id: keybindSequence
                 Layout.alignment: Qt.AlignVCenter
-                // Grow to the complete chord width first; only the remaining
-                // space is offered to the elided description.
                 maximumWidth: Math.max(1, keybindRow.width - keybindRow.keybindReserveWidth)
                 shortcutText: String(keybindRow.entry.keys ?? "")
                 compact: true
@@ -286,45 +354,250 @@ Item {
                 color: Appearance.colors.colPrimary
             }
 
-            StyledText {
+            Item {
+                id: descriptionContainer
                 Layout.fillWidth: true
+                Layout.fillHeight: true
                 Layout.alignment: Qt.AlignVCenter
-                text: String(keybindRow.entry.description ?? "")
-                elide: Text.ElideRight
-                font.pixelSize: Config.options.cheatsheet.fontSize.comment || Appearance.font.pixelSize.small
-                font.weight: Font.DemiBold
-                color: Appearance.colors.colOnSurface
-            }
 
-            MaterialSymbol {
-                id: contextIcon
-                visible: Boolean(keybindRow.entry.context)
-                Layout.alignment: Qt.AlignVCenter
-                text: root.contextIcon(keybindRow.entry.context)
-                iconSize: Appearance.font.pixelSize.normal
-                color: Appearance.colors.colTertiary
+                StyledText {
+                    id: descriptionText
+                    visible: !keybindRow.isEditing
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: String(keybindRow.entry.description ?? "")
+                    elide: Text.ElideRight
+                    font.pixelSize: Config.options.cheatsheet.fontSize.comment || Appearance.font.pixelSize.small
+                    font.weight: Font.DemiBold
+                    color: Appearance.colors.colOnSurface
 
-                HoverHandler {
-                    id: contextHover
+                    MouseArea {
+                        id: descriptionMouseArea
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        hoverEnabled: true
+                        onClicked: {
+                            keybindRow.isEditing = true;
+                            inlineEditField.text = String(keybindRow.entry.description ?? "");
+                            inlineEditField.forceActiveFocus();
+                            inlineEditField.selectAll();
+                        }
+
+                        StyledToolTip {
+                            extraVisibleCondition: descriptionMouseArea.containsMouse && !keybindRow.isEditing
+                            text: Translation.tr("Click to rename")
+                        }
+                    }
                 }
 
-                StyledToolTip {
-                    extraVisibleCondition: contextHover.hovered
-                    text: String(keybindRow.entry.context ?? "")
+                Rectangle {
+                    id: inlineEditBox
+                    visible: keybindRow.isEditing
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
+                    height: 28
+                    radius: Appearance.rounding.small
+                    color: Appearance.colors.colLayer1
+                    border.width: 1.5
+                    border.color: Appearance.colors.colPrimary
+
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.IBeamCursor
+                        onClicked: (mouse) => {
+                            inlineEditField.forceActiveFocus();
+                            mouse.accepted = false;
+                        }
+                    }
+
+                    TextInput {
+                        id: inlineEditField
+                        anchors.fill: parent
+                        anchors.leftMargin: 8
+                        anchors.rightMargin: 8
+                        verticalAlignment: TextInput.AlignVCenter
+                        color: Appearance.colors.colOnSurface
+                        font.family: Appearance.font.family.main
+                        font.pixelSize: Appearance.font.pixelSize.small
+                        font.weight: Font.DemiBold
+                        clip: true
+                        selectByMouse: true
+                        selectionColor: Appearance.colors.colPrimary
+                        selectedTextColor: Appearance.colors.colOnPrimary
+
+                        function commitEdit() {
+                            if (!keybindRow.isEditing) return;
+                            const newDesc = inlineEditField.text.trim();
+                            if (newDesc && newDesc !== keybindRow.entry.description) {
+                                KeybindsService.updateKeybind(
+                                    root.pageId,
+                                    keybindRow.entry.id,
+                                    keybindRow.entry.keys,
+                                    newDesc,
+                                    keybindRow.entry.category,
+                                    keybindRow.entry.context,
+                                    keybindRow.entry.notes,
+                                    keybindRow.entry.icon
+                                );
+                                KeybindsService.flush();
+                            }
+                            keybindRow.isEditing = false;
+                        }
+
+                        function cancelEdit() {
+                            keybindRow.isEditing = false;
+                        }
+
+                        onAccepted: commitEdit()
+                        Keys.onEscapePressed: cancelEdit()
+                    }
                 }
             }
 
-            MaterialSymbol {
-                id: endIcon
+            Row {
+                id: editActionsRow
+                visible: keybindRow.isEditing
                 Layout.alignment: Qt.AlignVCenter
-                text: keybindRow.hovered ? "edit" : "chevron_right"
-                iconSize: Appearance.font.pixelSize.normal
-                color: keybindRow.hovered ? Appearance.colors.colPrimary : Appearance.colors.colOnSurfaceVariant
-            }
-        }
+                spacing: 4
 
-        StyledToolTip {
-            text: keybindRow.accessibleSummary
+                RippleButton {
+                    id: saveButton
+                    implicitWidth: 28
+                    implicitHeight: 28
+                    buttonRadius: Appearance.rounding.full
+                    colBackground: Appearance.colors.colPrimary
+                    colBackgroundHover: Appearance.colors.colPrimaryHover
+                    colBackgroundActive: Appearance.colors.colPrimaryActive
+                    Accessible.name: Translation.tr("Save changes")
+                    onClicked: inlineEditField.commitEdit()
+
+                    contentItem: MaterialSymbol {
+                        anchors.centerIn: parent
+                        text: "done"
+                        iconSize: Appearance.font.pixelSize.normal
+                        color: Appearance.colors.colOnPrimary
+                    }
+
+                    StyledToolTip {
+                        extraVisibleCondition: saveButton.hovered
+                        text: Translation.tr("Save (Enter)")
+                    }
+                }
+
+                RippleButton {
+                    id: cancelButton
+                    implicitWidth: 28
+                    implicitHeight: 28
+                    buttonRadius: Appearance.rounding.full
+                    colBackground: Appearance.colors.colLayer3
+                    colBackgroundHover: Appearance.colors.colLayer3Hover
+                    Accessible.name: Translation.tr("Cancel")
+                    onClicked: inlineEditField.cancelEdit()
+
+                    contentItem: MaterialSymbol {
+                        anchors.centerIn: parent
+                        text: "close"
+                        iconSize: Appearance.font.pixelSize.normal
+                        color: Appearance.colors.colOnSurfaceVariant
+                    }
+
+                    StyledToolTip {
+                        extraVisibleCondition: cancelButton.hovered
+                        text: Translation.tr("Cancel (Esc)")
+                    }
+                }
+            }
+
+            Row {
+                id: normalActionsRow
+                visible: !keybindRow.isEditing
+                Layout.alignment: Qt.AlignVCenter
+                spacing: 2
+
+                RippleButton {
+                    id: modeOrEditButton
+                    anchors.verticalCenter: parent.verticalCenter
+                    implicitWidth: 28
+                    implicitHeight: 28
+                    buttonRadius: Appearance.rounding.full
+                    visible: root.hasContext(keybindRow.entry.context) || keybindRow.isEditAreaHovered
+                    colBackground: modeOrEditButton.hovered ? ColorUtils.transparentize(Appearance.colors.colOnSurface, 0.90) : "transparent"
+                    colBackgroundHover: ColorUtils.transparentize(Appearance.colors.colOnSurface, 0.86)
+                    Accessible.name: keybindRow.isEditAreaHovered
+                        ? Translation.tr("Rename shortcut")
+                        : String(keybindRow.entry.context ?? "")
+                    onClicked: {
+                        keybindRow.isEditing = true;
+                        inlineEditField.text = String(keybindRow.entry.description ?? "");
+                        inlineEditField.forceActiveFocus();
+                        inlineEditField.selectAll();
+                    }
+
+                    contentItem: Item {
+                        anchors.fill: parent
+
+                        MaterialSymbol {
+                            id: contextSymbol
+                            anchors.centerIn: parent
+                            visible: root.hasContext(keybindRow.entry.context)
+                            opacity: (keybindRow.isEditAreaHovered || keybindRow.isEditing) ? 0 : 1
+                            text: root.contextIcon(keybindRow.entry.context)
+                            iconSize: Appearance.font.pixelSize.normal
+                            color: Appearance.colors.colTertiary
+
+                            Behavior on opacity {
+                                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(contextSymbol)
+                            }
+                        }
+
+                        MaterialSymbol {
+                            id: editSymbol
+                            anchors.centerIn: parent
+                            opacity: keybindRow.isEditAreaHovered ? 1 : 0
+                            text: "edit"
+                            iconSize: Appearance.font.pixelSize.normal
+                            color: modeOrEditButton.hovered ? Appearance.colors.colPrimary : Appearance.colors.colOnSurfaceVariant
+
+                            Behavior on opacity {
+                                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(editSymbol)
+                            }
+                        }
+                    }
+
+                    StyledToolTip {
+                        extraVisibleCondition: modeOrEditButton.hovered
+                        text: keybindRow.isEditAreaHovered
+                            ? Translation.tr("Click to rename")
+                            : String(keybindRow.entry.context ?? "")
+                    }
+                }
+
+                RippleButton {
+                    id: chevronButton
+                    anchors.verticalCenter: parent.verticalCenter
+                    implicitWidth: 28
+                    implicitHeight: 28
+                    buttonRadius: Appearance.rounding.full
+                    colBackground: chevronButton.hovered ? ColorUtils.transparentize(Appearance.colors.colOnSurface, 0.90) : "transparent"
+                    colBackgroundHover: ColorUtils.transparentize(Appearance.colors.colOnSurface, 0.86)
+                    Accessible.name: Translation.tr("Open sidebar details")
+                    onClicked: root.editEntry(keybindRow.entry)
+
+                    contentItem: MaterialSymbol {
+                        anchors.centerIn: parent
+                        text: "chevron_right"
+                        iconSize: Appearance.font.pixelSize.normal
+                        color: chevronButton.hovered ? Appearance.colors.colPrimary : Appearance.colors.colOnSurfaceVariant
+                    }
+
+                    StyledToolTip {
+                        extraVisibleCondition: chevronButton.hovered
+                        text: Translation.tr("Open details in sidebar")
+                    }
+                }
+            }
         }
     }
 
@@ -381,6 +654,11 @@ Item {
         y: groupY
         radius: Appearance.rounding.large
         color: Appearance.m3colors.m3surfaceContainerHigh
+        opacity: root.isCategorizing ? 0 : 1
+
+        Behavior on opacity {
+            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(sectionCard)
+        }
 
         Behavior on x {
             animation: Appearance.animation.elementMove.numberAnimation.createObject(sectionCard)
@@ -542,6 +820,82 @@ Item {
             }
 
             RippleButton {
+                id: aiCategorizeButton
+                implicitWidth: 42
+                implicitHeight: 42
+                buttonRadius: Appearance.rounding.full
+                readonly property bool isCategorizing: KeybindsService.aiCategorizing && KeybindsService.aiCategorizingPageId === root.pageId
+                readonly property bool isDone: root.aiSuccess && !isCategorizing
+                readonly property string activeAiModelName: (typeof Ai !== "undefined" && Ai.currentModelEntry?.name)
+                    ? Ai.currentModelEntry.name
+                    : ((typeof Ai !== "undefined" && Ai.currentModelId) ? Ai.currentModelId : "AI")
+                toggled: isCategorizing || isDone
+                colBackground: isDone
+                    ? Appearance.colors.colPrimary
+                    : (isCategorizing ? Appearance.colors.colPrimaryContainer : Appearance.colors.colLayer2)
+                colBackgroundHover: isDone
+                    ? Appearance.colors.colPrimaryHover
+                    : (isCategorizing ? Appearance.colors.colPrimaryContainerHover : Appearance.colors.colLayer2Hover)
+                enabled: !KeybindsService.aiCategorizing && (root.page?.keybinds ?? []).length > 0
+                Accessible.name: Translation.tr("Organize categories with %1").arg(activeAiModelName)
+                onClicked: KeybindsService.aiCategorizePage(
+                    root.pageId,
+                    typeof Ai !== "undefined" ? Ai.currentModelId : "",
+                    typeof Translation !== "undefined" ? Translation.languageCode : ""
+                )
+
+                contentItem: Item {
+                    anchors.fill: parent
+
+                    MaterialSymbol {
+                        id: aiIcon
+                        anchors.centerIn: parent
+                        text: aiCategorizeButton.isCategorizing
+                            ? "progress_activity"
+                            : (aiCategorizeButton.isDone ? "check" : "auto_awesome")
+                        iconSize: Appearance.font.pixelSize.larger
+                        fill: (aiCategorizeButton.isCategorizing || aiCategorizeButton.isDone) ? 0 : 1
+                        color: aiCategorizeButton.isDone
+                            ? Appearance.colors.colOnPrimary
+                            : (aiCategorizeButton.isCategorizing
+                                ? Appearance.colors.colOnPrimaryContainer
+                                : (aiCategorizeButton.hovered ? Appearance.colors.colPrimary : Appearance.colors.colOnSurface))
+
+                        Behavior on color {
+                            animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
+                        }
+
+                        NumberAnimation {
+                            id: spinAnim
+                            target: aiIcon
+                            property: "rotation"
+                            running: aiCategorizeButton.isCategorizing
+                            loops: Animation.Infinite
+                            from: 0
+                            to: 360
+                            duration: 1000
+                        }
+
+                        Connections {
+                            target: aiCategorizeButton
+                            function onIsCategorizingChanged() {
+                                if (!aiCategorizeButton.isCategorizing)
+                                    aiIcon.rotation = 0;
+                            }
+                        }
+                    }
+                }
+
+                StyledToolTip {
+                    text: aiCategorizeButton.isDone
+                        ? Translation.tr("Shortcuts categorized successfully!")
+                        : (aiCategorizeButton.isCategorizing
+                            ? Translation.tr("Organizing categories with %1...").arg(aiCategorizeButton.activeAiModelName)
+                            : Translation.tr("Organize categories with %1").arg(aiCategorizeButton.activeAiModelName))
+                }
+            }
+
+            RippleButton {
                 implicitWidth: 42
                 implicitHeight: 42
                 buttonRadius: Appearance.rounding.full
@@ -636,9 +990,74 @@ Item {
                 spacing: 10
 
                 Item {
+                    id: aiLoadingContainer
+                    visible: opacity > 0.001
+                    opacity: root.isCategorizing ? 1 : 0
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: root.isCategorizing ? Math.max(280, contentFlickable.height - 40) : 0
+                    clip: true
+
+                    Behavior on opacity {
+                        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(aiLoadingContainer)
+                    }
+                    Behavior on Layout.preferredHeight {
+                        animation: Appearance.animation.elementMove.numberAnimation.createObject(aiLoadingContainer)
+                    }
+
+                    ColumnLayout {
+                        anchors.centerIn: parent
+                        spacing: 20
+                        width: Math.min(420, parent.width - 40)
+
+                        MaterialLoadingIndicator {
+                            Layout.alignment: Qt.AlignHCenter
+                            implicitSize: 64
+                            loading: root.isCategorizing
+                        }
+
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 8
+
+                            StyledText {
+                                Layout.fillWidth: true
+                                horizontalAlignment: Text.AlignHCenter
+                                text: Translation.tr("Organizing shortcuts with %1").arg(aiCategorizeButton.activeAiModelName)
+                                font.family: Appearance.font.family.title
+                                font.variableAxes: Appearance.font.variableAxes.title
+                                font.pixelSize: Appearance.font.pixelSize.huge
+                                font.weight: Font.Bold
+                                color: Appearance.colors.colOnSurface
+                            }
+
+                            StyledText {
+                                Layout.fillWidth: true
+                                horizontalAlignment: Text.AlignHCenter
+                                text: root.aiProgressMessage()
+                                font.pixelSize: Appearance.font.pixelSize.small
+                                color: Appearance.colors.colPrimary
+                                wrapMode: Text.Wrap
+                                elide: Text.ElideNone
+                            }
+                        }
+
+                        StyledIndeterminateProgressBar {
+                            Layout.fillWidth: true
+                            visible: root.isCategorizing
+                        }
+                    }
+                }
+
+                Item {
                     id: groupsArea
+                    visible: opacity > 0.001
+                    opacity: root.isCategorizing ? 0 : 1
                     Layout.fillWidth: true
                     implicitHeight: totalContentHeight
+
+                    Behavior on opacity {
+                        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(groupsArea)
+                    }
 
                     property int layoutRevision: 0
                     readonly property real totalContentHeight: {
@@ -676,7 +1095,7 @@ Item {
 
                     PagePlaceholder {
                         id: emptyState
-                        shown: root.totalMatches === 0
+                        shown: root.totalMatches === 0 && !root.isCategorizing
                         icon: root.searchText ? "search_off" : "keyboard_alt"
                         title: root.searchText ? Translation.tr("No matching shortcuts") : Translation.tr("This page is ready")
                         description: root.searchText

@@ -3,6 +3,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import qs.modules.common
 import qs.modules.common.widgets
+import qs.modules.common.functions
 
 /**
  * Compact shortcut label shared by personal pages and the editor preview.
@@ -93,7 +94,7 @@ Rectangle {
     color: root.capsuleColor
     clip: root.contentWidth > width
     Accessible.role: Accessible.StaticText
-    Accessible.name: root.shortcutText
+    Accessible.name: KeybindTokenizer.spokenDescription(root.shortcutText) || root.shortcutText
 
     function isSymbolToken(token): bool {
         const clean = String(token ?? "");

@@ -51,6 +51,44 @@ class KeybindImporterTests(unittest.TestCase):
         self.assertEqual(result["keybinds"][0]["keys"], "ctrl k ctrl o")
         self.assertEqual(result["keybinds"][0]["description"], "Go to file")
 
+    def test_zed_import(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "keymap.json"
+            path.write_text('[{"context": "Editor", "bindings": {"ctrl-shift-p": "command_palette::Toggle"}}]', encoding="utf-8")
+            result = MODULE.import_zed(path)
+        self.assertEqual(result["keybinds"][0]["keys"], "ctrl+shift+p")
+        self.assertEqual(result["keybinds"][0]["category"], "Editor")
+
+    def test_helix_import(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "config.toml"
+            path.write_text('[keys.normal]\n"space" = "file_picker"\n', encoding="utf-8")
+            result = MODULE.import_helix(path)
+        self.assertEqual(result["keybinds"][0]["keys"], "space")
+        self.assertEqual(result["keybinds"][0]["category"], "Normal")
+
+    def test_kitty_import(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "kitty.conf"
+            path.write_text('map ctrl+shift+t new_tab\n', encoding="utf-8")
+            result = MODULE.import_kitty(path)
+        self.assertEqual(result["keybinds"][0]["keys"], "ctrl+shift+t")
+        self.assertEqual(result["keybinds"][0]["description"], "New tab")
+
+    def test_tmux_import(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / ".tmux.conf"
+            path.write_text('bind-key -n C-h select-pane -L\n', encoding="utf-8")
+            result = MODULE.import_tmux(path)
+        self.assertEqual(result["keybinds"][0]["keys"], "C-h")
+
+    def test_obsidian_import(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "hotkeys.json"
+            path.write_text('{"editor:toggle-fold": [{"modifiers": ["Ctrl", "Alt"], "key": "L"}]}', encoding="utf-8")
+            result = MODULE.import_obsidian(path)
+        self.assertEqual(result["keybinds"][0]["keys"], "Ctrl+Alt+L")
+
 
 if __name__ == "__main__":
     unittest.main()

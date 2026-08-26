@@ -4,6 +4,7 @@ import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls
 import qs.modules.common
+import qs.modules.common.functions
 import qs.modules.common.widgets
 import qs.services
 
@@ -28,6 +29,12 @@ Item {
     property real pageOpacity: 1
     property string contextValue: ""
     property string iconValue: ""
+    property int sessionAddCount: 0
+    property bool keepCategory: false
+    property bool keepContext: false
+    property bool recordingKeys: false
+
+    readonly property var conflicts: KeybindsService.detectConflicts(root.pageId, keysField.text, root.editingKeybindId)
 
     readonly property var page: {
         const revision = KeybindsService.revision;
@@ -115,6 +122,7 @@ Item {
 
     function openCreate(): void {
         root.editingKeybindId = "";
+        root.sessionAddCount = 0;
         root.resetFields();
         root.isOpen = true;
     }
@@ -123,6 +131,7 @@ Item {
         if (!entry)
             return;
         root.editingKeybindId = String(entry.id ?? "");
+        root.sessionAddCount = 0;
         keysField.text = String(entry.keys ?? "");
         descriptionField.text = String(entry.description ?? "");
         categoryField.text = String(entry.category ?? "");
@@ -134,7 +143,7 @@ Item {
         root.isOpen = true;
     }
 
-    function saveForm(): void {
+    function saveForm(andNext = false): void {
         const keys = keysField.text.trim();
         const description = descriptionField.text.trim();
         keysField.error = !keys;
@@ -151,8 +160,24 @@ Item {
         const saved = root.editingKeybindId
             ? KeybindsService.updateKeybind(root.pageId, root.editingKeybindId, keys, description, categoryField.text, root.contextValue, notesField.text, root.iconValue)
             : Boolean(KeybindsService.addKeybind(root.pageId, keys, description, categoryField.text, root.contextValue, notesField.text, root.iconValue));
-        if (saved)
-            root.close();
+        if (saved) {
+            if (andNext && !root.editingKeybindId) {
+                root.sessionAddCount++;
+                keysField.text = "";
+                descriptionField.text = "";
+                if (!root.keepCategory)
+                    categoryField.text = "";
+                if (!root.keepContext)
+                    root.contextValue = "";
+                root.iconValue = "";
+                notesField.text = "";
+                keysField.error = false;
+                descriptionField.error = false;
+                Qt.callLater(() => keysField.forceActiveFocus());
+            } else {
+                root.close();
+            }
+        }
     }
 
     function requestDelete(): void {
@@ -366,6 +391,36 @@ Item {
                         width: editorFlick.width
                         spacing: 10
 
+                        RowLayout {
+                            visible: !root.editingKeybindId
+                            Layout.fillWidth: true
+                            spacing: 6
+
+                            StyledText {
+                                visible: root.sessionAddCount > 0
+                                text: Translation.tr("%1 added").arg(String(root.sessionAddCount))
+                                font.pixelSize: Appearance.font.pixelSize.smallest
+                                font.weight: Font.Bold
+                                color: Appearance.colors.colPrimary
+                            }
+
+                            Item { Layout.fillWidth: true }
+
+                            ChoiceChip {
+                                symbol: root.keepCategory ? "check" : "bookmark"
+                                label: Translation.tr("Keep category")
+                                selected: root.keepCategory
+                                onTriggered: root.keepCategory = !root.keepCategory
+                            }
+
+                            ChoiceChip {
+                                symbol: root.keepContext ? "check" : "tune"
+                                label: Translation.tr("Keep context")
+                                selected: root.keepContext
+                                onTriggered: root.keepContext = !root.keepContext
+                            }
+                        }
+
                         Rectangle {
                             id: previewCard
                             Layout.fillWidth: true
@@ -456,15 +511,94 @@ Item {
                             }
                         }
 
-                        EditorFieldCard {
-                            id: keysField
+                        RowLayout {
                             Layout.fillWidth: true
-                            symbol: "keyboard"
-                            label: Translation.tr("Keybind")
-                            placeholder: Translation.tr("Ctrl+Shift+P or <leader>ff")
-                            monospace: true
-                            requiredField: true
-                            onAccepted: descriptionField.forceActiveFocus()
+                            spacing: 8
+
+                            EditorFieldCard {
+                                id: keysField
+                                Layout.fillWidth: true
+                                symbol: "keyboard"
+                                label: root.recordingKeys ? Translation.tr("Listening for chord…") : Translation.tr("Keybind")
+                                placeholder: root.recordingKeys ? Translation.tr("Press keys on keyboard…") : Translation.tr("Ctrl+Shift+P or <leader>ff")
+                                monospace: true
+                                requiredField: true
+                                accentKind: root.recordingKeys ? 1 : 0
+                                recordKeyMode: root.recordingKeys
+                                onAccepted: descriptionField.forceActiveFocus()
+                            }
+
+                            RippleButton {
+                                id: recordToggle
+                                implicitWidth: 46
+                                implicitHeight: 74
+                                buttonRadius: Appearance.rounding.normal
+                                toggled: root.recordingKeys
+                                colBackground: root.recordingKeys ? Appearance.colors.colPrimary : Appearance.m3colors.m3surfaceContainerHighest
+                                colBackgroundHover: root.recordingKeys ? Appearance.colors.colPrimaryHover : Appearance.colors.colSurfaceContainerHighestHover
+                                Accessible.name: root.recordingKeys ? Translation.tr("Stop recording keys") : Translation.tr("Record keys")
+                                onClicked: {
+                                    root.recordingKeys = !root.recordingKeys;
+                                    if (root.recordingKeys)
+                                        keysField.forceActiveFocus();
+                                }
+
+                                contentItem: MaterialSymbol {
+                                    anchors.centerIn: parent
+                                    text: root.recordingKeys ? "fiber_manual_record" : "radio_button_checked"
+                                    iconSize: Appearance.font.pixelSize.larger
+                                    fill: root.recordingKeys ? 1 : 0
+                                    color: root.recordingKeys ? Appearance.colors.colOnPrimary : Appearance.colors.colPrimary
+                                }
+
+                                StyledToolTip {
+                                    text: root.recordingKeys ? Translation.tr("Stop listening") : Translation.tr("Record key chord live")
+                                }
+                            }
+                        }
+
+                        Rectangle {
+                            visible: root.conflicts.length > 0
+                            Layout.fillWidth: true
+                            implicitHeight: conflictRow.implicitHeight + 16
+                            radius: Appearance.rounding.normal
+                            color: Appearance.colors.colTertiaryContainer
+
+                            RowLayout {
+                                id: conflictRow
+                                anchors.fill: parent
+                                anchors.margins: 10
+                                spacing: 8
+
+                                MaterialSymbol {
+                                    text: "warning"
+                                    iconSize: Appearance.font.pixelSize.normal
+                                    color: Appearance.colors.colOnTertiaryContainer
+                                }
+
+                                ColumnLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 0
+
+                                    StyledText {
+                                        Layout.fillWidth: true
+                                        text: Translation.tr("Shortcut already assigned")
+                                        font.pixelSize: Appearance.font.pixelSize.small
+                                        font.weight: Font.Bold
+                                        color: Appearance.colors.colOnTertiaryContainer
+                                    }
+
+                                    StyledText {
+                                        Layout.fillWidth: true
+                                        text: root.conflicts.length > 0
+                                            ? Translation.tr("Matches '%1' in '%2'").arg(root.conflicts[0].description).arg(root.conflicts[0].category || Translation.tr("General"))
+                                            : ""
+                                        font.pixelSize: Appearance.font.pixelSize.smallest
+                                        color: Appearance.colors.colOnTertiaryContainer
+                                        elide: Text.ElideRight
+                                    }
+                                }
+                            }
                         }
 
                         EditorFieldCard {
@@ -666,18 +800,24 @@ Item {
                 SecondaryAction {
                     Layout.fillWidth: true
                     Layout.preferredWidth: 1
-                    label: Translation.tr("Cancel")
-                    symbol: "close"
-                    onTriggered: root.close()
+                    label: root.editingKeybindId ? Translation.tr("Cancel") : Translation.tr("Add & finish")
+                    symbol: root.editingKeybindId ? "close" : "check"
+                    onTriggered: {
+                        if (root.editingKeybindId) {
+                            root.close();
+                        } else {
+                            root.saveForm(false);
+                        }
+                    }
                 }
 
                 PrimaryAction {
                     Layout.fillWidth: true
                     Layout.preferredWidth: 1.35
-                    label: root.editingKeybindId ? Translation.tr("Save") : Translation.tr("Add shortcut")
+                    label: root.editingKeybindId ? Translation.tr("Save") : Translation.tr("Add & next")
                     symbol: root.editingKeybindId ? "check" : "add"
                     enabled: keysField.text.trim().length > 0 && descriptionField.text.trim().length > 0
-                    onTriggered: root.saveForm()
+                    onTriggered: root.saveForm(!root.editingKeybindId)
                 }
             }
         }
@@ -689,6 +829,7 @@ Item {
         property string placeholderText: ""
         property bool monospace: false
         property bool error: false
+        property bool recordKeyMode: false
         property Item navigationTarget: null
         property alias text: filledInput.text
         signal accepted
@@ -723,6 +864,16 @@ Item {
             color: filledField.error ? Appearance.colors.colOnErrorContainer : Appearance.m3colors.m3onSurface
             Accessible.name: filledField.accessibleName || filledField.placeholderText
             Keys.forwardTo: filledField.navigationTarget ? [filledField.navigationTarget] : []
+            Keys.onPressed: event => {
+                if (filledField.recordKeyMode) {
+                    const captured = KeybindTokenizer.keyEventToString(event);
+                    if (captured) {
+                        filledInput.text = captured;
+                        event.accepted = true;
+                        return;
+                    }
+                }
+            }
             onTextChanged: filledField.error = false
             onAccepted: filledField.accepted()
         }
@@ -747,6 +898,7 @@ Item {
         property bool monospace: false
         property bool requiredField: false
         property int accentKind: 0
+        property bool recordKeyMode: false
         property alias text: fieldInput.text
         property alias error: fieldInput.error
         signal accepted
@@ -794,6 +946,7 @@ Item {
                     accessibleName: fieldCard.label
                     placeholderText: fieldCard.placeholder
                     monospace: fieldCard.monospace
+                    recordKeyMode: fieldCard.recordKeyMode
                     navigationTarget: root.keyNavTarget
                     onAccepted: fieldCard.accepted()
                 }

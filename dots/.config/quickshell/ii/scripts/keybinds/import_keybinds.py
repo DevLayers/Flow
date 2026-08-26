@@ -326,6 +326,149 @@ def import_jetbrains(path: Path) -> dict[str, Any]:
                 "Imported from a custom JetBrains keymap. Built-in defaults are available as a starter template.")
 
 
+def import_zed(path: Path) -> dict[str, Any]:
+    if path.stat().st_size > 5 * 1024 * 1024:
+        raise ValueError("Zed keymap file is unexpectedly large")
+    data = json.loads(strip_jsonc(path.read_text(encoding="utf-8")))
+    if not isinstance(data, list):
+        raise ValueError("Zed keymap.json must contain an array")
+    keybinds: list[dict[str, str]] = []
+    for section in data:
+        if not isinstance(section, dict):
+            continue
+        context = str(section.get("context", "")).strip()
+        bindings = section.get("bindings", {})
+        if not isinstance(bindings, dict):
+            continue
+        for raw_keys, action in bindings.items():
+            keys = str(raw_keys).replace("-", "+").strip()
+            action_name = str(action).strip()
+            if not keys or not action_name:
+                continue
+            keybinds.append({
+                "keys": keys,
+                "description": humanize(action_name),
+                "category": context or "General",
+                "context": context,
+                "notes": action_name,
+            })
+    return page("Zed · user keymap", "code", "Zed", "zed", path, keybinds,
+                "Imported from Zed keymap.json")
+
+
+def import_helix(path: Path) -> dict[str, Any]:
+    if path.stat().st_size > 5 * 1024 * 1024:
+        raise ValueError("Helix config file is unexpectedly large")
+    lines = path.read_text(encoding="utf-8").splitlines()
+    keybinds: list[dict[str, str]] = []
+    current_mode = "Normal"
+    for line in lines:
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        if stripped.startswith("[keys."):
+            mode_tag = stripped[6:].rstrip("]").strip()
+            current_mode = humanize(mode_tag)
+            continue
+        match = re.match(r"^([\"']?)(?P<keys>[^\"'=]+)\1\s*=\s*[\"'](?P<action>[^\"']+)[\"']", stripped)
+        if match:
+            raw_keys = match.group("keys").strip()
+            action = match.group("action").strip()
+            keybinds.append({
+                "keys": raw_keys,
+                "description": humanize(action),
+                "category": current_mode,
+                "context": f"{current_mode} mode",
+                "notes": action,
+            })
+    return page("Helix · user config", "terminal", "Helix", "helix", path, keybinds,
+                "Imported from Helix config.toml")
+
+
+def import_kitty(path: Path) -> dict[str, Any]:
+    if path.stat().st_size > 5 * 1024 * 1024:
+        raise ValueError("Kitty config file is unexpectedly large")
+    lines = path.read_text(encoding="utf-8").splitlines()
+    keybinds: list[dict[str, str]] = []
+    for line in lines:
+        stripped = line.strip()
+        if not stripped.startswith("map "):
+            continue
+        parts = stripped.split(None, 2)
+        if len(parts) < 3:
+            continue
+        keys = parts[1].strip()
+        action = parts[2].strip()
+        keybinds.append({
+            "keys": keys,
+            "description": humanize(action),
+            "category": "Terminal",
+            "context": "",
+            "notes": action,
+        })
+    return page("Kitty · user config", "terminal", "Kitty", "kitty", path, keybinds,
+                "Imported from Kitty kitty.conf")
+
+
+def import_tmux(path: Path) -> dict[str, Any]:
+    if path.stat().st_size > 5 * 1024 * 1024:
+        raise ValueError("Tmux config file is unexpectedly large")
+    lines = path.read_text(encoding="utf-8").splitlines()
+    keybinds: list[dict[str, str]] = []
+    for line in lines:
+        stripped = line.strip()
+        if not stripped.startswith(("bind ", "bind-key ")):
+            continue
+        parts = stripped.split()
+        if len(parts) < 3:
+            continue
+        idx = 1
+        while idx < len(parts) and parts[idx].startswith("-"):
+            idx += 1
+        if idx >= len(parts) - 1:
+            continue
+        keys = parts[idx]
+        action = " ".join(parts[idx + 1:])
+        keybinds.append({
+            "keys": keys,
+            "description": humanize(action),
+            "category": "Tmux",
+            "context": "",
+            "notes": action,
+        })
+    return page("Tmux · user config", "terminal", "Tmux", "tmux", path, keybinds,
+                "Imported from .tmux.conf")
+
+
+def import_obsidian(path: Path) -> dict[str, Any]:
+    if path.stat().st_size > 5 * 1024 * 1024:
+        raise ValueError("Obsidian hotkeys file is unexpectedly large")
+    data = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(data, dict):
+        raise ValueError("Obsidian hotkeys.json must contain an object")
+    keybinds: list[dict[str, str]] = []
+    for command_id, shortcuts in data.items():
+        if not isinstance(shortcuts, list):
+            continue
+        for sc in shortcuts:
+            if not isinstance(sc, dict):
+                continue
+            mods = sc.get("modifiers", [])
+            key = sc.get("key", "")
+            if not key:
+                continue
+            keys = "+".join([*mods, key])
+            keybinds.append({
+                "keys": keys,
+                "description": humanize(command_id),
+                "category": "Obsidian",
+                "context": "",
+                "notes": command_id,
+            })
+    return page("Obsidian · custom hotkeys", "description", "Obsidian", "obsidian", path, keybinds,
+                "Imported from Obsidian hotkeys.json")
+
+
 def import_source(kind: str, path: Path) -> dict[str, Any]:
     if kind == "vscode":
         return import_vscode(path)
@@ -333,6 +476,16 @@ def import_source(kind: str, path: Path) -> dict[str, Any]:
         return import_neovim(path)
     if kind == "jetbrains":
         return import_jetbrains(path)
+    if kind == "zed":
+        return import_zed(path)
+    if kind == "helix":
+        return import_helix(path)
+    if kind == "kitty":
+        return import_kitty(path)
+    if kind == "tmux":
+        return import_tmux(path)
+    if kind == "obsidian":
+        return import_obsidian(path)
     raise ValueError(f"Unsupported source kind: {kind}")
 
 
@@ -393,6 +546,60 @@ def discover() -> list[dict[str, Any]]:
             "name": label, "icon": "deployed_code", "count": count, "confidence": "high",
             "detail": "Custom keymap XML",
         })
+
+    zed_candidate = config_home / "zed" / "keymap.json"
+    if zed_candidate.is_file():
+        try:
+            count = len(import_zed(zed_candidate)["keybinds"])
+        except Exception:
+            count = 0
+        sources.append({
+            "id": "zed:" + str(zed_candidate), "kind": "zed", "path": str(zed_candidate),
+            "name": "Zed", "icon": "code", "count": count, "confidence": "high",
+            "detail": "User keymap.json",
+        })
+
+    helix_candidate = config_home / "helix" / "config.toml"
+    if helix_candidate.is_file():
+        try:
+            count = len(import_helix(helix_candidate)["keybinds"])
+        except Exception:
+            count = 0
+        sources.append({
+            "id": "helix:" + str(helix_candidate), "kind": "helix", "path": str(helix_candidate),
+            "name": "Helix", "icon": "terminal", "count": count, "confidence": "high",
+            "detail": "User config.toml",
+        })
+
+    kitty_candidate = config_home / "kitty" / "kitty.conf"
+    if kitty_candidate.is_file():
+        try:
+            count = len(import_kitty(kitty_candidate)["keybinds"])
+        except Exception:
+            count = 0
+        sources.append({
+            "id": "kitty:" + str(kitty_candidate), "kind": "kitty", "path": str(kitty_candidate),
+            "name": "Kitty", "icon": "terminal", "count": count, "confidence": "high",
+            "detail": "User kitty.conf",
+        })
+
+    tmux_candidates = [
+        Path.home() / ".tmux.conf",
+        config_home / "tmux" / "tmux.conf",
+    ]
+    for tmux_candidate in tmux_candidates:
+        if tmux_candidate.is_file():
+            try:
+                count = len(import_tmux(tmux_candidate)["keybinds"])
+            except Exception:
+                count = 0
+            sources.append({
+                "id": "tmux:" + str(tmux_candidate), "kind": "tmux", "path": str(tmux_candidate),
+                "name": "Tmux", "icon": "terminal", "count": count, "confidence": "high",
+                "detail": "User tmux configuration",
+            })
+            break
+
     return sources
 
 

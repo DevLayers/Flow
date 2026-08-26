@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "templates": [
     {
       "id": "template-vscode",
@@ -8,26 +8,636 @@
       "program": "Visual Studio Code",
       "sourceKind": "template",
       "keybinds": [
-        { "keys": "Ctrl+Shift+P", "description": "Show command palette", "category": "Navigation" },
-        { "keys": "Ctrl+P", "description": "Quick open file", "category": "Navigation" },
-        { "keys": "Ctrl+Shift+E", "description": "Focus Explorer", "category": "Navigation" },
-        { "keys": "Ctrl+Shift+F", "description": "Search across files", "category": "Navigation" },
-        { "keys": "Ctrl+B", "description": "Toggle primary sidebar", "category": "View" },
-        { "keys": "Ctrl+`", "description": "Toggle integrated terminal", "category": "View" },
-        { "keys": "Ctrl+\\", "description": "Split editor", "category": "View" },
-        { "keys": "Ctrl+1", "description": "Focus first editor group", "category": "View" },
-        { "keys": "F12", "description": "Go to definition", "category": "Code" },
-        { "keys": "Alt+F12", "description": "Peek definition", "category": "Code" },
-        { "keys": "Shift+F12", "description": "Show references", "category": "Code" },
-        { "keys": "F2", "description": "Rename symbol", "category": "Code" },
-        { "keys": "Ctrl+.", "description": "Show quick fixes", "category": "Code" },
-        { "keys": "Shift+Alt+F", "description": "Format document", "category": "Code" },
-        { "keys": "Ctrl+Space", "description": "Trigger suggestions", "category": "Code" },
-        { "keys": "Alt+Up / Alt+Down", "description": "Move line up or down", "category": "Editing" },
-        { "keys": "Shift+Alt+Up / Shift+Alt+Down", "description": "Copy line up or down", "category": "Editing" },
-        { "keys": "Ctrl+Shift+K", "description": "Delete line", "category": "Editing" },
-        { "keys": "Ctrl+D", "description": "Add next occurrence to selection", "category": "Editing" },
-        { "keys": "Ctrl+K Ctrl+S", "description": "Open keyboard shortcuts", "category": "Preferences" }
+        {
+          "keys": "Ctrl+Shift+P",
+          "description": "Show command palette",
+          "category": "Navigation"
+        },
+        {
+          "keys": "Ctrl+P",
+          "description": "Quick open / Go to file",
+          "category": "Navigation"
+        },
+        {
+          "keys": "Ctrl+Shift+N",
+          "description": "New window",
+          "category": "Navigation"
+        },
+        {
+          "keys": "Ctrl+Shift+W",
+          "description": "Close window",
+          "category": "Navigation"
+        },
+        {
+          "keys": "Ctrl+N",
+          "description": "New file",
+          "category": "Navigation"
+        },
+        {
+          "keys": "Ctrl+O",
+          "description": "Open file",
+          "category": "Navigation"
+        },
+        {
+          "keys": "Ctrl+S",
+          "description": "Save file",
+          "category": "Navigation"
+        },
+        {
+          "keys": "Ctrl+Shift+S",
+          "description": "Save all files",
+          "category": "Navigation"
+        },
+        {
+          "keys": "Ctrl+W",
+          "description": "Close active editor",
+          "category": "Navigation"
+        },
+        {
+          "keys": "Ctrl+K Ctrl+W",
+          "description": "Close all editors",
+          "category": "Navigation"
+        },
+        {
+          "keys": "Ctrl+Shift+T",
+          "description": "Reopen closed editor",
+          "category": "Navigation"
+        },
+        {
+          "keys": "Ctrl+Tab",
+          "description": "Switch to next editor in group",
+          "category": "Navigation"
+        },
+        {
+          "keys": "Ctrl+Shift+Tab",
+          "description": "Switch to previous editor in group",
+          "category": "Navigation"
+        },
+        {
+          "keys": "Ctrl+1",
+          "description": "Focus first editor group",
+          "category": "Navigation"
+        },
+        {
+          "keys": "Ctrl+2",
+          "description": "Focus second editor group",
+          "category": "Navigation"
+        },
+        {
+          "keys": "Ctrl+3",
+          "description": "Focus third editor group",
+          "category": "Navigation"
+        },
+        {
+          "keys": "Ctrl+K Left",
+          "description": "Focus editor group on left",
+          "category": "Navigation"
+        },
+        {
+          "keys": "Ctrl+K Right",
+          "description": "Focus editor group on right",
+          "category": "Navigation"
+        },
+        {
+          "keys": "Ctrl+K Ctrl+Left",
+          "description": "Move active editor left",
+          "category": "Navigation"
+        },
+        {
+          "keys": "Ctrl+K Ctrl+Right",
+          "description": "Move active editor right",
+          "category": "Navigation"
+        },
+        {
+          "keys": "Ctrl+G",
+          "description": "Go to line",
+          "category": "Navigation"
+        },
+        {
+          "keys": "Ctrl+Shift+O",
+          "description": "Go to symbol in file",
+          "category": "Navigation"
+        },
+        {
+          "keys": "Ctrl+T",
+          "description": "Go to symbol in workspace",
+          "category": "Navigation"
+        },
+        {
+          "keys": "Ctrl+Shift+M",
+          "description": "Show problems panel",
+          "category": "Navigation"
+        },
+        {
+          "keys": "F8",
+          "description": "Go to next problem",
+          "category": "Navigation"
+        },
+        {
+          "keys": "Shift+F8",
+          "description": "Go to previous problem",
+          "category": "Navigation"
+        },
+        {
+          "keys": "Alt+Left",
+          "description": "Go back in navigation history",
+          "category": "Navigation"
+        },
+        {
+          "keys": "Alt+Right",
+          "description": "Go forward in navigation history",
+          "category": "Navigation"
+        },
+        {
+          "keys": "Ctrl+X",
+          "description": "Cut line or selection",
+          "category": "Editing"
+        },
+        {
+          "keys": "Ctrl+C",
+          "description": "Copy line or selection",
+          "category": "Editing"
+        },
+        {
+          "keys": "Ctrl+V",
+          "description": "Paste clipboard content",
+          "category": "Editing"
+        },
+        {
+          "keys": "Ctrl+Z",
+          "description": "Undo",
+          "category": "Editing"
+        },
+        {
+          "keys": "Ctrl+Y",
+          "description": "Redo",
+          "category": "Editing"
+        },
+        {
+          "keys": "Alt+Up",
+          "description": "Move line up",
+          "category": "Editing"
+        },
+        {
+          "keys": "Alt+Down",
+          "description": "Move line down",
+          "category": "Editing"
+        },
+        {
+          "keys": "Shift+Alt+Up",
+          "description": "Copy line up",
+          "category": "Editing"
+        },
+        {
+          "keys": "Shift+Alt+Down",
+          "description": "Copy line down",
+          "category": "Editing"
+        },
+        {
+          "keys": "Ctrl+Shift+K",
+          "description": "Delete current line",
+          "category": "Editing"
+        },
+        {
+          "keys": "Ctrl+Enter",
+          "description": "Insert line below",
+          "category": "Editing"
+        },
+        {
+          "keys": "Ctrl+Shift+Enter",
+          "description": "Insert line above",
+          "category": "Editing"
+        },
+        {
+          "keys": "Ctrl+Shift+\\",
+          "description": "Jump to matching bracket",
+          "category": "Editing"
+        },
+        {
+          "keys": "Ctrl+]",
+          "description": "Indent line",
+          "category": "Editing"
+        },
+        {
+          "keys": "Ctrl+[",
+          "description": "Outdent line",
+          "category": "Editing"
+        },
+        {
+          "keys": "Home",
+          "description": "Go to line start",
+          "category": "Editing"
+        },
+        {
+          "keys": "End",
+          "description": "Go to line end",
+          "category": "Editing"
+        },
+        {
+          "keys": "Ctrl+Home",
+          "description": "Go to file beginning",
+          "category": "Editing"
+        },
+        {
+          "keys": "Ctrl+End",
+          "description": "Go to file end",
+          "category": "Editing"
+        },
+        {
+          "keys": "Ctrl+Up",
+          "description": "Scroll line up",
+          "category": "Editing"
+        },
+        {
+          "keys": "Ctrl+Down",
+          "description": "Scroll line down",
+          "category": "Editing"
+        },
+        {
+          "keys": "Alt+PageUp",
+          "description": "Scroll page up",
+          "category": "Editing"
+        },
+        {
+          "keys": "Alt+PageDown",
+          "description": "Scroll page down",
+          "category": "Editing"
+        },
+        {
+          "keys": "Ctrl+Shift+[",
+          "description": "Fold code region",
+          "category": "Editing"
+        },
+        {
+          "keys": "Ctrl+Shift+]",
+          "description": "Unfold code region",
+          "category": "Editing"
+        },
+        {
+          "keys": "Ctrl+K Ctrl+[",
+          "description": "Fold all subregions",
+          "category": "Editing"
+        },
+        {
+          "keys": "Ctrl+K Ctrl+]",
+          "description": "Unfold all subregions",
+          "category": "Editing"
+        },
+        {
+          "keys": "Ctrl+K Ctrl+0",
+          "description": "Fold all regions",
+          "category": "Editing"
+        },
+        {
+          "keys": "Ctrl+K Ctrl+J",
+          "description": "Unfold all regions",
+          "category": "Editing"
+        },
+        {
+          "keys": "Ctrl+/",
+          "description": "Toggle line comment",
+          "category": "Editing"
+        },
+        {
+          "keys": "Shift+Alt+A",
+          "description": "Toggle block comment",
+          "category": "Editing"
+        },
+        {
+          "keys": "Alt+Z",
+          "description": "Toggle word wrap",
+          "category": "Editing"
+        },
+        {
+          "keys": "Alt+Click",
+          "description": "Insert cursor at position",
+          "category": "Selection"
+        },
+        {
+          "keys": "Ctrl+Alt+Up",
+          "description": "Insert cursor above",
+          "category": "Selection"
+        },
+        {
+          "keys": "Ctrl+Alt+Down",
+          "description": "Insert cursor below",
+          "category": "Selection"
+        },
+        {
+          "keys": "Ctrl+U",
+          "description": "Undo last cursor operation",
+          "category": "Selection"
+        },
+        {
+          "keys": "Ctrl+D",
+          "description": "Add next occurrence to selection",
+          "category": "Selection"
+        },
+        {
+          "keys": "Ctrl+K Ctrl+D",
+          "description": "Skip current occurrence and find next",
+          "category": "Selection"
+        },
+        {
+          "keys": "Ctrl+Shift+L",
+          "description": "Select all occurrences of current find match",
+          "category": "Selection"
+        },
+        {
+          "keys": "Ctrl+F2",
+          "description": "Select all occurrences of current word",
+          "category": "Selection"
+        },
+        {
+          "keys": "Shift+Alt+Right",
+          "description": "Expand selection",
+          "category": "Selection"
+        },
+        {
+          "keys": "Shift+Alt+Left",
+          "description": "Shrink selection",
+          "category": "Selection"
+        },
+        {
+          "keys": "Shift+Alt+I",
+          "description": "Insert cursor at end of each selected line",
+          "category": "Selection"
+        },
+        {
+          "keys": "Ctrl+L",
+          "description": "Select current line",
+          "category": "Selection"
+        },
+        {
+          "keys": "Ctrl+F",
+          "description": "Find in current file",
+          "category": "Search"
+        },
+        {
+          "keys": "Ctrl+H",
+          "description": "Replace in current file",
+          "category": "Search"
+        },
+        {
+          "keys": "F3",
+          "description": "Find next match",
+          "category": "Search"
+        },
+        {
+          "keys": "Shift+F3",
+          "description": "Find previous match",
+          "category": "Search"
+        },
+        {
+          "keys": "Alt+Enter",
+          "description": "Select all find matches",
+          "category": "Search"
+        },
+        {
+          "keys": "Alt+C",
+          "description": "Toggle match case in search",
+          "category": "Search"
+        },
+        {
+          "keys": "Alt+R",
+          "description": "Toggle regex mode in search",
+          "category": "Search"
+        },
+        {
+          "keys": "Alt+W",
+          "description": "Toggle match whole word in search",
+          "category": "Search"
+        },
+        {
+          "keys": "Ctrl+Shift+F",
+          "description": "Search across workspace",
+          "category": "Search"
+        },
+        {
+          "keys": "Ctrl+Shift+H",
+          "description": "Replace across workspace",
+          "category": "Search"
+        },
+        {
+          "keys": "Ctrl+Shift+J",
+          "description": "Toggle search details",
+          "category": "Search"
+        },
+        {
+          "keys": "Ctrl+Space",
+          "description": "Trigger IntelliSense suggestions",
+          "category": "Code"
+        },
+        {
+          "keys": "Ctrl+Shift+Space",
+          "description": "Trigger parameter hints",
+          "category": "Code"
+        },
+        {
+          "keys": "F12",
+          "description": "Go to definition",
+          "category": "Code"
+        },
+        {
+          "keys": "Alt+F12",
+          "description": "Peek definition",
+          "category": "Code"
+        },
+        {
+          "keys": "Ctrl+K F12",
+          "description": "Open definition to the side",
+          "category": "Code"
+        },
+        {
+          "keys": "Ctrl+.",
+          "description": "Quick fix / Code actions",
+          "category": "Code"
+        },
+        {
+          "keys": "Shift+F12",
+          "description": "Show references",
+          "category": "Code"
+        },
+        {
+          "keys": "F2",
+          "description": "Rename symbol",
+          "category": "Code"
+        },
+        {
+          "keys": "Shift+Alt+F",
+          "description": "Format entire document",
+          "category": "Code"
+        },
+        {
+          "keys": "Ctrl+K Ctrl+F",
+          "description": "Format current selection",
+          "category": "Code"
+        },
+        {
+          "keys": "Ctrl+K Ctrl+X",
+          "description": "Trim trailing whitespace",
+          "category": "Code"
+        },
+        {
+          "keys": "Ctrl+K M",
+          "description": "Change language mode",
+          "category": "Code"
+        },
+        {
+          "keys": "Ctrl+B",
+          "description": "Toggle primary sidebar",
+          "category": "View"
+        },
+        {
+          "keys": "Ctrl+Shift+E",
+          "description": "Show Explorer view",
+          "category": "View"
+        },
+        {
+          "keys": "Ctrl+Shift+G",
+          "description": "Show Source Control view",
+          "category": "View"
+        },
+        {
+          "keys": "Ctrl+Shift+D",
+          "description": "Show Run and Debug view",
+          "category": "View"
+        },
+        {
+          "keys": "Ctrl+Shift+X",
+          "description": "Show Extensions view",
+          "category": "View"
+        },
+        {
+          "keys": "Ctrl+Shift+U",
+          "description": "Show Output panel",
+          "category": "View"
+        },
+        {
+          "keys": "Ctrl+Shift+V",
+          "description": "Toggle Markdown preview",
+          "category": "View"
+        },
+        {
+          "keys": "Ctrl+K V",
+          "description": "Open Markdown preview to the side",
+          "category": "View"
+        },
+        {
+          "keys": "Ctrl+J",
+          "description": "Toggle bottom panel",
+          "category": "View"
+        },
+        {
+          "keys": "Ctrl+\\",
+          "description": "Split active editor group",
+          "category": "View"
+        },
+        {
+          "keys": "Ctrl+K Ctrl+\\",
+          "description": "Split editor orthogonal",
+          "category": "View"
+        },
+        {
+          "keys": "Ctrl+`",
+          "description": "Toggle integrated terminal",
+          "category": "Terminal"
+        },
+        {
+          "keys": "Ctrl+Shift+`",
+          "description": "Create new terminal instance",
+          "category": "Terminal"
+        },
+        {
+          "keys": "Ctrl+Shift+C",
+          "description": "Copy selection in terminal",
+          "category": "Terminal"
+        },
+        {
+          "keys": "Ctrl+Shift+V",
+          "description": "Paste into terminal",
+          "category": "Terminal"
+        },
+        {
+          "keys": "Ctrl+Shift+Up",
+          "description": "Scroll terminal up",
+          "category": "Terminal"
+        },
+        {
+          "keys": "Ctrl+Shift+Down",
+          "description": "Scroll terminal down",
+          "category": "Terminal"
+        },
+        {
+          "keys": "Ctrl+PageUp",
+          "description": "Focus previous terminal tab",
+          "category": "Terminal"
+        },
+        {
+          "keys": "Ctrl+PageDown",
+          "description": "Focus next terminal tab",
+          "category": "Terminal"
+        },
+        {
+          "keys": "F9",
+          "description": "Toggle breakpoint on current line",
+          "category": "Debug"
+        },
+        {
+          "keys": "F5",
+          "description": "Start debugging or continue",
+          "category": "Debug"
+        },
+        {
+          "keys": "Ctrl+F5",
+          "description": "Start without debugging",
+          "category": "Debug"
+        },
+        {
+          "keys": "Shift+F5",
+          "description": "Stop debugging session",
+          "category": "Debug"
+        },
+        {
+          "keys": "Ctrl+Shift+F5",
+          "description": "Restart debugging session",
+          "category": "Debug"
+        },
+        {
+          "keys": "F10",
+          "description": "Step over",
+          "category": "Debug"
+        },
+        {
+          "keys": "F11",
+          "description": "Step into",
+          "category": "Debug"
+        },
+        {
+          "keys": "Shift+F11",
+          "description": "Step out",
+          "category": "Debug"
+        },
+        {
+          "keys": "Ctrl+K Ctrl+I",
+          "description": "Show hover information",
+          "category": "Debug"
+        },
+        {
+          "keys": "Ctrl+,",
+          "description": "Open user settings",
+          "category": "Preferences"
+        },
+        {
+          "keys": "Ctrl+K Ctrl+S",
+          "description": "Open keyboard shortcuts",
+          "category": "Preferences"
+        },
+        {
+          "keys": "Ctrl+K Ctrl+T",
+          "description": "Select color theme",
+          "category": "Preferences"
+        }
       ]
     },
     {
@@ -37,26 +647,798 @@
       "program": "Neovim",
       "sourceKind": "template",
       "keybinds": [
-        { "keys": "h j k l", "description": "Move left, down, up, and right", "category": "Movement", "context": "Normal mode" },
-        { "keys": "w / b", "description": "Move by word forward or backward", "category": "Movement", "context": "Normal mode" },
-        { "keys": "0 / $", "description": "Jump to start or end of line", "category": "Movement", "context": "Normal mode" },
-        { "keys": "gg / G", "description": "Jump to first or last line", "category": "Movement", "context": "Normal mode" },
-        { "keys": "Ctrl+d / Ctrl+u", "description": "Move half a page down or up", "category": "Movement", "context": "Normal mode" },
-        { "keys": "i / a", "description": "Insert before or after the cursor", "category": "Editing", "context": "Normal mode" },
-        { "keys": "o / O", "description": "Open a line below or above", "category": "Editing", "context": "Normal mode" },
-        { "keys": "dd", "description": "Delete current line", "category": "Editing", "context": "Normal mode" },
-        { "keys": "yy", "description": "Yank current line", "category": "Editing", "context": "Normal mode" },
-        { "keys": "p / P", "description": "Paste after or before the cursor", "category": "Editing", "context": "Normal mode" },
-        { "keys": "u / Ctrl+r", "description": "Undo or redo", "category": "Editing", "context": "Normal mode" },
-        { "keys": ".", "description": "Repeat last change", "category": "Editing", "context": "Normal mode" },
-        { "keys": "v / V / Ctrl+v", "description": "Start character, line, or block selection", "category": "Selection", "context": "Normal mode" },
-        { "keys": "/", "description": "Search forward", "category": "Search", "context": "Normal mode" },
-        { "keys": "n / N", "description": "Next or previous search result", "category": "Search", "context": "Normal mode" },
-        { "keys": ":w", "description": "Write current buffer", "category": "Files" },
-        { "keys": ":q", "description": "Close current window", "category": "Files" },
-        { "keys": ":e path", "description": "Edit a file", "category": "Files" },
-        { "keys": "Ctrl+w s / Ctrl+w v", "description": "Split horizontally or vertically", "category": "Windows", "context": "Normal mode" },
-        { "keys": "Ctrl+w h/j/k/l", "description": "Move between windows", "category": "Windows", "context": "Normal mode" }
+        {
+          "keys": "h",
+          "description": "Move cursor left",
+          "category": "Motion",
+          "context": "Normal mode"
+        },
+        {
+          "keys": "j",
+          "description": "Move cursor down",
+          "category": "Motion",
+          "context": "Normal mode"
+        },
+        {
+          "keys": "k",
+          "description": "Move cursor up",
+          "category": "Motion",
+          "context": "Normal mode"
+        },
+        {
+          "keys": "l",
+          "description": "Move cursor right",
+          "category": "Motion",
+          "context": "Normal mode"
+        },
+        {
+          "keys": "w",
+          "description": "Jump forward to start of next word",
+          "category": "Motion",
+          "context": "Normal mode"
+        },
+        {
+          "keys": "W",
+          "description": "Jump forward to start of next WORD",
+          "category": "Motion",
+          "context": "Normal mode"
+        },
+        {
+          "keys": "e",
+          "description": "Jump forward to end of word",
+          "category": "Motion",
+          "context": "Normal mode"
+        },
+        {
+          "keys": "E",
+          "description": "Jump forward to end of WORD",
+          "category": "Motion",
+          "context": "Normal mode"
+        },
+        {
+          "keys": "b",
+          "description": "Jump backward to start of word",
+          "category": "Motion",
+          "context": "Normal mode"
+        },
+        {
+          "keys": "B",
+          "description": "Jump backward to start of WORD",
+          "category": "Motion",
+          "context": "Normal mode"
+        },
+        {
+          "keys": "ge",
+          "description": "Jump backward to end of word",
+          "category": "Motion",
+          "context": "Normal mode"
+        },
+        {
+          "keys": "0",
+          "description": "Jump to absolute line start",
+          "category": "Motion",
+          "context": "Normal mode"
+        },
+        {
+          "keys": "^",
+          "description": "Jump to first non-blank character",
+          "category": "Motion",
+          "context": "Normal mode"
+        },
+        {
+          "keys": "$",
+          "description": "Jump to line end",
+          "category": "Motion",
+          "context": "Normal mode"
+        },
+        {
+          "keys": "g_",
+          "description": "Jump to last non-blank character",
+          "category": "Motion",
+          "context": "Normal mode"
+        },
+        {
+          "keys": "gg",
+          "description": "Jump to start of document",
+          "category": "Motion",
+          "context": "Normal mode"
+        },
+        {
+          "keys": "G",
+          "description": "Jump to end of document",
+          "category": "Motion",
+          "context": "Normal mode"
+        },
+        {
+          "keys": ":<N>",
+          "description": "Jump to line number N",
+          "category": "Motion",
+          "context": "Normal mode"
+        },
+        {
+          "keys": "f<char>",
+          "description": "Find char forward in current line",
+          "category": "Motion",
+          "context": "Normal mode"
+        },
+        {
+          "keys": "F<char>",
+          "description": "Find char backward in current line",
+          "category": "Motion",
+          "context": "Normal mode"
+        },
+        {
+          "keys": "t<char>",
+          "description": "Till char forward in current line",
+          "category": "Motion",
+          "context": "Normal mode"
+        },
+        {
+          "keys": "T<char>",
+          "description": "Till char backward in current line",
+          "category": "Motion",
+          "context": "Normal mode"
+        },
+        {
+          "keys": ";",
+          "description": "Repeat last char find forward",
+          "category": "Motion",
+          "context": "Normal mode"
+        },
+        {
+          "keys": ",",
+          "description": "Repeat last char find backward",
+          "category": "Motion",
+          "context": "Normal mode"
+        },
+        {
+          "keys": "%",
+          "description": "Jump to matching bracket / parenthesis",
+          "category": "Motion",
+          "context": "Normal mode"
+        },
+        {
+          "keys": "Ctrl+d",
+          "description": "Scroll half page down",
+          "category": "Motion",
+          "context": "Normal mode"
+        },
+        {
+          "keys": "Ctrl+u",
+          "description": "Scroll half page up",
+          "category": "Motion",
+          "context": "Normal mode"
+        },
+        {
+          "keys": "Ctrl+f",
+          "description": "Scroll full page down",
+          "category": "Motion",
+          "context": "Normal mode"
+        },
+        {
+          "keys": "Ctrl+b",
+          "description": "Scroll full page up",
+          "category": "Motion",
+          "context": "Normal mode"
+        },
+        {
+          "keys": "H",
+          "description": "Jump to top of screen viewport",
+          "category": "Motion",
+          "context": "Normal mode"
+        },
+        {
+          "keys": "M",
+          "description": "Jump to middle of screen viewport",
+          "category": "Motion",
+          "context": "Normal mode"
+        },
+        {
+          "keys": "L",
+          "description": "Jump to bottom of screen viewport",
+          "category": "Motion",
+          "context": "Normal mode"
+        },
+        {
+          "keys": "iw",
+          "description": "Inner word text object",
+          "category": "Text Object",
+          "context": "Operator/Visual"
+        },
+        {
+          "keys": "aw",
+          "description": "A word with surrounding whitespace",
+          "category": "Text Object",
+          "context": "Operator/Visual"
+        },
+        {
+          "keys": "i\"",
+          "description": "Inner double quotes content",
+          "category": "Text Object",
+          "context": "Operator/Visual"
+        },
+        {
+          "keys": "a\"",
+          "description": "Double quotes and contents",
+          "category": "Text Object",
+          "context": "Operator/Visual"
+        },
+        {
+          "keys": "i'",
+          "description": "Inner single quotes content",
+          "category": "Text Object",
+          "context": "Operator/Visual"
+        },
+        {
+          "keys": "a'",
+          "description": "Single quotes and contents",
+          "category": "Text Object",
+          "context": "Operator/Visual"
+        },
+        {
+          "keys": "i(",
+          "description": "Inner parentheses block",
+          "category": "Text Object",
+          "context": "Operator/Visual"
+        },
+        {
+          "keys": "a(",
+          "description": "Parentheses and block contents",
+          "category": "Text Object",
+          "context": "Operator/Visual"
+        },
+        {
+          "keys": "i{",
+          "description": "Inner curly braces block",
+          "category": "Text Object",
+          "context": "Operator/Visual"
+        },
+        {
+          "keys": "a{",
+          "description": "Curly braces and block contents",
+          "category": "Text Object",
+          "context": "Operator/Visual"
+        },
+        {
+          "keys": "i[",
+          "description": "Inner square brackets block",
+          "category": "Text Object",
+          "context": "Operator/Visual"
+        },
+        {
+          "keys": "a[",
+          "description": "Square brackets and block contents",
+          "category": "Text Object",
+          "context": "Operator/Visual"
+        },
+        {
+          "keys": "it",
+          "description": "Inner HTML / XML tag content",
+          "category": "Text Object",
+          "context": "Operator/Visual"
+        },
+        {
+          "keys": "at",
+          "description": "HTML / XML tag with tags",
+          "category": "Text Object",
+          "context": "Operator/Visual"
+        },
+        {
+          "keys": "ip",
+          "description": "Inner paragraph",
+          "category": "Text Object",
+          "context": "Operator/Visual"
+        },
+        {
+          "keys": "ap",
+          "description": "A paragraph with trailing newline",
+          "category": "Text Object",
+          "context": "Operator/Visual"
+        },
+        {
+          "keys": "i",
+          "description": "Insert before cursor",
+          "category": "Insert",
+          "context": "Normal mode"
+        },
+        {
+          "keys": "I",
+          "description": "Insert at line beginning",
+          "category": "Insert",
+          "context": "Normal mode"
+        },
+        {
+          "keys": "a",
+          "description": "Append after cursor",
+          "category": "Insert",
+          "context": "Normal mode"
+        },
+        {
+          "keys": "A",
+          "description": "Append at line end",
+          "category": "Insert",
+          "context": "Normal mode"
+        },
+        {
+          "keys": "o",
+          "description": "Open new line below",
+          "category": "Insert",
+          "context": "Normal mode"
+        },
+        {
+          "keys": "O",
+          "description": "Open new line above",
+          "category": "Insert",
+          "context": "Normal mode"
+        },
+        {
+          "keys": "ea",
+          "description": "Append at end of word",
+          "category": "Insert",
+          "context": "Normal mode"
+        },
+        {
+          "keys": "Esc",
+          "description": "Exit insert mode back to normal",
+          "category": "Insert",
+          "context": "Insert mode"
+        },
+        {
+          "keys": "Ctrl+[",
+          "description": "Exit insert mode (alternative to Esc)",
+          "category": "Insert",
+          "context": "Insert mode"
+        },
+        {
+          "keys": "Ctrl+h",
+          "description": "Delete previous character in insert mode",
+          "category": "Insert",
+          "context": "Insert mode"
+        },
+        {
+          "keys": "Ctrl+w",
+          "description": "Delete previous word in insert mode",
+          "category": "Insert",
+          "context": "Insert mode"
+        },
+        {
+          "keys": "Ctrl+u",
+          "description": "Delete current line back to beginning",
+          "category": "Insert",
+          "context": "Insert mode"
+        },
+        {
+          "keys": "Ctrl+o",
+          "description": "Execute one normal mode command in insert",
+          "category": "Insert",
+          "context": "Insert mode"
+        },
+        {
+          "keys": "x",
+          "description": "Delete character under cursor",
+          "category": "Editing",
+          "context": "Normal mode"
+        },
+        {
+          "keys": "X",
+          "description": "Delete character before cursor",
+          "category": "Editing",
+          "context": "Normal mode"
+        },
+        {
+          "keys": "s",
+          "description": "Substitute character and enter insert mode",
+          "category": "Editing",
+          "context": "Normal mode"
+        },
+        {
+          "keys": "S",
+          "description": "Substitute whole line",
+          "category": "Editing",
+          "context": "Normal mode"
+        },
+        {
+          "keys": "r<char>",
+          "description": "Replace char under cursor without inserting",
+          "category": "Editing",
+          "context": "Normal mode"
+        },
+        {
+          "keys": "R",
+          "description": "Enter replace mode",
+          "category": "Editing",
+          "context": "Normal mode"
+        },
+        {
+          "keys": "dd",
+          "description": "Delete (cut) current line",
+          "category": "Editing",
+          "context": "Normal mode"
+        },
+        {
+          "keys": "dw",
+          "description": "Delete from cursor to next word start",
+          "category": "Editing",
+          "context": "Normal mode"
+        },
+        {
+          "keys": "d$",
+          "description": "Delete from cursor to line end",
+          "category": "Editing",
+          "context": "Normal mode"
+        },
+        {
+          "keys": "cc",
+          "description": "Change (clear) line and enter insert mode",
+          "category": "Editing",
+          "context": "Normal mode"
+        },
+        {
+          "keys": "cw",
+          "description": "Change word",
+          "category": "Editing",
+          "context": "Normal mode"
+        },
+        {
+          "keys": "C",
+          "description": "Change to line end",
+          "category": "Editing",
+          "context": "Normal mode"
+        },
+        {
+          "keys": "yy",
+          "description": "Yank (copy) current line",
+          "category": "Editing",
+          "context": "Normal mode"
+        },
+        {
+          "keys": "yw",
+          "description": "Yank word",
+          "category": "Editing",
+          "context": "Normal mode"
+        },
+        {
+          "keys": "y$",
+          "description": "Yank to line end",
+          "category": "Editing",
+          "context": "Normal mode"
+        },
+        {
+          "keys": "p",
+          "description": "Paste after cursor / below line",
+          "category": "Editing",
+          "context": "Normal mode"
+        },
+        {
+          "keys": "P",
+          "description": "Paste before cursor / above line",
+          "category": "Editing",
+          "context": "Normal mode"
+        },
+        {
+          "keys": "u",
+          "description": "Undo last change",
+          "category": "Editing",
+          "context": "Normal mode"
+        },
+        {
+          "keys": "Ctrl+r",
+          "description": "Redo change",
+          "category": "Editing",
+          "context": "Normal mode"
+        },
+        {
+          "keys": ".",
+          "description": "Repeat last edit operation",
+          "category": "Editing",
+          "context": "Normal mode"
+        },
+        {
+          "keys": ">>",
+          "description": "Indent line right",
+          "category": "Editing",
+          "context": "Normal mode"
+        },
+        {
+          "keys": "<<",
+          "description": "Indent line left",
+          "category": "Editing",
+          "context": "Normal mode"
+        },
+        {
+          "keys": "==",
+          "description": "Auto-indent current line",
+          "category": "Editing",
+          "context": "Normal mode"
+        },
+        {
+          "keys": "J",
+          "description": "Join current line with line below",
+          "category": "Editing",
+          "context": "Normal mode"
+        },
+        {
+          "keys": "gJ",
+          "description": "Join lines without adding spaces",
+          "category": "Editing",
+          "context": "Normal mode"
+        },
+        {
+          "keys": "~",
+          "description": "Toggle case of char under cursor",
+          "category": "Editing",
+          "context": "Normal mode"
+        },
+        {
+          "keys": "v",
+          "description": "Start character-wise visual selection",
+          "category": "Visual",
+          "context": "Normal mode"
+        },
+        {
+          "keys": "V",
+          "description": "Start line-wise visual selection",
+          "category": "Visual",
+          "context": "Normal mode"
+        },
+        {
+          "keys": "Ctrl+v",
+          "description": "Start block-wise visual selection",
+          "category": "Visual",
+          "context": "Normal mode"
+        },
+        {
+          "keys": "o",
+          "description": "Jump to other end of visual selection",
+          "category": "Visual",
+          "context": "Visual mode"
+        },
+        {
+          "keys": "d / x",
+          "description": "Delete selected text",
+          "category": "Visual",
+          "context": "Visual mode"
+        },
+        {
+          "keys": "y",
+          "description": "Yank selected text",
+          "category": "Visual",
+          "context": "Visual mode"
+        },
+        {
+          "keys": "c",
+          "description": "Change selected text",
+          "category": "Visual",
+          "context": "Visual mode"
+        },
+        {
+          "keys": ">",
+          "description": "Indent selected text",
+          "category": "Visual",
+          "context": "Visual mode"
+        },
+        {
+          "keys": "<",
+          "description": "Outdent selected text",
+          "category": "Visual",
+          "context": "Visual mode"
+        },
+        {
+          "keys": "u / U",
+          "description": "Make selected text lowercase / uppercase",
+          "category": "Visual",
+          "context": "Visual mode"
+        },
+        {
+          "keys": "gv",
+          "description": "Reselect previous visual area",
+          "category": "Visual",
+          "context": "Normal mode"
+        },
+        {
+          "keys": "/<pattern>",
+          "description": "Search forward for pattern",
+          "category": "Search",
+          "context": "Normal mode"
+        },
+        {
+          "keys": "?<pattern>",
+          "description": "Search backward for pattern",
+          "category": "Search",
+          "context": "Normal mode"
+        },
+        {
+          "keys": "n",
+          "description": "Repeat search in same direction",
+          "category": "Search",
+          "context": "Normal mode"
+        },
+        {
+          "keys": "N",
+          "description": "Repeat search in opposite direction",
+          "category": "Search",
+          "context": "Normal mode"
+        },
+        {
+          "keys": "*",
+          "description": "Search forward for word under cursor",
+          "category": "Search",
+          "context": "Normal mode"
+        },
+        {
+          "keys": "#",
+          "description": "Search backward for word under cursor",
+          "category": "Search",
+          "context": "Normal mode"
+        },
+        {
+          "keys": ":noh",
+          "description": "Clear search highlights",
+          "category": "Search",
+          "context": "Command"
+        },
+        {
+          "keys": ":%s/old/new/g",
+          "description": "Replace all occurrences in file",
+          "category": "Search",
+          "context": "Command"
+        },
+        {
+          "keys": ":%s/old/new/gc",
+          "description": "Replace with confirmation prompt",
+          "category": "Search",
+          "context": "Command"
+        },
+        {
+          "keys": "Ctrl+w s",
+          "description": "Split window horizontally",
+          "category": "Windows",
+          "context": "Normal mode"
+        },
+        {
+          "keys": "Ctrl+w v",
+          "description": "Split window vertically",
+          "category": "Windows",
+          "context": "Normal mode"
+        },
+        {
+          "keys": "Ctrl+w h",
+          "description": "Move to window on the left",
+          "category": "Windows",
+          "context": "Normal mode"
+        },
+        {
+          "keys": "Ctrl+w j",
+          "description": "Move to window below",
+          "category": "Windows",
+          "context": "Normal mode"
+        },
+        {
+          "keys": "Ctrl+w k",
+          "description": "Move to window above",
+          "category": "Windows",
+          "context": "Normal mode"
+        },
+        {
+          "keys": "Ctrl+w l",
+          "description": "Move to window on the right",
+          "category": "Windows",
+          "context": "Normal mode"
+        },
+        {
+          "keys": "Ctrl+w w",
+          "description": "Cycle to next window",
+          "category": "Windows",
+          "context": "Normal mode"
+        },
+        {
+          "keys": "Ctrl+w q",
+          "description": "Quit / close current window",
+          "category": "Windows",
+          "context": "Normal mode"
+        },
+        {
+          "keys": "Ctrl+w o",
+          "description": "Close all other windows except current",
+          "category": "Windows",
+          "context": "Normal mode"
+        },
+        {
+          "keys": "Ctrl+w =",
+          "description": "Make all split windows equal size",
+          "category": "Windows",
+          "context": "Normal mode"
+        },
+        {
+          "keys": ":bn",
+          "description": "Switch to next buffer",
+          "category": "Buffers",
+          "context": "Command"
+        },
+        {
+          "keys": ":bp",
+          "description": "Switch to previous buffer",
+          "category": "Buffers",
+          "context": "Command"
+        },
+        {
+          "keys": ":bd",
+          "description": "Delete (close) current buffer",
+          "category": "Buffers",
+          "context": "Command"
+        },
+        {
+          "keys": ":ls",
+          "description": "List open buffers",
+          "category": "Buffers",
+          "context": "Command"
+        },
+        {
+          "keys": ":b <name>",
+          "description": "Switch to buffer by name or number",
+          "category": "Buffers",
+          "context": "Command"
+        },
+        {
+          "keys": ":tabnew",
+          "description": "Open new tab page",
+          "category": "Tabs",
+          "context": "Command"
+        },
+        {
+          "keys": ":tabclose",
+          "description": "Close current tab page",
+          "category": "Tabs",
+          "context": "Command"
+        },
+        {
+          "keys": "gt",
+          "description": "Go to next tab page",
+          "category": "Tabs",
+          "context": "Normal mode"
+        },
+        {
+          "keys": "gT",
+          "description": "Go to previous tab page",
+          "category": "Tabs",
+          "context": "Normal mode"
+        },
+        {
+          "keys": ":w",
+          "description": "Save file",
+          "category": "Files",
+          "context": "Command"
+        },
+        {
+          "keys": ":w!",
+          "description": "Force save file",
+          "category": "Files",
+          "context": "Command"
+        },
+        {
+          "keys": ":q",
+          "description": "Quit file",
+          "category": "Files",
+          "context": "Command"
+        },
+        {
+          "keys": ":q!",
+          "description": "Quit without saving changes",
+          "category": "Files",
+          "context": "Command"
+        },
+        {
+          "keys": ":wq / :x / ZZ",
+          "description": "Save and quit",
+          "category": "Files",
+          "context": "Command"
+        },
+        {
+          "keys": ":e <path>",
+          "description": "Edit file at path",
+          "category": "Files",
+          "context": "Command"
+        }
       ]
     },
     {
@@ -66,26 +1448,1039 @@
       "program": "IntelliJ IDEA",
       "sourceKind": "template",
       "keybinds": [
-        { "keys": "Ctrl+Shift+A", "description": "Find action", "category": "Navigation" },
-        { "keys": "Shift Shift", "description": "Search everywhere", "category": "Navigation" },
-        { "keys": "Ctrl+N", "description": "Go to class", "category": "Navigation" },
-        { "keys": "Ctrl+Shift+N", "description": "Go to file", "category": "Navigation" },
-        { "keys": "Ctrl+Alt+Shift+N", "description": "Go to symbol", "category": "Navigation" },
-        { "keys": "Ctrl+B", "description": "Go to declaration or usages", "category": "Navigation" },
-        { "keys": "Alt+F7", "description": "Find usages", "category": "Navigation" },
-        { "keys": "Ctrl+E", "description": "Recent files", "category": "Navigation" },
-        { "keys": "Ctrl+Space", "description": "Basic code completion", "category": "Code" },
-        { "keys": "Ctrl+Shift+Space", "description": "Smart code completion", "category": "Code" },
-        { "keys": "Alt+Enter", "description": "Show intention actions", "category": "Code" },
-        { "keys": "Ctrl+Alt+L", "description": "Reformat code", "category": "Code" },
-        { "keys": "Ctrl+Alt+O", "description": "Optimize imports", "category": "Code" },
-        { "keys": "Shift+F6", "description": "Rename", "category": "Refactor" },
-        { "keys": "Ctrl+Alt+M", "description": "Extract method", "category": "Refactor" },
-        { "keys": "Ctrl+F8", "description": "Toggle line breakpoint", "category": "Run and debug" },
-        { "keys": "Shift+F10", "description": "Run", "category": "Run and debug" },
-        { "keys": "Shift+F9", "description": "Debug", "category": "Run and debug" },
-        { "keys": "Ctrl+F2", "description": "Stop", "category": "Run and debug" },
-        { "keys": "Ctrl+Alt+S", "description": "Open settings", "category": "Preferences" }
+        {
+          "keys": "Shift Shift",
+          "description": "Search everywhere (classes, files, symbols, actions)",
+          "category": "Navigation"
+        },
+        {
+          "keys": "Ctrl+Shift+A",
+          "description": "Find action by name",
+          "category": "Navigation"
+        },
+        {
+          "keys": "Ctrl+N",
+          "description": "Go to class",
+          "category": "Navigation"
+        },
+        {
+          "keys": "Ctrl+Shift+N",
+          "description": "Go to file",
+          "category": "Navigation"
+        },
+        {
+          "keys": "Ctrl+Alt+Shift+N",
+          "description": "Go to symbol",
+          "category": "Navigation"
+        },
+        {
+          "keys": "Ctrl+E",
+          "description": "Recent files popup",
+          "category": "Navigation"
+        },
+        {
+          "keys": "Ctrl+Shift+E",
+          "description": "Recently edited files popup",
+          "category": "Navigation"
+        },
+        {
+          "keys": "Ctrl+B",
+          "description": "Go to declaration or usages",
+          "category": "Navigation"
+        },
+        {
+          "keys": "Ctrl+Alt+B",
+          "description": "Go to implementation(s)",
+          "category": "Navigation"
+        },
+        {
+          "keys": "Ctrl+U",
+          "description": "Go to super-method / super-class",
+          "category": "Navigation"
+        },
+        {
+          "keys": "Alt+F7",
+          "description": "Find usages in project",
+          "category": "Navigation"
+        },
+        {
+          "keys": "Ctrl+F7",
+          "description": "Find usages in current file",
+          "category": "Navigation"
+        },
+        {
+          "keys": "Ctrl+Shift+F7",
+          "description": "Highlight usages in file",
+          "category": "Navigation"
+        },
+        {
+          "keys": "Ctrl+Alt+Left",
+          "description": "Navigate back",
+          "category": "Navigation"
+        },
+        {
+          "keys": "Ctrl+Alt+Right",
+          "description": "Navigate forward",
+          "category": "Navigation"
+        },
+        {
+          "keys": "Alt+Home",
+          "description": "Jump to navigation bar",
+          "category": "Navigation"
+        },
+        {
+          "keys": "F12",
+          "description": "Jump to last tool window",
+          "category": "Navigation"
+        },
+        {
+          "keys": "Esc",
+          "description": "Return focus to editor",
+          "category": "Navigation"
+        },
+        {
+          "keys": "Ctrl+Space",
+          "description": "Basic code completion",
+          "category": "Code"
+        },
+        {
+          "keys": "Ctrl+Shift+Space",
+          "description": "Smart type-aware code completion",
+          "category": "Code"
+        },
+        {
+          "keys": "Ctrl+Shift+Enter",
+          "description": "Complete current statement",
+          "category": "Code"
+        },
+        {
+          "keys": "Ctrl+P",
+          "description": "Parameter info (within method arguments)",
+          "category": "Code"
+        },
+        {
+          "keys": "Ctrl+Q",
+          "description": "Quick documentation lookup",
+          "category": "Code"
+        },
+        {
+          "keys": "Alt+Enter",
+          "description": "Show intention actions and quick-fixes",
+          "category": "Code"
+        },
+        {
+          "keys": "Ctrl+Alt+L",
+          "description": "Reformat code style",
+          "category": "Code"
+        },
+        {
+          "keys": "Ctrl+Alt+O",
+          "description": "Optimize import statements",
+          "category": "Code"
+        },
+        {
+          "keys": "Ctrl+Alt+I",
+          "description": "Auto-indent current line / selection",
+          "category": "Code"
+        },
+        {
+          "keys": "Tab / Shift+Tab",
+          "description": "Indent / Outdent selected lines",
+          "category": "Code"
+        },
+        {
+          "keys": "Ctrl+X",
+          "description": "Cut line or selection",
+          "category": "Editing"
+        },
+        {
+          "keys": "Ctrl+C",
+          "description": "Copy line or selection",
+          "category": "Editing"
+        },
+        {
+          "keys": "Ctrl+V",
+          "description": "Paste from clipboard",
+          "category": "Editing"
+        },
+        {
+          "keys": "Ctrl+Shift+V",
+          "description": "Paste from clipboard history",
+          "category": "Editing"
+        },
+        {
+          "keys": "Ctrl+D",
+          "description": "Duplicate current line or selection",
+          "category": "Editing"
+        },
+        {
+          "keys": "Ctrl+Y",
+          "description": "Delete line under cursor",
+          "category": "Editing"
+        },
+        {
+          "keys": "Ctrl+/",
+          "description": "Comment / uncomment with line comment",
+          "category": "Editing"
+        },
+        {
+          "keys": "Ctrl+Shift+/",
+          "description": "Comment / uncomment with block comment",
+          "category": "Editing"
+        },
+        {
+          "keys": "Ctrl+W",
+          "description": "Extend selection successively",
+          "category": "Selection"
+        },
+        {
+          "keys": "Ctrl+Shift+W",
+          "description": "Shrink selection successively",
+          "category": "Selection"
+        },
+        {
+          "keys": "Alt+Shift+Up",
+          "description": "Move line up",
+          "category": "Editing"
+        },
+        {
+          "keys": "Alt+Shift+Down",
+          "description": "Move line down",
+          "category": "Editing"
+        },
+        {
+          "keys": "Ctrl+Shift+Up",
+          "description": "Move statement up",
+          "category": "Editing"
+        },
+        {
+          "keys": "Ctrl+Shift+Down",
+          "description": "Move statement down",
+          "category": "Editing"
+        },
+        {
+          "keys": "Ctrl+Minus",
+          "description": "Collapse code block",
+          "category": "Editing"
+        },
+        {
+          "keys": "Ctrl+Plus",
+          "description": "Expand code block",
+          "category": "Editing"
+        },
+        {
+          "keys": "Ctrl+Shift+Minus",
+          "description": "Collapse all code blocks",
+          "category": "Editing"
+        },
+        {
+          "keys": "Ctrl+Shift+Plus",
+          "description": "Expand all code blocks",
+          "category": "Editing"
+        },
+        {
+          "keys": "Shift+F6",
+          "description": "Rename element and references",
+          "category": "Refactor"
+        },
+        {
+          "keys": "Ctrl+Alt+V",
+          "description": "Extract variable",
+          "category": "Refactor"
+        },
+        {
+          "keys": "Ctrl+Alt+M",
+          "description": "Extract method",
+          "category": "Refactor"
+        },
+        {
+          "keys": "Ctrl+Alt+C",
+          "description": "Extract constant",
+          "category": "Refactor"
+        },
+        {
+          "keys": "Ctrl+Alt+F",
+          "description": "Extract field",
+          "category": "Refactor"
+        },
+        {
+          "keys": "Ctrl+Alt+P",
+          "description": "Extract parameter",
+          "category": "Refactor"
+        },
+        {
+          "keys": "Ctrl+Alt+N",
+          "description": "Inline variable or method",
+          "category": "Refactor"
+        },
+        {
+          "keys": "Ctrl+F6",
+          "description": "Change method signature",
+          "category": "Refactor"
+        },
+        {
+          "keys": "F6",
+          "description": "Move class / method to another package",
+          "category": "Refactor"
+        },
+        {
+          "keys": "F5",
+          "description": "Copy class or file",
+          "category": "Refactor"
+        },
+        {
+          "keys": "Alt+Delete",
+          "description": "Safe delete with usage check",
+          "category": "Refactor"
+        },
+        {
+          "keys": "Ctrl+Alt+Shift+T",
+          "description": "Refactor this (contextual popup)",
+          "category": "Refactor"
+        },
+        {
+          "keys": "Ctrl+F9",
+          "description": "Build project / Make module",
+          "category": "Run and debug"
+        },
+        {
+          "keys": "Shift+F10",
+          "description": "Run current configuration",
+          "category": "Run and debug"
+        },
+        {
+          "keys": "Shift+F9",
+          "description": "Debug current configuration",
+          "category": "Run and debug"
+        },
+        {
+          "keys": "Alt+Shift+F10",
+          "description": "Select configuration and run",
+          "category": "Run and debug"
+        },
+        {
+          "keys": "Alt+Shift+F9",
+          "description": "Select configuration and debug",
+          "category": "Run and debug"
+        },
+        {
+          "keys": "Ctrl+F2",
+          "description": "Stop running process",
+          "category": "Run and debug"
+        },
+        {
+          "keys": "Ctrl+F8",
+          "description": "Toggle line breakpoint",
+          "category": "Run and debug"
+        },
+        {
+          "keys": "Ctrl+Shift+F8",
+          "description": "View / edit all breakpoints",
+          "category": "Run and debug"
+        },
+        {
+          "keys": "F8",
+          "description": "Step over in debugger",
+          "category": "Run and debug"
+        },
+        {
+          "keys": "F7",
+          "description": "Step into in debugger",
+          "category": "Run and debug"
+        },
+        {
+          "keys": "Shift+F8",
+          "description": "Step out in debugger",
+          "category": "Run and debug"
+        },
+        {
+          "keys": "Alt+F9",
+          "description": "Run to cursor position",
+          "category": "Run and debug"
+        },
+        {
+          "keys": "Alt+F8",
+          "description": "Evaluate expression popup",
+          "category": "Run and debug"
+        },
+        {
+          "keys": "F9",
+          "description": "Resume program execution",
+          "category": "Run and debug"
+        },
+        {
+          "keys": "Alt+1",
+          "description": "Toggle Project tool window",
+          "category": "Tool Windows"
+        },
+        {
+          "keys": "Alt+4",
+          "description": "Toggle Run tool window",
+          "category": "Tool Windows"
+        },
+        {
+          "keys": "Alt+5",
+          "description": "Toggle Debug tool window",
+          "category": "Tool Windows"
+        },
+        {
+          "keys": "Alt+6",
+          "description": "Toggle Problems tool window",
+          "category": "Tool Windows"
+        },
+        {
+          "keys": "Alt+7",
+          "description": "Toggle Structure tool window",
+          "category": "Tool Windows"
+        },
+        {
+          "keys": "Alt+8",
+          "description": "Toggle Services tool window",
+          "category": "Tool Windows"
+        },
+        {
+          "keys": "Alt+9",
+          "description": "Toggle Version Control tool window",
+          "category": "Tool Windows"
+        },
+        {
+          "keys": "Alt+F12",
+          "description": "Toggle Terminal tool window",
+          "category": "Tool Windows"
+        },
+        {
+          "keys": "Ctrl+Shift+F12",
+          "description": "Toggle maximize active editor",
+          "category": "Tool Windows"
+        },
+        {
+          "keys": "Ctrl+Alt+S",
+          "description": "Open settings / preferences",
+          "category": "Preferences"
+        },
+        {
+          "keys": "Ctrl+Alt+Shift+S",
+          "description": "Open Project Structure dialog",
+          "category": "Preferences"
+        }
+      ]
+    },
+    {
+      "id": "template-zed",
+      "name": "Zed",
+      "icon": "code",
+      "program": "Zed",
+      "sourceKind": "template",
+      "keybinds": [
+        {
+          "keys": "Ctrl+Shift+P",
+          "description": "Command palette",
+          "category": "Navigation"
+        },
+        {
+          "keys": "Ctrl+P",
+          "description": "File search / Open file",
+          "category": "Navigation"
+        },
+        {
+          "keys": "Ctrl+B",
+          "description": "Toggle project panel",
+          "category": "View"
+        },
+        {
+          "keys": "Ctrl+`",
+          "description": "Toggle integrated terminal",
+          "category": "Terminal"
+        },
+        {
+          "keys": "Ctrl+K Ctrl+S",
+          "description": "Open keymap settings",
+          "category": "Preferences"
+        },
+        {
+          "keys": "Ctrl+,",
+          "description": "Open settings file",
+          "category": "Preferences"
+        },
+        {
+          "keys": "Ctrl+Shift+F",
+          "description": "Project-wide search",
+          "category": "Search"
+        },
+        {
+          "keys": "Ctrl+F",
+          "description": "Find in buffer",
+          "category": "Search"
+        },
+        {
+          "keys": "Ctrl+H",
+          "description": "Replace in buffer",
+          "category": "Search"
+        },
+        {
+          "keys": "F12",
+          "description": "Go to definition",
+          "category": "Code"
+        },
+        {
+          "keys": "Alt+F12",
+          "description": "Peek definition",
+          "category": "Code"
+        },
+        {
+          "keys": "F2",
+          "description": "Rename symbol",
+          "category": "Code"
+        },
+        {
+          "keys": "Ctrl+.",
+          "description": "Code actions",
+          "category": "Code"
+        },
+        {
+          "keys": "Alt+Up / Alt+Down",
+          "description": "Move line up or down",
+          "category": "Editing"
+        },
+        {
+          "keys": "Shift+Alt+Up / Shift+Alt+Down",
+          "description": "Duplicate line up or down",
+          "category": "Editing"
+        },
+        {
+          "keys": "Ctrl+D",
+          "description": "Select next occurrence",
+          "category": "Selection"
+        },
+        {
+          "keys": "Ctrl+K Ctrl+D",
+          "description": "Skip next occurrence",
+          "category": "Selection"
+        },
+        {
+          "keys": "Ctrl+K Ctrl+Right",
+          "description": "Split pane right",
+          "category": "Windows"
+        },
+        {
+          "keys": "Ctrl+K Ctrl+Down",
+          "description": "Split pane down",
+          "category": "Windows"
+        }
+      ]
+    },
+    {
+      "id": "template-helix",
+      "name": "Helix",
+      "icon": "terminal",
+      "program": "Helix",
+      "sourceKind": "template",
+      "keybinds": [
+        {
+          "keys": "h j k l",
+          "description": "Move left, down, up, and right",
+          "category": "Movement",
+          "context": "Normal"
+        },
+        {
+          "keys": "w / b / e",
+          "description": "Move forward word start, backward, or word end",
+          "category": "Movement",
+          "context": "Normal"
+        },
+        {
+          "keys": "x",
+          "description": "Select current line and extend",
+          "category": "Selection",
+          "context": "Normal"
+        },
+        {
+          "keys": "v",
+          "description": "Enter select (extend) mode",
+          "category": "Selection",
+          "context": "Normal"
+        },
+        {
+          "keys": "i / a",
+          "description": "Insert before or after selection",
+          "category": "Insert",
+          "context": "Normal"
+        },
+        {
+          "keys": "o / O",
+          "description": "Open line below or above",
+          "category": "Insert",
+          "context": "Normal"
+        },
+        {
+          "keys": "d",
+          "description": "Delete selection into register",
+          "category": "Editing",
+          "context": "Normal"
+        },
+        {
+          "keys": "c",
+          "description": "Change selection (delete & enter insert)",
+          "category": "Editing",
+          "context": "Normal"
+        },
+        {
+          "keys": "y",
+          "description": "Yank selection into register",
+          "category": "Editing",
+          "context": "Normal"
+        },
+        {
+          "keys": "p / P",
+          "description": "Paste after or before selection",
+          "category": "Editing",
+          "context": "Normal"
+        },
+        {
+          "keys": "u / U",
+          "description": "Undo or redo change",
+          "category": "Editing",
+          "context": "Normal"
+        },
+        {
+          "keys": "Space f",
+          "description": "File picker",
+          "category": "Space Menu",
+          "context": "Normal"
+        },
+        {
+          "keys": "Space b",
+          "description": "Buffer picker",
+          "category": "Space Menu",
+          "context": "Normal"
+        },
+        {
+          "keys": "Space /",
+          "description": "Global search across workspace",
+          "category": "Space Menu",
+          "context": "Normal"
+        },
+        {
+          "keys": "Space k",
+          "description": "Show documentation hover",
+          "category": "Space Menu",
+          "context": "Normal"
+        },
+        {
+          "keys": "Space a",
+          "description": "Code action popup",
+          "category": "Space Menu",
+          "context": "Normal"
+        },
+        {
+          "keys": "Space r",
+          "description": "Rename symbol",
+          "category": "Space Menu",
+          "context": "Normal"
+        },
+        {
+          "keys": "Ctrl+w s / Ctrl+w v",
+          "description": "Split window horizontally or vertically",
+          "category": "Windows",
+          "context": "Normal"
+        },
+        {
+          "keys": "Ctrl+w h/j/k/l",
+          "description": "Jump to split window",
+          "category": "Windows",
+          "context": "Normal"
+        }
+      ]
+    },
+    {
+      "id": "template-kitty",
+      "name": "Kitty Terminal",
+      "icon": "terminal",
+      "program": "Kitty",
+      "sourceKind": "template",
+      "keybinds": [
+        {
+          "keys": "Ctrl+Shift+Enter",
+          "description": "New window in current tab",
+          "category": "Windows"
+        },
+        {
+          "keys": "Ctrl+Shift+W",
+          "description": "Close active window",
+          "category": "Windows"
+        },
+        {
+          "keys": "Ctrl+Shift+] / Ctrl+Shift+[",
+          "description": "Next / Previous window",
+          "category": "Windows"
+        },
+        {
+          "keys": "Ctrl+Shift+T",
+          "description": "New tab",
+          "category": "Tabs"
+        },
+        {
+          "keys": "Ctrl+Shift+Q",
+          "description": "Close active tab",
+          "category": "Tabs"
+        },
+        {
+          "keys": "Ctrl+Shift+Right / Ctrl+Shift+Left",
+          "description": "Next / Previous tab",
+          "category": "Tabs"
+        },
+        {
+          "keys": "Ctrl+Shift+L",
+          "description": "Next layout",
+          "category": "Layouts"
+        },
+        {
+          "keys": "Ctrl+Shift+C",
+          "description": "Copy selection to clipboard",
+          "category": "Clipboard"
+        },
+        {
+          "keys": "Ctrl+Shift+V",
+          "description": "Paste from clipboard",
+          "category": "Clipboard"
+        },
+        {
+          "keys": "Ctrl+Shift+H",
+          "description": "Browse scrollback in pager",
+          "category": "Scrollback"
+        },
+        {
+          "keys": "Ctrl+Shift+Equal",
+          "description": "Increase font size",
+          "category": "Font"
+        },
+        {
+          "keys": "Ctrl+Shift+Minus",
+          "description": "Decrease font size",
+          "category": "Font"
+        },
+        {
+          "keys": "Ctrl+Shift+Backspace",
+          "description": "Reset font size to default",
+          "category": "Font"
+        },
+        {
+          "keys": "Ctrl+Shift+F11",
+          "description": "Toggle fullscreen",
+          "category": "View"
+        },
+        {
+          "keys": "Ctrl+Shift+F5",
+          "description": "Reload kitty.conf configuration",
+          "category": "Preferences"
+        }
+      ]
+    },
+    {
+      "id": "template-tmux",
+      "name": "Tmux",
+      "icon": "terminal",
+      "program": "Tmux",
+      "sourceKind": "template",
+      "keybinds": [
+        {
+          "keys": "Ctrl+b c",
+          "description": "Create new window",
+          "category": "Windows"
+        },
+        {
+          "keys": "Ctrl+b &",
+          "description": "Kill current window",
+          "category": "Windows"
+        },
+        {
+          "keys": "Ctrl+b n / Ctrl+b p",
+          "description": "Next / Previous window",
+          "category": "Windows"
+        },
+        {
+          "keys": "Ctrl+b <0-9>",
+          "description": "Select window by index 0-9",
+          "category": "Windows"
+        },
+        {
+          "keys": "Ctrl+b ,",
+          "description": "Rename current window",
+          "category": "Windows"
+        },
+        {
+          "keys": "Ctrl+b w",
+          "description": "List and choose window interactively",
+          "category": "Windows"
+        },
+        {
+          "keys": "Ctrl+b %",
+          "description": "Split pane vertically",
+          "category": "Panes"
+        },
+        {
+          "keys": "Ctrl+b \"",
+          "description": "Split pane horizontally",
+          "category": "Panes"
+        },
+        {
+          "keys": "Ctrl+b o",
+          "description": "Cycle to next pane",
+          "category": "Panes"
+        },
+        {
+          "keys": "Ctrl+b x",
+          "description": "Kill active pane",
+          "category": "Panes"
+        },
+        {
+          "keys": "Ctrl+b z",
+          "description": "Toggle zoom active pane",
+          "category": "Panes"
+        },
+        {
+          "keys": "Ctrl+b { / Ctrl+b }",
+          "description": "Swap active pane with previous / next",
+          "category": "Panes"
+        },
+        {
+          "keys": "Ctrl+b [",
+          "description": "Enter copy / scrollback mode",
+          "category": "Copy Mode"
+        },
+        {
+          "keys": "Ctrl+b d",
+          "description": "Detach current client session",
+          "category": "Sessions"
+        },
+        {
+          "keys": "Ctrl+b s",
+          "description": "Choose session interactively",
+          "category": "Sessions"
+        },
+        {
+          "keys": "Ctrl+b $",
+          "description": "Rename current session",
+          "category": "Sessions"
+        },
+        {
+          "keys": "Ctrl+b ?",
+          "description": "List all tmux keybindings",
+          "category": "Help"
+        }
+      ]
+    },
+    {
+      "id": "template-browsers",
+      "name": "Web Browsers",
+      "icon": "web",
+      "program": "Web Browser",
+      "sourceKind": "template",
+      "keybinds": [
+        {
+          "keys": "Ctrl+T",
+          "description": "Open new tab",
+          "category": "Tabs"
+        },
+        {
+          "keys": "Ctrl+W",
+          "description": "Close active tab",
+          "category": "Tabs"
+        },
+        {
+          "keys": "Ctrl+Shift+T",
+          "description": "Reopen last closed tab",
+          "category": "Tabs"
+        },
+        {
+          "keys": "Ctrl+Tab / Ctrl+PageDown",
+          "description": "Switch to next tab",
+          "category": "Tabs"
+        },
+        {
+          "keys": "Ctrl+Shift+Tab / Ctrl+PageUp",
+          "description": "Switch to previous tab",
+          "category": "Tabs"
+        },
+        {
+          "keys": "Ctrl+<1-8>",
+          "description": "Switch to tab 1 through 8",
+          "category": "Tabs"
+        },
+        {
+          "keys": "Ctrl+9",
+          "description": "Switch to rightmost tab",
+          "category": "Tabs"
+        },
+        {
+          "keys": "Ctrl+N",
+          "description": "Open new browser window",
+          "category": "Windows"
+        },
+        {
+          "keys": "Ctrl+Shift+N",
+          "description": "Open new incognito / private window",
+          "category": "Windows"
+        },
+        {
+          "keys": "Ctrl+L / Alt+D",
+          "description": "Focus address / search bar",
+          "category": "Navigation"
+        },
+        {
+          "keys": "Alt+Left / Alt+Right",
+          "description": "Navigate back or forward in history",
+          "category": "Navigation"
+        },
+        {
+          "keys": "F5 / Ctrl+R",
+          "description": "Reload current page",
+          "category": "Navigation"
+        },
+        {
+          "keys": "Ctrl+F5 / Ctrl+Shift+R",
+          "description": "Hard reload ignoring cache",
+          "category": "Navigation"
+        },
+        {
+          "keys": "Ctrl+F",
+          "description": "Find text in page",
+          "category": "Search"
+        },
+        {
+          "keys": "Ctrl+G / Ctrl+Shift+G",
+          "description": "Find next or previous match in page",
+          "category": "Search"
+        },
+        {
+          "keys": "Ctrl+D",
+          "description": "Bookmark current page",
+          "category": "Bookmarks"
+        },
+        {
+          "keys": "Ctrl+Shift+O",
+          "description": "Open Bookmark manager",
+          "category": "Bookmarks"
+        },
+        {
+          "keys": "Ctrl+H",
+          "description": "Open browsing History",
+          "category": "History"
+        },
+        {
+          "keys": "Ctrl+J",
+          "description": "Open Downloads page",
+          "category": "Downloads"
+        },
+        {
+          "keys": "F12 / Ctrl+Shift+I",
+          "description": "Open Developer Tools",
+          "category": "DevTools"
+        },
+        {
+          "keys": "Ctrl+Shift+C",
+          "description": "Inspect element with cursor",
+          "category": "DevTools"
+        },
+        {
+          "keys": "Ctrl+Shift+J",
+          "description": "Open JavaScript console",
+          "category": "DevTools"
+        },
+        {
+          "keys": "Ctrl++ / Ctrl+-",
+          "description": "Zoom in / Zoom out page",
+          "category": "View"
+        },
+        {
+          "keys": "Ctrl+0",
+          "description": "Reset zoom to 100%",
+          "category": "View"
+        },
+        {
+          "keys": "F11",
+          "description": "Toggle full screen mode",
+          "category": "View"
+        }
+      ]
+    },
+    {
+      "id": "template-obsidian",
+      "name": "Obsidian",
+      "icon": "description",
+      "program": "Obsidian",
+      "sourceKind": "template",
+      "keybinds": [
+        {
+          "keys": "Ctrl+O",
+          "description": "Quick switcher (open note)",
+          "category": "Navigation"
+        },
+        {
+          "keys": "Ctrl+Shift+F",
+          "description": "Search across all notes in vault",
+          "category": "Search"
+        },
+        {
+          "keys": "Ctrl+N",
+          "description": "Create new note",
+          "category": "Notes"
+        },
+        {
+          "keys": "Ctrl+Shift+N",
+          "description": "Create note in new pane",
+          "category": "Notes"
+        },
+        {
+          "keys": "Ctrl+P",
+          "description": "Command palette",
+          "category": "Navigation"
+        },
+        {
+          "keys": "Ctrl+E",
+          "description": "Toggle between editing and reading view",
+          "category": "View"
+        },
+        {
+          "keys": "Ctrl+G",
+          "description": "Open graph view",
+          "category": "View"
+        },
+        {
+          "keys": "Ctrl+,",
+          "description": "Open settings",
+          "category": "Preferences"
+        },
+        {
+          "keys": "Ctrl+K",
+          "description": "Insert Markdown link",
+          "category": "Editing"
+        },
+        {
+          "keys": "Ctrl+B",
+          "description": "Toggle bold formatting",
+          "category": "Editing"
+        },
+        {
+          "keys": "Ctrl+I",
+          "description": "Toggle italic formatting",
+          "category": "Editing"
+        },
+        {
+          "keys": "Ctrl+D",
+          "description": "Delete current line",
+          "category": "Editing"
+        },
+        {
+          "keys": "Ctrl+Shift+D",
+          "description": "Duplicate current line",
+          "category": "Editing"
+        },
+        {
+          "keys": "Alt+Left / Alt+Right",
+          "description": "Navigate back or forward in history",
+          "category": "Navigation"
+        }
       ]
     }
   ]

@@ -3,6 +3,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
 import Quickshell
+import Quickshell.Wayland
 import Quickshell.Widgets
 import qs.modules.common
 import qs.modules.common.functions
@@ -39,6 +40,27 @@ Item {
     readonly property real sidebarWidth: Math.max(230, Math.min(280, root.width * 0.18))
     readonly property bool pageFormShowing: pageForm.isOpen || pageForm.isAnimating
     readonly property bool hyprlandSelected: root.displayedPageId === "" || !KeybindsService.ready
+    readonly property var activeAppPage: {
+        const toplevel = ToplevelManager.activeToplevel;
+        if (!toplevel || !KeybindsService.ready)
+            return null;
+        const appId = String(toplevel.appId ?? "").toLowerCase().trim();
+        const title = String(toplevel.title ?? "").toLowerCase().trim();
+        for (const page of KeybindsService.pages ?? []) {
+            const pageApp = String(page.programId || page.program || page.name).toLowerCase().trim();
+            if (pageApp && (appId.includes(pageApp) || pageApp.includes(appId) || title.includes(pageApp)))
+                return page;
+        }
+        return null;
+    }
+    readonly property var appPages: {
+        const revision = KeybindsService.revision;
+        return (KeybindsService.pages ?? []).filter(page => Boolean(page.program || page.programId || (page.sourceKind && page.sourceKind !== "manual")));
+    }
+    readonly property var personalPages: {
+        const revision = KeybindsService.revision;
+        return (KeybindsService.pages ?? []).filter(page => !page.program && !page.programId && (!page.sourceKind || page.sourceKind === "manual"));
+    }
     readonly property int personalShortcutCount: {
         const revision = KeybindsService.revision;
         return KeybindsService.pages.reduce((total, page) => total + (page.keybinds ?? []).length, 0);
@@ -262,7 +284,9 @@ Item {
         contentItem: RowLayout {
             anchors.fill: parent
             anchors.leftMargin: 12
-            anchors.rightMargin: 10
+            anchors.rightMargin: 8
+            anchors.topMargin: 8
+            anchors.bottomMargin: 8
             spacing: 10
 
             Item {
@@ -295,6 +319,7 @@ Item {
 
             ColumnLayout {
                 Layout.fillWidth: true
+                Layout.alignment: Qt.AlignVCenter
                 spacing: 0
 
                 StyledText {
@@ -325,42 +350,31 @@ Item {
                 }
             }
 
-            Rectangle {
-                implicitWidth: Math.max(36, pageCountRow.implicitWidth + 12)
-                implicitHeight: 28
-                radius: Appearance.rounding.full
-                color: pageButton.pageSelected ? Appearance.colors.colPrimary : Appearance.colors.colLayer3
+            Row {
+                id: pageCountRow
+                Layout.alignment: Qt.AlignVCenter
+                spacing: 5
 
-                Behavior on color {
-                    animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
+                MaterialSymbol {
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: "keyboard"
+                    iconSize: Appearance.font.pixelSize.small
+                    color: pageButton.pageSelected ? Appearance.colors.colPrimary : Appearance.colors.colOnSurfaceVariant
+
+                    Behavior on color {
+                        animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
+                    }
                 }
 
-                Row {
-                    id: pageCountRow
-                    anchors.centerIn: parent
-                    spacing: 3
+                StyledText {
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: String(pageButton.shortcutCount)
+                    font.pixelSize: Appearance.font.pixelSize.small
+                    font.weight: Font.Bold
+                    color: pageButton.pageSelected ? Appearance.colors.colPrimary : Appearance.colors.colOnSurfaceVariant
 
-                    MaterialSymbol {
-                        anchors.verticalCenter: parent.verticalCenter
-                        text: "keyboard"
-                        iconSize: Appearance.font.pixelSize.smallest
-                        color: pageButton.pageSelected ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSurfaceVariant
-
-                        Behavior on color {
-                            animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
-                        }
-                    }
-
-                    StyledText {
-                        anchors.verticalCenter: parent.verticalCenter
-                        text: String(pageButton.shortcutCount)
-                        font.pixelSize: Appearance.font.pixelSize.smallest
-                        font.weight: Font.Bold
-                        color: pageButton.pageSelected ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSurfaceVariant
-
-                        Behavior on color {
-                            animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
-                        }
+                    Behavior on color {
+                        animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
                     }
                 }
             }
@@ -566,62 +580,126 @@ Item {
                     }
                 }
 
-                RailSectionHeader {
-                    symbol: "computer"
-                    label: Translation.tr("System")
-                }
-
-                PageButton {
-                    pageId: ""
-                    pageName: Translation.tr("Hyprland")
-                    pageIcon: "desktop_windows"
-                    pageSubtitle: Translation.tr("Generated keymap · read only")
-                    shortcutCount: root.hyprlandShortcutCount
-                }
-
-                RailSectionHeader {
-                    symbol: "person"
-                    label: Translation.tr("Your collection")
-                    count: KeybindsService.pages.length
-                }
-
-                Item {
+                StyledFlickable {
+                    id: railFlickable
                     Layout.fillWidth: true
                     Layout.fillHeight: true
+                    clip: true
+                    contentWidth: width
+                    contentHeight: railContentColumn.implicitHeight + 6
 
-                    StyledListView {
-                        id: pagesList
-                        anchors.fill: parent
-                        clip: true
-                        spacing: 4
-                        model: {
-                            const revision = KeybindsService.revision;
-                            return KeybindsService.pages;
+                    ColumnLayout {
+                        id: railContentColumn
+                        width: railFlickable.width
+                        spacing: 6
+
+                        ColumnLayout {
+                            visible: root.activeAppPage !== null
+                            Layout.fillWidth: true
+                            spacing: 4
+
+                            RailSectionHeader {
+                                symbol: "bolt"
+                                label: Translation.tr("Now (in focus)")
+                            }
+
+                            PageButton {
+                                visible: root.activeAppPage !== null
+                                pageId: String(root.activeAppPage?.id ?? "")
+                                pageName: String(root.activeAppPage?.name ?? Translation.tr("Active App"))
+                                pageIcon: String(root.activeAppPage?.icon ?? "keyboard")
+                                pageProgram: String(root.activeAppPage?.program ?? "")
+                                pageProgramId: String(root.activeAppPage?.programId ?? "")
+                                pageUseProgramIcon: Boolean(root.activeAppPage?.useProgramIcon)
+                                shortcutCount: (root.activeAppPage?.keybinds ?? []).length
+                                pageSubtitle: Translation.tr("Active application")
+                            }
                         }
 
-                        delegate: PageButton {
-                            required property var modelData
-                            width: pagesList.width
-                            pageId: String(modelData.id ?? "")
-                            pageName: String(modelData.name ?? Translation.tr("Shortcuts"))
-                            pageIcon: String(modelData.icon ?? "keyboard")
-                            pageProgram: String(modelData.program ?? "")
-                            pageProgramId: String(modelData.programId ?? "")
-                            pageUseProgramIcon: Boolean(modelData.useProgramIcon)
-                            shortcutCount: (modelData.keybinds ?? []).length
-                            pageSubtitle: root.pageSubtitle(modelData)
+                        RailSectionHeader {
+                            symbol: "computer"
+                            label: Translation.tr("System")
                         }
-                    }
 
-                    PagePlaceholder {
-                        shown: KeybindsService.ready && KeybindsService.pages.length === 0
-                        icon: "book_2"
-                        title: Translation.tr("Your pages live here")
-                        description: Translation.tr("Start blank, use a template, or import an app.")
-                        anchors.fill: parent
-                        titlePixelSize: Appearance.font.pixelSize.normal
-                        descriptionPixelSize: Appearance.font.pixelSize.smallest
-                        animateIconOnShow: false
+                        PageButton {
+                            pageId: ""
+                            pageName: Translation.tr("Hyprland")
+                            pageIcon: "desktop_windows"
+                            pageSubtitle: Translation.tr("Generated keymap · read only")
+                            shortcutCount: root.hyprlandShortcutCount
+                        }
+
+                        ColumnLayout {
+                            visible: root.appPages.length > 0
+                            Layout.fillWidth: true
+                            spacing: 4
+
+                            RailSectionHeader {
+                                symbol: "apps"
+                                label: Translation.tr("Applications")
+                                count: root.appPages.length
+                            }
+
+                            Repeater {
+                                model: root.appPages
+
+                                delegate: PageButton {
+                                    required property var modelData
+                                    Layout.fillWidth: true
+                                    pageId: String(modelData.id ?? "")
+                                    pageName: String(modelData.name ?? Translation.tr("Shortcuts"))
+                                    pageIcon: String(modelData.icon ?? "keyboard")
+                                    pageProgram: String(modelData.program ?? "")
+                                    pageProgramId: String(modelData.programId ?? "")
+                                    pageUseProgramIcon: Boolean(modelData.useProgramIcon)
+                                    shortcutCount: (modelData.keybinds ?? []).length
+                                    pageSubtitle: root.pageSubtitle(modelData)
+                                }
+                            }
+                        }
+
+                        ColumnLayout {
+                            visible: root.personalPages.length > 0 || KeybindsService.pages.length === 0
+                            Layout.fillWidth: true
+                            spacing: 4
+
+                            RailSectionHeader {
+                                symbol: "person"
+                                label: Translation.tr("Your collection")
+                                count: root.personalPages.length
+                            }
+
+                            Repeater {
+                                model: root.personalPages
+
+                                delegate: PageButton {
+                                    required property var modelData
+                                    Layout.fillWidth: true
+                                    pageId: String(modelData.id ?? "")
+                                    pageName: String(modelData.name ?? Translation.tr("Shortcuts"))
+                                    pageIcon: String(modelData.icon ?? "keyboard")
+                                    pageProgram: String(modelData.program ?? "")
+                                    pageProgramId: String(modelData.programId ?? "")
+                                    pageUseProgramIcon: Boolean(modelData.useProgramIcon)
+                                    shortcutCount: (modelData.keybinds ?? []).length
+                                    pageSubtitle: root.pageSubtitle(modelData)
+                                }
+                            }
+
+                            PagePlaceholder {
+                                shown: KeybindsService.ready && KeybindsService.pages.length === 0
+                                icon: "book_2"
+                                title: Translation.tr("Your pages live here")
+                                description: Translation.tr("Start blank, use a template, or import an app.")
+                                Layout.fillWidth: true
+                                Layout.topMargin: 24
+                                Layout.bottomMargin: 12
+                                Layout.preferredHeight: 160
+                                titlePixelSize: Appearance.font.pixelSize.normal
+                                descriptionPixelSize: Appearance.font.pixelSize.smallest
+                                animateIconOnShow: false
+                            }
+                        }
                     }
                 }
 
