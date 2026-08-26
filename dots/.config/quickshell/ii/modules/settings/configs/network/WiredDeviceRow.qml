@@ -243,7 +243,14 @@ Rectangle {
 
                 DetailRow {
                     label: Translation.tr("Negotiated speed")
-                    value: root.details.speed ?? ""
+                    // A port that cannot report a rate answers "unknown" — USB
+                    // tethering adapters do. The Addressing section drops its
+                    // speed row outright in that case; do the same here rather
+                    // than showing the user the word "unknown".
+                    value: {
+                        const speed = root.details.speed ?? "";
+                        return speed === "unknown" ? "" : speed;
+                    }
                 }
 
                 DetailRow {
