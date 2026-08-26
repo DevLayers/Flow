@@ -166,6 +166,8 @@ Item {
         id: dayDragArea
         anchors.fill: parent
         hoverEnabled: true
+        acceptedButtons: Qt.LeftButton
+        preventStealing: true
         cursorShape: ghostVisible && ghostDayIndex === dayIdx ? Qt.ArrowCursor : Qt.CrossCursor
         z: 0
 
@@ -205,7 +207,7 @@ Item {
     // ─── Drag preview (during drag) ───────────
     Rectangle {
         id: dragPreview
-        visible: isDragging && dragDayIndex === dayIdx
+        visible: isDragging && dragDayIndex === dayIdx && Math.abs(dragCurrentY - dragStartY) >= 4
         width: parent.width - 10
         anchors.horizontalCenter: parent.horizontalCenter
         radius: Appearance.rounding.normal

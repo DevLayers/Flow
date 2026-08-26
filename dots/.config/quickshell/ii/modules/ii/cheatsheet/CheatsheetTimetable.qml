@@ -49,6 +49,7 @@ Item {
     readonly property bool sportsRequested: Config.options.calendar.timetable.sportsEvents
     readonly property var activeViewItem: root.activeMode === "month" ? monthViewLoader.item : weekViewLoader.item
     readonly property bool activeViewReady: root.activeViewItem?.initialLoadComplete ?? false
+    readonly property bool timetableDragActive: root.activeViewItem?.timetableDragActive === true
 
     Keys.priority: Keys.AfterItem
     Keys.onPressed: event => {

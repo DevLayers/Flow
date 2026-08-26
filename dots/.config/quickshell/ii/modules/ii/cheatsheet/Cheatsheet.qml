@@ -480,6 +480,11 @@ Scope {
                             Layout.preferredHeight: Math.min(850, Math.max(500, calculatedHeight))
                             spacing: 10
                             currentIndex: cheatsheetRoot.selectedTab
+                            readonly property bool currentPageLocksHorizontalSwipe: currentItem
+                                && currentItem.status === Loader.Ready
+                                && currentItem.item
+                                && currentItem.item.timetableDragActive === true
+                            interactive: !swipeView.currentPageLocksHorizontalSwipe
                             onCurrentIndexChanged: {
                                 if (cheatsheetRoot.selectedTab !== currentIndex)
                                     cheatsheetRoot.selectedTab = currentIndex;

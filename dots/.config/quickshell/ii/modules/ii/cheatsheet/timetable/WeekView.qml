@@ -138,12 +138,21 @@ Item {
     property int ghostDayIndex: -1
     property real ghostTopY: 0
     property real ghostHeight: 0
+    // The host exposes this to Cheatsheet.qml so a day-grid selection keeps
+    // ownership of its pointer instead of switching the outer SwipeView tab.
+    property bool timetableDragActive: false
     property var timedMutationEvent: null
     property string timedMutationKind: ""
     property real timedMutationPointerOffsetY: 0
     property int timedMutationStartMinutes: 0
     property int timedMutationEndMinutes: 0
     property int timedMutationDayIndex: -1
+
+    function setTimetableDragActive(active) {
+        root.timetableDragActive = active;
+        if (styledFlickable)
+            styledFlickable.interactive = !active;
+    }
 
     // ─── Helpers ───
     function updateCurrentTimeLine() {
@@ -1148,7 +1157,7 @@ Item {
                                         }
                                     }
 
-                                    onDragRequestInteractivity: i => styledFlickable.interactive = i
+                                    onDragRequestInteractivity: i => root.setTimetableDragActive(!i)
                                     onDragReleased: (dIdx, sY, cY) => {
                                         let dist = Math.abs(cY - sY);
                                         if (dist < 10) {
@@ -1169,14 +1178,32 @@ Item {
                                     }
                                     onEditRequested: (evt, dIdx) => root.openPopupForEdit(evt, dIdx)
                                     onDeleteRequested: (evt, dIdx) => root.requestWeekDelete(evt)
-                                    onEventMoveStarted: (evt, x, y, offsetY) => root.beginEventMove(evt, x, y, offsetY)
+                                    onEventMoveStarted: (evt, x, y, offsetY) => {
+                                        root.setTimetableDragActive(true);
+                                        root.beginEventMove(evt, x, y, offsetY);
+                                    }
                                     onEventMoveMoved: (x, y) => root.updateEventMove(x, y)
-                                    onEventMoveEnded: root.commitTimedMutation()
-                                    onEventMoveCanceled: root.cancelTimedMutation()
-                                    onEventResizeStarted: (evt, x, y) => root.beginEventResize(evt, x, y)
+                                    onEventMoveEnded: {
+                                        root.commitTimedMutation();
+                                        root.setTimetableDragActive(false);
+                                    }
+                                    onEventMoveCanceled: {
+                                        root.cancelTimedMutation();
+                                        root.setTimetableDragActive(false);
+                                    }
+                                    onEventResizeStarted: (evt, x, y) => {
+                                        root.setTimetableDragActive(true);
+                                        root.beginEventResize(evt, x, y);
+                                    }
                                     onEventResizeMoved: (x, y) => root.updateEventResize(x, y)
-                                    onEventResizeEnded: root.commitTimedMutation()
-                                    onEventResizeCanceled: root.cancelTimedMutation()
+                                    onEventResizeEnded: {
+                                        root.commitTimedMutation();
+                                        root.setTimetableDragActive(false);
+                                    }
+                                    onEventResizeCanceled: {
+                                        root.cancelTimedMutation();
+                                        root.setTimetableDragActive(false);
+                                    }
                                 }
                             }
                         }
