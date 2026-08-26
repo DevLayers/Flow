@@ -368,16 +368,6 @@ Item {
     function ensureDataForView() {
         CalendarService.ensureRangeCovers(root.viewWeekStart);
         CalendarService.ensureRangeCovers(root.viewWeekEnd);
-        if (AppStats.enabled) {
-            const todayKey = H.dayKeyOf(DateTime.clock.date);
-            const usageDates = [];
-            for (let index = 0; index < root.visibleDayCount; index++) {
-                const key = H.dayKeyOf(H.addDays(root.viewWeekStart, index));
-                if (key <= todayKey)
-                    usageDates.push(key);
-            }
-            AppStats.ensureDates(usageDates);
-        }
     }
 
     function playWeekTransition(direction) {
