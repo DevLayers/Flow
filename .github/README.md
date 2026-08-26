@@ -56,49 +56,61 @@ Please refer to the **[upstream ii-vynx wiki](https://github.com/vaguesyntax/ii-
 
 <br>
 
-Dynamic colors / Matugen are not working
+### Dynamic colors / Matugen are not working
 
 If wallpaper colors are not being applied and you see an error such as:
 
-matugen exited with an error, so the shell kept its previous palette.
+> matugen exited with an error, so the shell kept its previous palette.
 
 First, make sure you are running:
 
-Matugen 4.1.0 or newer
-quickshell-git 0.3.0 or newer
+- **Matugen** 4.1.0 or newer
+- **quickshell-git** 0.3.0 or newer
 
 You can check the installed versions with:
 
+```bash
 matugen --version
 quickshell --version
-Arch Linux / CachyOS
+```
 
-Make sure you are using the AUR quickshell-git package, rather than another Quickshell build provided by a third-party repository.
+#### Arch Linux / CachyOS
 
-A reported case on CachyOS was caused by the system using the Noctalia Quickshell package from the CachyOS repositories instead of aur/quickshell-git. Replacing it with the AUR package fixed Matugen and dynamic colors.
+Make sure you are using the AUR `quickshell-git` package, rather than another Quickshell build provided by a third-party repository.
 
+A reported case on CachyOS was caused by the system using the Noctalia Quickshell package from the CachyOS repositories instead of `aur/quickshell-git`. Replacing it with the AUR package fixed Matugen and dynamic colors.
+
+```bash
 yay -S aur/quickshell-git
+```
 
 If another Quickshell package is installed, your package manager may ask to replace the conflicting package.
 
-Quickshell stopped working after a Qt update
+---
 
-Quickshell may stop starting correctly after a Qt update if the installed quickshell-git package was compiled against the previous Qt version.
+### Quickshell stopped working after a Qt update
+
+Quickshell may stop starting correctly after a Qt update if the installed `quickshell-git` package was compiled against the previous Qt version.
 
 For example, this can happen after updates such as:
 
+```
 Qt 6.11.1 -> Qt 6.11.2
+```
 
-Rebuild quickshell-git against the newly installed Qt libraries:
+Rebuild `quickshell-git` against the newly installed Qt libraries:
 
+```bash
 yay -S --rebuild aur/quickshell-git
+```
 
 Then restart Quickshell.
 
-If rebuilding does not solve the problem, completely reinstall quickshell-git using your AUR helper.
+If rebuilding does not solve the problem, completely reinstall `quickshell-git` using your AUR helper.
 
-[!TIP]
-If the shell suddenly stops working immediately after a Qt system update, rebuilding quickshell-git should be one of the first troubleshooting steps.
+> **💡 Tip**
+>
+> If the shell suddenly stops working immediately after a Qt system update, rebuilding `quickshell-git` should be one of the first troubleshooting steps.
 
 </details>
 
