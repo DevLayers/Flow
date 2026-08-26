@@ -141,6 +141,13 @@ Item {
     // The host exposes this to Cheatsheet.qml so a day-grid selection keeps
     // ownership of its pointer instead of switching the outer SwipeView tab.
     property bool timetableDragActive: false
+
+    function clearGhostPreview() {
+        root.ghostVisible = false;
+        root.ghostDayIndex = -1;
+        root.ghostTopY = 0;
+        root.ghostHeight = 0;
+    }
     property var timedMutationEvent: null
     property string timedMutationKind: ""
     property real timedMutationPointerOffsetY: 0
@@ -574,7 +581,6 @@ Item {
         let eventDate = root.days[root.ghostDayIndex]?.sportsDate ?? root.viewWeekStart;
         eventSidebar.sportsListOnly = false;
         eventSidebar.startCreateAt(eventDate, topMin, botMin);
-        root.ghostVisible = false;
     }
 
     function openPopupForEdit(event, dayIndex) {
@@ -1281,6 +1287,7 @@ Item {
             anchors.fill: parent
             sportsListOnly: false
             onSaveRequested: payload => root.applySidebarPayload(payload)
+            onCloseRequested: root.clearGhostPreview()
             onTaskCreateRequested: task => Todo.addItem(task)
             onTaskCompletionRequested: task => Todo.markDone(task)
             onDeleteRequested: (eventData, scope) => CalendarService.deleteEventWithScope(eventData, scope)

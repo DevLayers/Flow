@@ -33,6 +33,15 @@ class TimetableDragContractTests(unittest.TestCase):
         self.assertIn("readonly property bool currentPageLocksHorizontalSwipe", cheatsheet)
         self.assertIn("interactive: !swipeView.currentPageLocksHorizontalSwipe", cheatsheet)
 
+    def test_creation_preview_stays_visible_until_the_sidebar_closes(self) -> None:
+        week = (TIMETABLE / "WeekView.qml").read_text(encoding="utf-8")
+        ghost_open = week.split("function openPopupForGhost()", 1)[1].split("function openPopupForEdit", 1)[0]
+
+        self.assertIn("eventSidebar.startCreateAt(eventDate, topMin, botMin);", ghost_open)
+        self.assertNotIn("root.ghostVisible = false;", ghost_open)
+        self.assertIn("function clearGhostPreview()", week)
+        self.assertIn("onCloseRequested: root.clearGhostPreview()", week)
+
 
 if __name__ == "__main__":
     unittest.main()
