@@ -35,6 +35,19 @@ class TimetableCalendarDefaultContractTests(unittest.TestCase):
         self.assertIn("[CalendarService] vdirsyncer sync failed:", service)
         self.assertIn("Qt.callLater(function() { root.requestCalendarSync(next); });", service)
 
+    def test_created_events_are_projected_before_the_calendar_helper_returns(self) -> None:
+        service = (ROOT / "services" / "CalendarService.qml").read_text(encoding="utf-8")
+
+        self.assertIn("property list<var> optimisticEvents: []", service)
+        self.assertIn("function newEventUid()", service)
+        self.assertIn("function optimisticEvent(calendar, fields)", service)
+        self.assertIn("function addOptimisticEvent(event)", service)
+        self.assertIn("function removeOptimisticEvent(uid)", service)
+        self.assertIn("const evts = root.visibleEvents;", service)
+        self.assertIn("payload.uid = root.newEventUid();", service)
+        self.assertIn("root.addOptimisticEvent(root.optimisticEvent(target, payload));", service)
+        self.assertIn("root.removeOptimisticEvent(payload.uid);", service)
+
 
 if __name__ == "__main__":
     unittest.main()

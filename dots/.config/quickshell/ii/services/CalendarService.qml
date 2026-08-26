@@ -18,6 +18,10 @@ Singleton {
     readonly property string homePath: String(StandardPaths.standardLocations(StandardPaths.HomeLocation)[0]).replace("file://", "")
     property bool khalAvailable: false
     property var events: []
+    // New events are rendered from this local projection before khal finishes
+    // indexing their ICS file. The canonical event replaces it on the next
+    // successful list response, keyed by the UID generated here.
+    property list<var> optimisticEvents: []
 
     // Directories holding the .ics files of every configured khal calendar.
     // Read from khal's own config so deletion works wherever the user keeps their calendars.
@@ -50,6 +54,78 @@ Singleton {
         if (persist && Config.ready && Config.options.calendar.timetable.defaultCalendar !== root.defaultCalendar)
             Config.options.calendar.timetable.defaultCalendar = root.defaultCalendar;
         return true;
+    }
+
+    function newEventUid() {
+        const timestamp = Date.now().toString(36);
+        const entropy = Math.random().toString(36).slice(2);
+        return "ii-" + timestamp + "-" + entropy + "@local";
+    }
+
+    function localDateFromIso(value) {
+        const match = String(value ?? "").match(/^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2})(?::(\d{2}))?)?$/);
+        if (!match)
+            return null;
+        return new Date(
+            Number(match[1]),
+            Number(match[2]) - 1,
+            Number(match[3]),
+            Number(match[4] ?? 0),
+            Number(match[5] ?? 0),
+            Number(match[6] ?? 0)
+        );
+    }
+
+    function optimisticEvent(calendar, fields) {
+        const calendarData = root.calendars.find(item => String(item.name ?? "") === String(calendar ?? ""));
+        const categories = Array.isArray(fields.categories) ? fields.categories.slice() : [];
+        return {
+            content: String(fields.summary ?? ""),
+            startDate: root.localDateFromIso(fields.start),
+            endDate: root.localDateFromIso(fields.end),
+            color: root.getNextEventColor(),
+            description: String(fields.description ?? ""),
+            calendar: String(calendar ?? ""),
+            readOnly: false,
+            uid: String(fields.uid ?? ""),
+            url: String(fields.url ?? ""),
+            location: String(fields.location ?? ""),
+            categories: categories,
+            colorToken: String(fields.color ?? ""),
+            repeatSymbol: fields.recurrence ? "↻" : "",
+            status: String(fields.status ?? "CONFIRMED"),
+            organizer: "",
+            allDay: fields.allDay === true,
+            calendarColor: String(calendarData?.color ?? ""),
+            optimistic: true
+        };
+    }
+
+    function addOptimisticEvent(event) {
+        if (!event?.uid)
+            return;
+        root.optimisticEvents = root.optimisticEvents.concat([event]);
+    }
+
+    function removeOptimisticEvent(uid) {
+        const target = String(uid ?? "");
+        if (!target)
+            return;
+        root.optimisticEvents = root.optimisticEvents.filter(event => String(event?.uid ?? "") !== target);
+    }
+
+    readonly property var visibleEvents: {
+        const persisted = root.events ?? [];
+        const optimistic = root.optimisticEvents ?? [];
+        if (optimistic.length === 0)
+            return persisted;
+        const projected = persisted.slice();
+        for (const event of optimistic) {
+            const uid = String(event?.uid ?? "");
+            if (!persisted.some(saved => String(saved?.uid ?? "") === uid))
+                projected.push(event);
+        }
+        return projected;
     }
 
     // Process for checking khal configuration
@@ -212,7 +288,7 @@ Singleton {
     // event is enough (no multi-day expansion).
     readonly property var eventsByDay: {
         const map = {};
-        const evts = root.events;
+        const evts = root.visibleEvents;
         if (!evts)
             return map;
         for (let i = 0; i < evts.length; i++) {
@@ -320,6 +396,7 @@ Singleton {
                     }
                 }
                 root.events = events;
+                root.optimisticEvents = root.optimisticEvents.filter(optimistic => !events.some(saved => String(saved?.uid ?? "") === String(optimistic?.uid ?? "")));
             }
         }
         onExited: {
@@ -601,9 +678,13 @@ Singleton {
 
     function createEventFields(calendar, fields, callback = null) {
         const target = String(calendar || root.defaultCalendar).trim();
-        root.enqueueCalendarRequest({ op: "save", calendar: target, event: fields }, reply => {
-            if (reply?.ok)
-                root.setDefaultCalendar(target);
+        const payload = Object.assign({}, fields);
+        payload.uid = root.newEventUid();
+        root.setDefaultCalendar(target);
+        root.addOptimisticEvent(root.optimisticEvent(target, payload));
+        root.enqueueCalendarRequest({ op: "save", calendar: target, event: payload }, reply => {
+            if (!reply?.ok)
+                root.removeOptimisticEvent(payload.uid);
             if (typeof callback === "function")
                 callback(reply);
         });
