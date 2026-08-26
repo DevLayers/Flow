@@ -340,14 +340,6 @@ Item {
                         font.weight: Font.Bold
                         color: Appearance.colors.colOnSurface
                     }
-
-                        StyledText {
-                            text: root.mode === "create"
-                                ? Translation.tr("Start blank, pick a starter set, or import what an app already uses.")
-                                : Translation.tr("Name, icon, and app association change the page presentation; shortcuts stay intact.")
-                        font.pixelSize: Appearance.font.pixelSize.small
-                        color: Appearance.colors.colOnSurfaceVariant
-                    }
                 }
 
                 Item { Layout.fillWidth: true }
@@ -405,14 +397,6 @@ Item {
                                     color: Appearance.colors.colOnSurface
                                 }
 
-                                StyledText {
-                                    text: Translation.tr("Only the page name is required. A program label helps identify where the shortcuts belong.")
-                                    Layout.fillWidth: true
-                                    wrapMode: Text.Wrap
-                                    font.pixelSize: Appearance.font.pixelSize.small
-                                    color: Appearance.colors.colOnSurfaceVariant
-                                }
-
                                 MaterialTextField {
                                     id: nameField
                                     Layout.fillWidth: true
@@ -428,13 +412,6 @@ Item {
                                     font.pixelSize: Appearance.font.pixelSize.small
                                     font.weight: Font.Bold
                                     color: Appearance.colors.colOnSurface
-                                }
-
-                                StyledText {
-                                    Layout.fillWidth: true
-                                    text: Translation.tr("Choose a symbol for this collection")
-                                    font.pixelSize: Appearance.font.pixelSize.smallest
-                                    color: Appearance.colors.colOnSurfaceVariant
                                 }
 
                                 Flow {
@@ -475,14 +452,6 @@ Item {
                                     font.pixelSize: Appearance.font.pixelSize.small
                                     font.weight: Font.Bold
                                     color: Appearance.colors.colOnSurface
-                                }
-
-                                StyledText {
-                                    Layout.fillWidth: true
-                                    text: Translation.tr("Choose an installed app to show its icon in the page rail")
-                                    wrapMode: Text.Wrap
-                                    font.pixelSize: Appearance.font.pixelSize.smallest
-                                    color: Appearance.colors.colOnSurfaceVariant
                                 }
 
                                 StyledComboBox {
@@ -587,30 +556,15 @@ Item {
                                                 : Appearance.colors.colOnSurfaceVariant
                                         }
 
-                                        ColumnLayout {
+                                        StyledText {
                                             Layout.fillWidth: true
-                                            spacing: 0
-
-                                            StyledText {
-                                                Layout.fillWidth: true
-                                                text: Translation.tr("Use app icon in sidebar")
-                                                elide: Text.ElideRight
-                                                font.pixelSize: Appearance.font.pixelSize.small
-                                                font.weight: Font.Bold
-                                                color: root.useProgramIcon
-                                                    ? Appearance.colors.colOnSecondaryContainer
-                                                    : Appearance.colors.colOnSurface
-                                            }
-
-                                            StyledText {
-                                                Layout.fillWidth: true
-                                                text: Translation.tr("Show the related program instead of the page symbol")
-                                                elide: Text.ElideRight
-                                                font.pixelSize: Appearance.font.pixelSize.smallest
-                                                color: root.useProgramIcon
-                                                    ? Appearance.colors.colOnSecondaryContainer
-                                                    : Appearance.colors.colOnSurfaceVariant
-                                            }
+                                            text: Translation.tr("Use app icon in sidebar")
+                                            elide: Text.ElideRight
+                                            font.pixelSize: Appearance.font.pixelSize.small
+                                            font.weight: Font.Bold
+                                            color: root.useProgramIcon
+                                                ? Appearance.colors.colOnSecondaryContainer
+                                                : Appearance.colors.colOnSurface
                                         }
 
                                         StyledSwitch {
@@ -658,21 +612,11 @@ Item {
                         RowLayout {
                             Layout.fillWidth: true
 
-                            ColumnLayout {
-                                spacing: 0
-
-                                StyledText {
-                                    text: Translation.tr("Ready-made collections")
-                                    font.pixelSize: Appearance.font.pixelSize.large
-                                    font.weight: Font.Bold
-                                    color: Appearance.colors.colOnSurface
-                                }
-
-                                StyledText {
-                                    text: Translation.tr("Useful defaults that you can edit after adding.")
-                                    font.pixelSize: Appearance.font.pixelSize.small
-                                    color: Appearance.colors.colOnSurfaceVariant
-                                }
+                            StyledText {
+                                text: Translation.tr("Ready-made collections")
+                                font.pixelSize: Appearance.font.pixelSize.large
+                                font.weight: Font.Bold
+                                color: Appearance.colors.colOnSurface
                             }
 
                             Item { Layout.fillWidth: true }
