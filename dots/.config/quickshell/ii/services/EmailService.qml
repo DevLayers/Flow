@@ -30,9 +30,9 @@ Singleton {
     property int maxEmails: 20
     property string historyId: ""
     property bool enableAllInboxes: false
-    property bool enableUpdates: false
-    property bool enablePromotions: false
-    property bool enableSocials: false
+    property bool enableUpdates: true
+    property bool enablePromotions: true
+    property bool enableSocials: true
     property int refreshIntervalMinutes: 1
     property bool compactMode: false
     property bool stackingEnabled: true

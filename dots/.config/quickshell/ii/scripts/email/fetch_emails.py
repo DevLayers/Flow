@@ -90,16 +90,19 @@ def main():
         if flags_arg:
             flags = flags_arg.split(",")
             if len(flags) == 3:
-                if flags[0] == "1": cats.append("category:updates")
-                if flags[1] == "1": cats.append("category:promotions")
-                if flags[2] == "1": cats.append("category:social")
-        
-        if cats:
-            cats.insert(0, "category:primary")
-            q_cats = "{" + " ".join(cats) + "}"
-            q_param = f"in:inbox {q_cats}"
+                if flags[0] == "1" and flags[1] == "1" and flags[2] == "1":
+                    q_param = "in:inbox"
+                else:
+                    cats = ["category:primary"]
+                    if flags[0] == "1": cats.append("category:updates")
+                    if flags[1] == "1": cats.append("category:promotions")
+                    if flags[2] == "1": cats.append("category:social")
+                    q_cats = "{" + " ".join(cats) + "}"
+                    q_param = f"in:inbox {q_cats}"
+            else:
+                q_param = "in:inbox"
         else:
-            q_param = "in:inbox category:primary"
+            q_param = "in:inbox"
         query_params = f"q={urllib.parse.quote(q_param)}&maxResults={max_results}"
     elif label_id.startswith("SEARCH:"):
         q = label_id[7:]
