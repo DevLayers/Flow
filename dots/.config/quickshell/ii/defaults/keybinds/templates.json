@@ -1,0 +1,92 @@
+{
+  "schemaVersion": 1,
+  "templates": [
+    {
+      "id": "template-vscode",
+      "name": "Visual Studio Code",
+      "icon": "code",
+      "program": "Visual Studio Code",
+      "sourceKind": "template",
+      "keybinds": [
+        { "keys": "Ctrl+Shift+P", "description": "Show command palette", "category": "Navigation" },
+        { "keys": "Ctrl+P", "description": "Quick open file", "category": "Navigation" },
+        { "keys": "Ctrl+Shift+E", "description": "Focus Explorer", "category": "Navigation" },
+        { "keys": "Ctrl+Shift+F", "description": "Search across files", "category": "Navigation" },
+        { "keys": "Ctrl+B", "description": "Toggle primary sidebar", "category": "View" },
+        { "keys": "Ctrl+`", "description": "Toggle integrated terminal", "category": "View" },
+        { "keys": "Ctrl+\\", "description": "Split editor", "category": "View" },
+        { "keys": "Ctrl+1", "description": "Focus first editor group", "category": "View" },
+        { "keys": "F12", "description": "Go to definition", "category": "Code" },
+        { "keys": "Alt+F12", "description": "Peek definition", "category": "Code" },
+        { "keys": "Shift+F12", "description": "Show references", "category": "Code" },
+        { "keys": "F2", "description": "Rename symbol", "category": "Code" },
+        { "keys": "Ctrl+.", "description": "Show quick fixes", "category": "Code" },
+        { "keys": "Shift+Alt+F", "description": "Format document", "category": "Code" },
+        { "keys": "Ctrl+Space", "description": "Trigger suggestions", "category": "Code" },
+        { "keys": "Alt+Up / Alt+Down", "description": "Move line up or down", "category": "Editing" },
+        { "keys": "Shift+Alt+Up / Shift+Alt+Down", "description": "Copy line up or down", "category": "Editing" },
+        { "keys": "Ctrl+Shift+K", "description": "Delete line", "category": "Editing" },
+        { "keys": "Ctrl+D", "description": "Add next occurrence to selection", "category": "Editing" },
+        { "keys": "Ctrl+K Ctrl+S", "description": "Open keyboard shortcuts", "category": "Preferences" }
+      ]
+    },
+    {
+      "id": "template-neovim",
+      "name": "Neovim",
+      "icon": "terminal",
+      "program": "Neovim",
+      "sourceKind": "template",
+      "keybinds": [
+        { "keys": "h j k l", "description": "Move left, down, up, and right", "category": "Movement", "context": "Normal mode" },
+        { "keys": "w / b", "description": "Move by word forward or backward", "category": "Movement", "context": "Normal mode" },
+        { "keys": "0 / $", "description": "Jump to start or end of line", "category": "Movement", "context": "Normal mode" },
+        { "keys": "gg / G", "description": "Jump to first or last line", "category": "Movement", "context": "Normal mode" },
+        { "keys": "Ctrl+d / Ctrl+u", "description": "Move half a page down or up", "category": "Movement", "context": "Normal mode" },
+        { "keys": "i / a", "description": "Insert before or after the cursor", "category": "Editing", "context": "Normal mode" },
+        { "keys": "o / O", "description": "Open a line below or above", "category": "Editing", "context": "Normal mode" },
+        { "keys": "dd", "description": "Delete current line", "category": "Editing", "context": "Normal mode" },
+        { "keys": "yy", "description": "Yank current line", "category": "Editing", "context": "Normal mode" },
+        { "keys": "p / P", "description": "Paste after or before the cursor", "category": "Editing", "context": "Normal mode" },
+        { "keys": "u / Ctrl+r", "description": "Undo or redo", "category": "Editing", "context": "Normal mode" },
+        { "keys": ".", "description": "Repeat last change", "category": "Editing", "context": "Normal mode" },
+        { "keys": "v / V / Ctrl+v", "description": "Start character, line, or block selection", "category": "Selection", "context": "Normal mode" },
+        { "keys": "/", "description": "Search forward", "category": "Search", "context": "Normal mode" },
+        { "keys": "n / N", "description": "Next or previous search result", "category": "Search", "context": "Normal mode" },
+        { "keys": ":w", "description": "Write current buffer", "category": "Files" },
+        { "keys": ":q", "description": "Close current window", "category": "Files" },
+        { "keys": ":e path", "description": "Edit a file", "category": "Files" },
+        { "keys": "Ctrl+w s / Ctrl+w v", "description": "Split horizontally or vertically", "category": "Windows", "context": "Normal mode" },
+        { "keys": "Ctrl+w h/j/k/l", "description": "Move between windows", "category": "Windows", "context": "Normal mode" }
+      ]
+    },
+    {
+      "id": "template-intellij",
+      "name": "IntelliJ IDEA",
+      "icon": "deployed_code",
+      "program": "IntelliJ IDEA",
+      "sourceKind": "template",
+      "keybinds": [
+        { "keys": "Ctrl+Shift+A", "description": "Find action", "category": "Navigation" },
+        { "keys": "Shift Shift", "description": "Search everywhere", "category": "Navigation" },
+        { "keys": "Ctrl+N", "description": "Go to class", "category": "Navigation" },
+        { "keys": "Ctrl+Shift+N", "description": "Go to file", "category": "Navigation" },
+        { "keys": "Ctrl+Alt+Shift+N", "description": "Go to symbol", "category": "Navigation" },
+        { "keys": "Ctrl+B", "description": "Go to declaration or usages", "category": "Navigation" },
+        { "keys": "Alt+F7", "description": "Find usages", "category": "Navigation" },
+        { "keys": "Ctrl+E", "description": "Recent files", "category": "Navigation" },
+        { "keys": "Ctrl+Space", "description": "Basic code completion", "category": "Code" },
+        { "keys": "Ctrl+Shift+Space", "description": "Smart code completion", "category": "Code" },
+        { "keys": "Alt+Enter", "description": "Show intention actions", "category": "Code" },
+        { "keys": "Ctrl+Alt+L", "description": "Reformat code", "category": "Code" },
+        { "keys": "Ctrl+Alt+O", "description": "Optimize imports", "category": "Code" },
+        { "keys": "Shift+F6", "description": "Rename", "category": "Refactor" },
+        { "keys": "Ctrl+Alt+M", "description": "Extract method", "category": "Refactor" },
+        { "keys": "Ctrl+F8", "description": "Toggle line breakpoint", "category": "Run and debug" },
+        { "keys": "Shift+F10", "description": "Run", "category": "Run and debug" },
+        { "keys": "Shift+F9", "description": "Debug", "category": "Run and debug" },
+        { "keys": "Ctrl+F2", "description": "Stop", "category": "Run and debug" },
+        { "keys": "Ctrl+Alt+S", "description": "Open settings", "category": "Preferences" }
+      ]
+    }
+  ]
+}

@@ -53,6 +53,11 @@ Singleton {
     // One file per local day, written by the app_stats sampler.
     property string appStats: FileUtils.trimFileProtocol(`${Directories.state}/user/app_stats`)
     property string commandsPath: FileUtils.trimFileProtocol(`${Directories.state}/user/commands.json`)
+    // User-authored shortcut collections. Hyprland remains a generated,
+    // read-only page and is deliberately not duplicated into this file.
+    property string keybindsPath: FileUtils.trimFileProtocol(`${Directories.state}/user/keybinds.json`)
+    property string keybindTemplatesPath: FileUtils.trimFileProtocol(Quickshell.shellPath("defaults/keybinds/templates.json"))
+    property string keybindImporterPath: FileUtils.trimFileProtocol(`${Directories.scriptPath}/keybinds/import_keybinds.py`)
     property string notesPath: FileUtils.trimFileProtocol(`${Directories.state}/user/notes.json`)
     property string conflictCachePath: FileUtils.trimFileProtocol(`${Directories.cache}/conflict-killer`)
     property string notificationsPath: FileUtils.trimFileProtocol(`${Directories.cache}/notifications/notifications.json`)
@@ -130,6 +135,7 @@ Singleton {
         Quickshell.execDetached(["bash", "-c", `rm -rf '${cliphistDecode}'; mkdir -p '${cliphistDecode}'`]);
         Quickshell.execDetached(["mkdir", "-p", `${aiChats}`]);
         Quickshell.execDetached(["mkdir", "-p", `${FileUtils.parentDirectory(aiUsage)}`]);
+        Quickshell.execDetached(["mkdir", "-p", `${FileUtils.parentDirectory(keybindsPath)}`]);
         Quickshell.execDetached(["mkdir", "-p", `${aiRagIndexDir}`]);
         Quickshell.execDetached(["mkdir", "-p", `${aiDrafts}`]);
         Quickshell.execDetached(["mkdir", "-p", `${appStats}`]);

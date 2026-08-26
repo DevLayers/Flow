@@ -304,6 +304,13 @@ Singleton {
             property JsonObject cheatsheet: JsonObject {
                 property int tabIndex: 0
                 property list<string> sectionOrder: []
+                // Empty selects the generated Hyprland page. User page ids are
+                // stable across edits and imports, so the last collection can
+                // be restored without coupling it to its list position.
+                property string keybindPageId: ""
+                // The page rail follows the timetable sidebar pattern and
+                // remembers whether the user left it expanded.
+                property bool keybindSidebarVisible: true
                 // "day" | "threeDay" | "week" | "month" — timetable range.
                 property string timetableView: "month"
                 property bool timetableShowUpcoming: true
