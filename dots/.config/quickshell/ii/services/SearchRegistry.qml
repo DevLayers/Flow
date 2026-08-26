@@ -309,6 +309,16 @@ Item {
                 if (sub.title) searchStrings.push(sub.title);
             }
 
+            // The registry's page name and aliases describe everything on the
+            // page, so they belong to each of its sections. They were indexed
+            // nowhere before, which left a page findable only under the words
+            // printed on its own sections.
+            const page = SettingsPageRegistry.pageById(pageId);
+            for (let term of [page?.name ?? "", ...(page?.aliases ?? [])]) {
+                if (term.length > 0 && searchStrings.indexOf(term) === -1)
+                    searchStrings.push(term);
+            }
+
             registerSection({
                 pageId: pageId,
                 subPage: subPage || "",

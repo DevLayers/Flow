@@ -294,6 +294,16 @@ Singleton {
             "aliases": ["Usage stats", "Screen time", "App usage", "Digital wellbeing", "Energy per app", "RAPL", "History retention"]
         },
         {
+            "id": "network",
+            "name": "Network",
+            "icon": "wifi",
+            "component": "modules/settings/configs/NetworkConfig.qml",
+            "subPages": [],
+            "searchSources": ["network/WifiTab.qml", "network/BluetoothTab.qml", "network/HotspotTab.qml",
+                "network/WiredTab.qml"],
+            "aliases": ["Wi-Fi", "WiFi", "Wireless", "Bluetooth", "Pairing", "Hotspot", "Tethering", "Access point", "Ethernet", "Wired", "802.1X", "Enterprise Wi-Fi", "Hidden network", "NetworkManager", "IP address", "DNS"]
+        },
+        {
             "id": "devicesPhone",
             "name": "Devices & Phone",
             "icon": "smartphone",
@@ -375,7 +385,7 @@ Singleton {
         {
             "id": "system",
             "name": "System",
-            "pageIds": ["displays", "touchGestures", "soundAlerts", "power", "usageStats", "devicesPhone", "privacy", "about"]
+            "pageIds": ["displays", "network", "soundAlerts", "touchGestures", "power", "devicesPhone", "usageStats", "privacy", "about"]
         }
     ]
 
