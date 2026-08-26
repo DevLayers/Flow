@@ -364,7 +364,7 @@ cp target/release/workspace_compactor ../`
                 icon: "timer"
                 text: Translation.tr("Auto-Compact delay (ms)")
                 value: Config.options.bar.workspaces.autoCompactDelay
-                from: 100
+                from: 0
                 to: 5000
                 stepSize: 100
                 onValueChanged: {
