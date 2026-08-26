@@ -19,6 +19,12 @@ ContentPage {
 
     property bool hiddenOpen: false
 
+    // The network in use has its own section above the scan list, so the list
+    // is everything except it. Read through Array.from: the service hands out a
+    // QML list, which does not reliably answer to the JS array methods.
+    readonly property var otherNetworks: Array.from(Network.friendlyWifiNetworks)
+        .filter(network => network && !network.active)
+
     // Sub-pages belong to the page that owns the tab bar, not to a tab that is
     // unloaded the moment someone switches away from it.
     signal openSubPage(url page)
@@ -107,6 +113,24 @@ ContentPage {
     }
 
     ContentSection {
+        icon: "link"
+        title: Translation.tr("Connected network")
+        visible: Network.wifiEnabled && Network.active !== null
+
+        Loader {
+            Layout.fillWidth: true
+            active: Network.active !== null
+            sourceComponent: Component {
+                WifiNetworkRow {
+                    accessPoint: Network.active
+                    isFirst: true
+                    isLast: true
+                }
+            }
+        }
+    }
+
+    ContentSection {
         icon: "wifi_find"
         title: Translation.tr("Available networks")
 
@@ -117,7 +141,7 @@ ContentPage {
             StyledText {
                 Layout.fillWidth: true
                 text: Network.wifiScanning ? Translation.tr("Scanning…")
-                    : Translation.tr("%1 networks in range").arg(Network.friendlyWifiNetworks.length)
+                    : Translation.tr("%1 networks in range").arg(root.otherNetworks.length)
                 font.pixelSize: Appearance.font.pixelSize.smaller
                 color: Appearance.colors.colSubtext
             }
@@ -138,7 +162,7 @@ ContentPage {
             Repeater {
                 id: networkRepeater
                 model: ScriptModel {
-                    values: Network.friendlyWifiNetworks
+                    values: root.otherNetworks
                 }
 
                 delegate: WifiNetworkRow {
@@ -156,7 +180,7 @@ ContentPage {
             Layout.fillWidth: true
             Layout.topMargin: 8
             horizontalAlignment: Text.AlignHCenter
-            visible: Network.wifiEnabled && !Network.wifiScanning && Network.friendlyWifiNetworks.length === 0
+            visible: Network.wifiEnabled && !Network.wifiScanning && root.otherNetworks.length === 0
             text: Translation.tr("No networks found.")
             font.pixelSize: Appearance.font.pixelSize.smaller
             color: Appearance.colors.colSubtext

@@ -143,18 +143,18 @@ ContentPage {
     }
 
     ContentSection {
-        icon: "devices"
-        title: Translation.tr("Paired devices")
+        icon: "bluetooth_connected"
+        title: Translation.tr("Connected")
+        visible: connectedRepeater.count > 0
 
         ColumnLayout {
             Layout.fillWidth: true
             spacing: 4
 
             Repeater {
-                id: pairedRepeater
+                id: connectedRepeater
                 model: ScriptModel {
                     values: BluetoothStatus.connectedDevices
-                        .concat(BluetoothStatus.pairedButNotConnectedDevices)
                 }
 
                 delegate: BluetoothDeviceRow {
@@ -163,18 +163,9 @@ ContentPage {
 
                     device: modelData
                     isFirst: index === 0
-                    isLast: index === pairedRepeater.count - 1
+                    isLast: index === connectedRepeater.count - 1
                 }
             }
-        }
-
-        StyledText {
-            Layout.fillWidth: true
-            horizontalAlignment: Text.AlignHCenter
-            visible: pairedRepeater.count === 0
-            text: Translation.tr("No devices are paired yet.")
-            font.pixelSize: Appearance.font.pixelSize.smaller
-            color: Appearance.colors.colSubtext
         }
     }
 
@@ -236,6 +227,42 @@ ContentPage {
             horizontalAlignment: Text.AlignHCenter
             visible: BluetoothStatus.enabled && nearbyRepeater.count === 0
             text: Translation.tr("Nothing new found yet. Put the other device in pairing mode.")
+            font.pixelSize: Appearance.font.pixelSize.smaller
+            color: Appearance.colors.colSubtext
+        }
+    }
+
+    ContentSection {
+        icon: "devices"
+        title: Translation.tr("Paired devices")
+
+        ColumnLayout {
+            Layout.fillWidth: true
+            spacing: 4
+
+            Repeater {
+                id: pairedRepeater
+                model: ScriptModel {
+                    values: BluetoothStatus.pairedButNotConnectedDevices
+                }
+
+                delegate: BluetoothDeviceRow {
+                    required property BluetoothDevice modelData
+                    required property int index
+
+                    device: modelData
+                    isFirst: index === 0
+                    isLast: index === pairedRepeater.count - 1
+                }
+            }
+        }
+
+        StyledText {
+            Layout.fillWidth: true
+            horizontalAlignment: Text.AlignHCenter
+            visible: pairedRepeater.count === 0
+            text: connectedRepeater.count > 0 ? Translation.tr("Everything paired is connected.")
+                : Translation.tr("No devices are paired yet.")
             font.pixelSize: Appearance.font.pixelSize.smaller
             color: Appearance.colors.colSubtext
         }

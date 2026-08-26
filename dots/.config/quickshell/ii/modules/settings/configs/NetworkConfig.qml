@@ -36,16 +36,16 @@ Item {
             "source": "network/WifiTab.qml",
             "icon": "wifi",
             "name": Translation.tr("Wi-Fi"),
-            "sections": [Translation.tr("Wi-Fi"), Translation.tr("Available networks"),
-                Translation.tr("Saved networks"), Translation.tr("Hidden network"),
-                Translation.tr("Connection details")]
+            "sections": [Translation.tr("Wi-Fi"), Translation.tr("Connected network"),
+                Translation.tr("Available networks"), Translation.tr("Saved networks"),
+                Translation.tr("Hidden network"), Translation.tr("Connection details")]
         },
         {
             "source": "network/BluetoothTab.qml",
             "icon": "bluetooth",
             "name": Translation.tr("Bluetooth"),
-            "sections": [Translation.tr("Bluetooth"), Translation.tr("Paired devices"),
-                Translation.tr("Nearby devices")]
+            "sections": [Translation.tr("Bluetooth"), Translation.tr("Connected"),
+                Translation.tr("Nearby devices"), Translation.tr("Paired devices")]
         },
         {
             "source": "network/HotspotTab.qml",
