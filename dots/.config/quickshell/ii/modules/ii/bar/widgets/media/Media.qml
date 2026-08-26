@@ -51,11 +51,33 @@ Item {
         animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(root)
     }
 
+    function updatePopupRect() {
+        if (root.visible && root.width > 0 && root.height > 0) {
+            var globalPos = root.mapToItem(null, 0, 0);
+            GlobalStates.mediaPopupRect = Qt.rect(globalPos.x, globalPos.y, root.width, root.height);
+        }
+    }
+
+    onVisibleChanged: if (visible) Qt.callLater(updatePopupRect)
+    onWidthChanged: if (visible) Qt.callLater(updatePopupRect)
+    onXChanged: if (visible) Qt.callLater(updatePopupRect)
+    onYChanged: if (visible) Qt.callLater(updatePopupRect)
+
+    Connections {
+        target: GlobalStates
+        function onMediaControlsOpenChanged() {
+            if (GlobalStates.mediaControlsOpen && root.visible) {
+                root.updatePopupRect();
+            }
+        }
+    }
+
     Component.onCompleted: {
         LyricsService.initiliazeLyrics();
         if (typeof rootItem !== "undefined") {
             rootItem.toggleVisible(hasTrack);
         }
+        Qt.callLater(updatePopupRect);
     }
 
     readonly property string artUrl: MprisController.artUrl
