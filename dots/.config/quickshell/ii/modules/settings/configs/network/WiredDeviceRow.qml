@@ -119,6 +119,13 @@ Rectangle {
 
             Rectangle {
                 anchors.fill: parent
+                // A Rectangle clips its children to its bounding box, not to its
+                // rounded shape, so a plain fill squares off the corners the row
+                // just rounded. The highlight has to carry them itself.
+                topLeftRadius: root.topLeftRadius
+                topRightRadius: root.topRightRadius
+                bottomLeftRadius: root.expanded ? 0 : root.bottomLeftRadius
+                bottomRightRadius: root.expanded ? 0 : root.bottomRightRadius
                 color: headerArea.containsMouse ? Appearance.colors.colLayer2Hover : "transparent"
                 opacity: root.isConnected ? 0.4 : 1
             }
