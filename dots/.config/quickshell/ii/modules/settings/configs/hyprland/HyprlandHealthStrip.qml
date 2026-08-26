@@ -55,19 +55,28 @@ Rectangle {
         return `${owned} · ${Translation.tr("backed up %1").arg(root.backupAge)}`;
     }
 
-    /// One line each, and only when there is something to say.
+    /// One line each, and only when there is something to say. `accent` marks the one the user
+    /// is expected to act on, so it does not read as another piece of background reporting.
     readonly property var notes: {
         const list = [];
         if (root.failed)
-            list.push({ icon: "error", text: HyprlandGui.lastError.split("\n")[0] });
+            list.push({ icon: "error", text: HyprlandGui.lastError.split("\n")[0], accent: false });
+        if (HyprlandGui.dirty)
+            list.push({
+                icon: "pending",
+                accent: true,
+                text: Translation.tr("%1 change(s) staged. Nothing reaches Hyprland until you press Save to Hyprland, in the corner.").arg(Math.max(1, HyprlandGui.pending.count))
+            });
         if (root.status.unrecognised > 0)
             list.push({
                 icon: "help",
+                accent: false,
                 text: Translation.tr("%1 line(s) inside the managed block were not written by this version. They are left exactly as they are.").arg(root.status.unrecognised)
             });
         if (root.status.shadowed.length > 0)
             list.push({
                 icon: "layers",
+                accent: false,
                 text: Translation.tr("Overridden after load by Modes, Game Mode or the screen shader: %1").arg(root.status.shadowed.join(", "))
             });
         return list;
@@ -150,7 +159,12 @@ Rectangle {
             model: root.notes
 
             delegate: RowLayout {
+                id: note
+
                 required property var modelData
+
+                readonly property color noteColor: root.failed ? Appearance.colors.colOnErrorContainer
+                    : (modelData.accent ? Appearance.colors.colPrimary : Appearance.colors.colSubtext)
 
                 Layout.fillWidth: true
                 Layout.leftMargin: 30
@@ -160,8 +174,7 @@ Rectangle {
                     Layout.alignment: Qt.AlignTop
                     iconSize: 16
                     text: modelData.icon
-                    color: root.failed ? Appearance.colors.colOnErrorContainer
-                    : Appearance.colors.colSubtext
+                    color: note.noteColor
                 }
 
                 StyledText {
@@ -169,8 +182,7 @@ Rectangle {
                     text: modelData.text
                     wrapMode: Text.WordWrap
                     font.pixelSize: Appearance.font.pixelSize.smaller
-                    color: root.failed ? Appearance.colors.colOnErrorContainer
-                    : Appearance.colors.colSubtext
+                    color: note.noteColor
                 }
             }
         }

@@ -20,6 +20,9 @@ import qs.modules.settings.configs.hyprland
  * Everything written from here lands in a fenced block at the end of the matching file in
  * ~/.config/hypr/custom/. The strip at the top is the only place that says so, so it stays
  * visible on every tab.
+ *
+ * An edit is staged, not written. The two buttons in the corner are the only things that touch
+ * the files, and they only appear once there is something to touch them for.
  */
 Item {
     id: hubRoot
@@ -485,6 +488,48 @@ Item {
                 onClicked: {
                     HyprlandGui.stripAll();
                     removeDialog.show = false;
+                }
+            }
+        }
+    }
+
+    // ── Save / Rollback ───────────────────────────────────────────────────────
+    /// Above the sub-page overlay rather than inside the page, because a rule or a keybind is
+    /// edited on a sub-page and there is no sense in having to come back out to save it.
+    FadeLoader {
+        parent: hubRoot.parent ?? hubRoot
+        anchors.bottom: parent ? parent.bottom : undefined
+        anchors.right: parent ? parent.right : undefined
+        anchors.margins: 25
+        z: 9999
+        shown: HyprlandGui.dirty
+
+        sourceComponent: RowLayout {
+            spacing: 12
+
+            FloatingActionButton {
+                iconText: "history"
+                buttonText: Translation.tr("Rollback")
+                expanded: hovered
+                colBackground: Appearance.colors.colSurfaceContainerHigh
+                colBackgroundHover: Appearance.colors.colSurfaceContainerHighest
+                colOnBackground: Appearance.colors.colOnSurface
+                onClicked: HyprlandGui.rollback()
+
+                StyledToolTip {
+                    text: Translation.tr("Forget the changes above and go back to what the files say")
+                }
+            }
+
+            FloatingActionButton {
+                iconText: "save"
+                buttonText: Translation.tr("Save to Hyprland")
+                expanded: hovered
+                enabled: !HyprlandGui.busy
+                onClicked: HyprlandGui.save()
+
+                StyledToolTip {
+                    text: Translation.tr("Write the changes to ~/.config/hypr/custom/ and reload Hyprland")
                 }
             }
         }

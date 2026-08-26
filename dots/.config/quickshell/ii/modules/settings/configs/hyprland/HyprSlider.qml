@@ -73,21 +73,10 @@ ConfigSlider {
         HyprlandGui.setKey(root.optionKey, root.committedValue());
     }
 
-    /**
-     * While the handle is down, the value goes to the compositor and nowhere else.
-     *
-     * Writing on every frame of a drag meant staging an edit sixty times a second, and each
-     * one rebuilt every map the page reads. The drag is still live - the compositor gets each
-     * value as it passes - but only the value it is left on is written.
-     */
-    function preview() {
-        if (!root.wouldWrite()) return;
-        HyprlandGui.previewKey(root.optionKey, root.committedValue());
-    }
-
+    // Only the value the handle is left on is staged. Staging on every frame of a drag meant
+    // sixty edits a second, and each one rebuilt every map the page reads.
     onValueChanged: {
-        if (root.pressed) root.preview();
-        else root.push();
+        if (!root.pressed) root.push();
     }
 
     onPressedChanged: {

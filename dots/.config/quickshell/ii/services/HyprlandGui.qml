@@ -21,6 +21,12 @@ import qs.modules.common.functions
  *
  * A fourth layer sits above all of them: hyprland/shellOverrides/main.lua loads last, so Modes,
  * Game Mode and the screen shader shadow anything set here. Those keys are reported, not hidden.
+ *
+ * Nothing here reaches disk on its own. An edit is staged, `dirty` goes true, and the page's
+ * Save button writes every staged file in one go; Rollback throws the staging away. Writing on
+ * every keystroke meant the compositor reloaded mid-thought - a half-typed rule matched nothing,
+ * a keybind existed for the moment it took to pick its second half - and there was no way back
+ * from a change other than making the opposite one.
  */
 Singleton {
     id: root
@@ -80,7 +86,21 @@ Singleton {
     property var watchedKeys: []
     /// The same keys as an object, so watch() does not walk the list once per control.
     property var _watchedSet: ({})
-    property bool dirty: false
+    /// The files whose staged entries differ from what is on disk, and how many entries in
+    /// them changed. What the Save button and the strip above it are reading.
+    readonly property var pending: {
+        const targets = [];
+        let count = 0;
+        for (const target of Object.keys(root._desired)) {
+            const stored = root._stored[target] ?? [];
+            if (JSON.stringify(root._desired[target]) === JSON.stringify(stored)) continue;
+            targets.push(target);
+            count += root._pendingIn(target);
+        }
+        return ({ targets: targets, count: count });
+    }
+
+    readonly property bool dirty: root.pending.targets.length > 0
     property string lastError: ""
     /// Hyprland's own log, kept beside the one-line message rather than inside it.
     property string lastLog: ""
@@ -368,22 +388,18 @@ Singleton {
 
     // --------------------------------------------------------------- writing
 
-    function setKey(key: string, value: var, options: var) {
+    function setKey(key: string, value: var) {
         if (root.shellOwned(key) !== "") {
             console.warn("[HyprlandGui] refusing to manage shell-owned key:", key);
             return;
         }
         root._upsert({ kind: "config", id: key, key: key, value: value });
-        if (!options || options.preview !== false) root.previewKey(key, value);
     }
 
+    /// Stop managing a key. What it goes back to is whatever a hand-written line above the
+    /// block says, or the compositor's own default - either way, from the next save's reload.
     function resetKey(key: string) {
         root._remove("config", key);
-        // Putting a key back is an edit like any other, so it has to look like one. What it
-        // goes back to is whatever a hand-written line above the block says; with no such
-        // line there is nothing to push and the reload restores the compositor's own default.
-        const inherited = root.inheritedConfig[key];
-        if (inherited !== undefined) root.previewKey(key, inherited.value);
     }
 
     /// The override this page wrote for one device, or null when it does not manage it.
@@ -393,24 +409,8 @@ Singleton {
 
     function setDevice(id: string, spec: var) {
         root._upsert({ kind: "device", id: id, spec: spec });
-        root.previewDevice(spec);
     }
 
-    /**
-     * Push one device override into the running compositor so the card answers at once.
-     *
-     * Same deal as previewKey: volatile, and replaced by the file on the next reload. Safe to
-     * repeat because hl.device replaces the whole override for that name rather than adding
-     * to it - which is also why removing one cannot be previewed, and waits for the reload.
-     */
-    function previewDevice(spec: var) {
-        const name = String(spec?.name ?? "").trim();
-        if (name === "" || !root._validKey(name)) return;
-        const pending = Object.assign({}, root._devicePending);
-        pending[name] = spec;
-        root._devicePending = pending;
-        previewTimer.restart();
-    }
     function removeDevice(id: string) {
         root._remove("device", id);
     }
@@ -475,17 +475,6 @@ Singleton {
         root._remove("unbind", key);
     }
 
-    /// Push a value straight into the running compositor so a slider feels live. Volatile:
-    /// the next reload drops it unless the region was written too. Coalesced, because dragging
-    /// a slider changes its value on every frame and each push is a process.
-    function previewKey(key: string, value: var) {
-        if (!root._validKey(key)) return;
-        const pending = Object.assign({}, root._previewPending);
-        pending[key] = value;
-        root._previewPending = pending;
-        previewTimer.restart();
-    }
-
     /// Delete the hand-written line outside the block that also sets `key`. `callback(result)`
     /// gets hyprgui.py's answer - `diff` on a dry run, `error` when it refused.
     function dropInherited(key: string, dryRun: bool, callback: var) {
@@ -502,31 +491,29 @@ Singleton {
         dropProc.running = true;
     }
 
-    /// Write every dirty target now instead of waiting out the debounce.
-    function flush() {
-        writeDebounce.stop();
+    /// Write every staged file. Hyprland picks the change up from the reload each write causes.
+    function save() {
         root._flush();
     }
 
-    /// Throw away edits that have not been written yet.
-    function discard() {
-        writeDebounce.stop();
+    /// Throw the staged edits away and go back to what the files say.
+    function rollback() {
+        if (!root.dirty) return;
         root._desired = ({});
-        root.dirty = false;
+        root.lastError = "";
         root.changed();
+        root.refresh();
     }
 
     /// Remove the managed region from every file, leaving hand-written Lua alone.
     function stripAll() {
-        writeDebounce.stop();
         root._desired = ({});
-        root.dirty = false;
         root._writeQueue = Object.keys(root.targetFiles).map(
             target => ({ target: target, strip: true, sent: null, reloadTick: 0 }));
         root._drainWrites();
     }
 
-    /// Ask for a unified diff of what `flush()` would do to one target. `callback(target, diff)`.
+    /// Ask for a unified diff of what `save()` would do to one target. `callback(target, diff)`.
     /// Queued: the review dialog asks about all four files in a row.
     function previewDiff(target: string, callback: var) {
         root._diffQueue = root._diffQueue.concat([{ target: target, callback: callback }]);
@@ -543,8 +530,6 @@ Singleton {
     property var _optionQueue: []
     property var _writeQueue: []
     property var _diffQueue: []
-    property var _previewPending: ({})
-    property var _devicePending: ({})
     property bool _optionBusy: false
     property bool _awaitingReload: false
     property bool _refreshAgain: false
@@ -634,24 +619,27 @@ Singleton {
         const staged = Object.assign({}, root._desired);
         staged[target] = entries;
         root._desired = staged;
-        root.dirty = true;
         root.changed();
-        root._scheduleWrite();
     }
 
-    /**
-     * One edit goes out at once; a run of them coalesces behind whatever is already going out.
-     * Waiting a fixed interval on every change made a single click pay for a burst that never
-     * came, and that wait was the largest part of the delay between clicking a switch and
-     * Hyprland acting on it.
-     */
-    function _scheduleWrite() {
-        if (writeProc.running || root._writeQueue.length > 0) {
-            writeDebounce.restart();
-            return;
+    /// How many entries of one staged file differ from the file on disk. The lines the parser
+    /// could not identify are left out: this page never edits them, so counting them would only
+    /// report a number nobody could act on.
+    function _pendingIn(target: string): int {
+        const before = {};
+        for (const entry of (root._stored[target] ?? []))
+            if (entry.kind !== "raw") before[`${entry.kind}\u0000${entry.id}`] = JSON.stringify(entry);
+        const seen = {};
+        let changed = 0;
+        for (const entry of (root._desired[target] ?? [])) {
+            if (entry.kind === "raw") continue;
+            const id = `${entry.kind}\u0000${entry.id}`;
+            seen[id] = true;
+            if (before[id] !== JSON.stringify(entry)) changed += 1;
         }
-        writeDebounce.stop();
-        root._flush();
+        for (const id of Object.keys(before))
+            if (seen[id] !== true) changed += 1;
+        return changed;
     }
 
     function _flush() {
@@ -872,8 +860,6 @@ Singleton {
         const superseded = job.sent !== null && staged[job.target] !== job.sent;
         if (!superseded) delete staged[job.target];
         root._desired = staged;
-        root.dirty = Object.keys(staged).length > 0;
-        if (superseded) writeDebounce.restart();
 
         root.wrote(job.target);
         if (!result.changed) return;
@@ -891,52 +877,6 @@ Singleton {
         root._awaitingReload = true;
         canaryTimer.target = job.target;
         canaryTimer.restart();
-    }
-
-    // Lua rendering, for `hyprctl eval` previews only -----------------------
-
-    /// Merge one colon-separated key into a nested table, so a whole batch of previews renders
-    /// as a single hl.config call.
-    function _mergeKey(table: var, key: string, value: var) {
-        const parts = String(key).split(":");
-        let node = table;
-        for (let i = 0; i < parts.length - 1; i++) {
-            if (node[parts[i]] === undefined || typeof node[parts[i]] !== "object")
-                node[parts[i]] = {};
-            node = node[parts[i]];
-        }
-        node[parts[parts.length - 1]] = value;
-    }
-
-    function _nest(key: string, value: var): var {
-        const parts = String(key).split(":");
-        let node = value;
-        for (let i = parts.length - 1; i >= 0; i--) {
-            const wrapper = {};
-            wrapper[parts[i]] = node;
-            node = wrapper;
-        }
-        return node;
-    }
-
-    function _renderValue(value: var): string {
-        if (typeof value === "boolean") return value ? "true" : "false";
-        if (typeof value === "number") return String(value);
-        if (Array.isArray(value)) return `{ ${value.map(item => root._renderValue(item)).join(", ")} }`;
-        if (value !== null && typeof value === "object") return root._renderTable(value);
-        return root._renderString(String(value));
-    }
-
-    function _renderString(value: string): string {
-        return `"${value.replace(/\\/g, "\\\\").replace(/"/g, "\\\"").replace(/\n/g, "\\n")}"`;
-    }
-
-    function _renderTable(table: var): string {
-        const parts = Object.keys(table).map(key => {
-            const name = /^[A-Za-z_][A-Za-z0-9_]*$/.test(key) ? key : `[${root._renderString(key)}]`;
-            return `${name} = ${root._renderValue(table[key])}`;
-        });
-        return parts.length === 0 ? "{}" : `{ ${parts.join(", ")} }`;
     }
 
     // Processes ------------------------------------------------------------
@@ -1049,29 +989,6 @@ Singleton {
         })
     }
 
-    Timer {
-        id: previewTimer
-        interval: 40
-        onTriggered: {
-            const pending = root._previewPending;
-            const devices = root._devicePending;
-            root._previewPending = ({});
-            root._devicePending = ({});
-            const parts = [];
-            const merged = {};
-            let anyKey = false;
-            for (const key of Object.keys(pending)) {
-                root._mergeKey(merged, key, pending[key]);
-                anyKey = true;
-            }
-            if (anyKey) parts.push(`hl.config(${root._renderTable(merged)})`);
-            for (const name of Object.keys(devices))
-                parts.push(`hl.device(${root._renderTable(devices[name])})`);
-            if (parts.length === 0) return;
-            Quickshell.execDetached(["hyprctl", "eval", parts.join(" ")]);
-        }
-    }
-
     /// A write that never produces a reload means Hyprland rejected the file or is not
     /// watching it. Say so, with the log, instead of leaving the UI showing a value that
     /// never took effect.
@@ -1098,14 +1015,6 @@ Singleton {
                 root.writeFailed(logProc.target, root.lastError + "\n" + root.lastLog);
             }
         }
-    }
-
-    /// Only ever runs while a write is already going out: the first edit of a run does not
-    /// wait, so this is how long the ones behind it gather before following.
-    Timer {
-        id: writeDebounce
-        interval: 150
-        onTriggered: root._flush()
     }
 
     Connections {
