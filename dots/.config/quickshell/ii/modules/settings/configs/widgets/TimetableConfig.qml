@@ -268,6 +268,15 @@ ContentPage {
     }
 
     ContentSection {
+        icon: "sync"
+        title: Translation.tr("Google Calendar synchronization")
+
+        GoogleCalendarSetupGuide {
+            Layout.fillWidth: true
+        }
+    }
+
+    ContentSection {
         icon: "colorize"
         title: Translation.tr("Google event colors")
 

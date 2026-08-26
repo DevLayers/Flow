@@ -1095,6 +1095,10 @@ Item {
                                 wrapMode: Text.Wrap
                             }
 
+                            GoogleCalendarSetupGuide {
+                                Layout.fillWidth: true
+                            }
+
                             ConfigSwitch {
                                 Layout.fillWidth: true
                                 buttonIcon: "calendar_add_on"
