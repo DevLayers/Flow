@@ -79,7 +79,7 @@ Singleton {
 
     Timer {
         id: debounce
-        interval: Math.max(0, root.opts.autoCompactDelay ?? 600)
+        interval: Math.max(100, root.opts.autoCompactDelay ?? 600)
         repeat: false
         onTriggered: root.fire()
     }
