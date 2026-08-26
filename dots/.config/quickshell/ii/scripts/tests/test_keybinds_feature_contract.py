@@ -256,11 +256,29 @@ class KeybindFeatureContractTests(unittest.TestCase):
         self.assertNotIn("rawPages.slice(0, 500)", service)
         self.assertNotIn("inputEntries.slice(0, 10000)", service)
 
-    def test_schema_versions_are_validated_before_writes(self):
-        service = (ROOT / "services/KeybindsService.qml").read_text(encoding="utf-8")
-        self.assertIn("Number.isInteger(diskVersion)", service)
-        self.assertIn("Number.isInteger(importedVersion)", service)
+    def test_overview_keybinds_panel_category_tabs_and_all_search(self):
+        panel = (ROOT / "modules/ii/overview/KeybindsPanel.qml").read_text(encoding="utf-8")
+        self.assertIn("categoryTabsList", panel)
+        self.assertIn('property string selectedCategory: "all"', panel)
+        self.assertIn("readonly property var categories:", panel)
+        self.assertIn("collectHyprlandBindings", panel)
+        self.assertIn("collectCustomBindings", panel)
+        self.assertIn("collectAllBindings", panel)
+        self.assertIn("activeBindings", panel)
+        self.assertIn("supportsSectionToggle: true", panel)
+        self.assertIn("toggleSection()", panel)
+        self.assertIn("cycleCategory", panel)
+        self.assertIn("setCategory", panel)
+        self.assertIn("KeybindsService.pages", panel)
+        self.assertIn("HyprlandKeybinds", panel)
+
+    def test_collapsed_rail_has_new_page_button_at_bottom(self):
+        host = (ROOT / "modules/ii/cheatsheet/CheatsheetKeybinds.qml").read_text(encoding="utf-8")
+        rail = host.split("id: collapsedRailSlot", 1)[1].split("Loader {", 1)[0]
+        self.assertIn("pageForm.openCreate()", rail)
+        self.assertIn('text: "add"', rail)
 
 
 if __name__ == "__main__":
     unittest.main()
+

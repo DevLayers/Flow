@@ -14,22 +14,77 @@ Item {
 
     property string searchQuery: ""
     property int selectedIndex: -1
+    property string selectedCategory: "all"
 
+    readonly property bool supportsSectionToggle: true
     readonly property string normalizedQuery: root.searchQuery.trim().toLocaleLowerCase()
-    readonly property var bindings: root.collectBindings()
-    readonly property var filteredBindings: root.bindings.filter(binding => {
+
+    readonly property var categories: {
+        const revision = KeybindsService.revision;
+        const list = [
+            { id: "all", label: Translation.tr("All"), icon: "all_inclusive", pageId: "" },
+            { id: "hyprland", label: Translation.tr("Hyprland"), icon: "desktop_windows", pageId: "" }
+        ];
+        for (const page of KeybindsService.pages ?? []) {
+            list.push({
+                id: "page_" + String(page.id ?? ""),
+                label: String(page.name ?? Translation.tr("Shortcuts")),
+                icon: String(page.icon ?? "keyboard"),
+                pageId: String(page.id ?? ""),
+                program: String(page.program ?? ""),
+                programId: String(page.programId ?? ""),
+                useProgramIcon: Boolean(page.useProgramIcon)
+            });
+        }
+        return list;
+    }
+
+    readonly property var allBindings: root.collectAllBindings()
+
+    readonly property var activeBindings: {
+        if (root.selectedCategory === "all")
+            return root.allBindings;
+        if (root.selectedCategory === "hyprland")
+            return root.allBindings.filter(binding => binding.source === "hyprland");
+        return root.allBindings.filter(binding => binding.source === root.selectedCategory);
+    }
+
+    readonly property var filteredBindings: root.activeBindings.filter(binding => {
         const terms = root.normalizedQuery.split(/\s+/).filter(term => term.length > 0);
-        const haystack = [binding.section, binding.name, binding.keys.join(" "), binding.dispatcher, binding.params]
-            .join(" ").toLocaleLowerCase();
+        const haystack = [
+            binding.section,
+            binding.sourceLabel,
+            binding.name,
+            binding.rawKeys,
+            binding.keys.join(" "),
+            binding.context ?? "",
+            binding.notes ?? "",
+            binding.dispatcher ?? "",
+            binding.params ?? ""
+        ].join(" ").toLocaleLowerCase();
         return terms.length === 0 || terms.every(term => haystack.includes(term));
     })
+
     readonly property var rows: root.sectionRows(root.filteredBindings)
     readonly property string statusText: Translation.tr("%1 shortcuts").arg(String(root.filteredBindings.length))
 
     implicitWidth: 720
     implicitHeight: scaffold.implicitHeight
 
-    function collectBindings() {
+    function parseKeyList(rawKeys) {
+        if (!rawKeys) return [];
+        if (Array.isArray(rawKeys)) return rawKeys;
+        const str = String(rawKeys).trim();
+        if (str.includes("+")) {
+            return str.split("+").map(p => p.trim()).filter(Boolean);
+        }
+        if (str.includes(" ")) {
+            return str.split(/\s+/).map(p => p.trim()).filter(Boolean);
+        }
+        return [str];
+    }
+
+    function collectHyprlandBindings() {
         const output = [];
 
         function walk(nodes, source, parentSection) {
@@ -43,12 +98,19 @@ Item {
                     if (keys.length === 0 || name.length === 0)
                         continue;
                     output.push({
-                        section,
-                        source,
-                        keys,
-                        name,
+                        section: section,
+                        source: "hyprland",
+                        sourceLabel: Translation.tr("Hyprland"),
+                        icon: "desktop_windows",
+                        pageId: "",
+                        keys: keys,
+                        rawKeys: keys.join("+"),
+                        name: name,
+                        context: "",
+                        notes: "",
                         dispatcher: String(binding?.dispatcher ?? "").trim(),
-                        params: String(binding?.params ?? "").trim()
+                        params: String(binding?.params ?? "").trim(),
+                        canDispatch: true
                     });
                 }
                 walk(node?.children, source, section);
@@ -62,13 +124,54 @@ Item {
         return output;
     }
 
+    function collectCustomBindings() {
+        const output = [];
+        const revision = KeybindsService.revision;
+        for (const page of KeybindsService.pages ?? []) {
+            const pageName = String(page.name ?? Translation.tr("Shortcuts"));
+            const pageIcon = String(page.icon ?? "keyboard");
+            const pageId = String(page.id ?? "");
+            for (const item of page.keybinds ?? []) {
+                const rawKeys = String(item.keys ?? "").trim();
+                if (!rawKeys) continue;
+                const section = String(item.category ?? "").trim() || pageName;
+                const name = String(item.description ?? "").trim() || rawKeys;
+                const keys = root.parseKeyList(rawKeys);
+                output.push({
+                    section: section,
+                    source: "page_" + pageId,
+                    sourceLabel: pageName,
+                    icon: pageIcon,
+                    pageId: pageId,
+                    keys: keys.length > 0 ? keys : [rawKeys],
+                    rawKeys: rawKeys,
+                    name: name,
+                    context: String(item.context ?? "").trim(),
+                    notes: String(item.notes ?? "").trim(),
+                    itemIcon: String(item.icon ?? "").trim(),
+                    dispatcher: "",
+                    params: "",
+                    canDispatch: false
+                });
+            }
+        }
+        return output;
+    }
+
+    function collectAllBindings() {
+        return root.collectHyprlandBindings().concat(root.collectCustomBindings());
+    }
+
     function sectionRows(bindings) {
         const output = [];
-        let previousSection = "";
+        let previousHeader = "";
         for (const binding of bindings) {
-            if (binding.section !== previousSection) {
-                output.push({ kind: "section", name: binding.section });
-                previousSection = binding.section;
+            const header = root.selectedCategory === "all"
+                ? (binding.sourceLabel + " · " + binding.section)
+                : binding.section;
+            if (header !== previousHeader) {
+                output.push({ kind: "section", name: header });
+                previousHeader = header;
             }
             output.push({ kind: "binding", binding });
         }
@@ -120,25 +223,69 @@ Item {
 
     function activateSelected(): bool {
         const binding = root.selectedBinding();
-        return binding ? HyprlandKeybinds.dispatchBinding(binding) : false;
+        if (!binding)
+            return false;
+        if (binding.canDispatch) {
+            return HyprlandKeybinds.dispatchBinding(binding);
+        }
+        Quickshell.clipboardText = binding.rawKeys || binding.keys.join("+");
+        GlobalStates.openCheatsheet("keybinds");
+        if (binding.pageId) {
+            KeybindsService.selectPage(binding.pageId);
+        }
+        return true;
     }
 
     function copySelected(): bool {
         const binding = root.selectedBinding();
         if (!binding)
             return false;
-        Quickshell.clipboardText = binding.keys.join("+");
+        Quickshell.clipboardText = binding.rawKeys || binding.keys.join("+");
         return true;
     }
 
     function openSelectedInCheatsheet(): bool {
-        if (!root.selectedBinding())
+        const binding = root.selectedBinding();
+        if (!binding)
             return false;
         GlobalStates.openCheatsheet("keybinds");
+        if (binding.pageId) {
+            KeybindsService.selectPage(binding.pageId);
+        }
         return true;
     }
 
+    function toggleSection(): bool {
+        return root.cycleCategory(1);
+    }
+
+    function cycleSection(): bool {
+        return root.cycleCategory(1);
+    }
+
+    function cycleCategory(direction = 1): bool {
+        if (root.categories.length === 0)
+            return false;
+        let currentIndex = root.categories.findIndex(c => c.id === root.selectedCategory);
+        if (currentIndex < 0)
+            currentIndex = 0;
+        let nextIndex = (currentIndex + direction + root.categories.length) % root.categories.length;
+        root.setCategory(root.categories[nextIndex].id);
+        return true;
+    }
+
+    function setCategory(categoryId: string) {
+        root.selectedCategory = categoryId;
+        root.selectedIndex = -1;
+        root.clampSelection();
+        const index = root.categories.findIndex(c => c.id === categoryId);
+        if (index >= 0) {
+            categoryTabsList.positionViewAtIndex(index, ListView.Contain);
+        }
+    }
+
     onRowsChanged: root.clampSelection()
+    onSelectedCategoryChanged: root.clampSelection()
     Component.onCompleted: root.clampSelection()
 
     SearchPanelScaffold {
@@ -149,9 +296,15 @@ Item {
         accent: true
         statusText: root.statusText
         showStatus: true
-        primaryHint: ({ label: Translation.tr("Run"), actionId: "activate", keys: ["↵"] })
+        primaryHint: {
+            const b = root.selectedBinding();
+            if (b && b.canDispatch)
+                return ({ label: Translation.tr("Run"), actionId: "activate", keys: ["↵"] });
+            return ({ label: Translation.tr("Open page"), actionId: "activate", keys: ["↵"] });
+        }
         hints: [
             { label: Translation.tr("Copy"), actionId: "copy", keys: ["Ctrl", "C"] },
+            { label: Translation.tr("Category"), actionId: "section", keys: ["Tab"] },
             { label: Translation.tr("Cheat sheet"), actionId: "secondary", keys: ["Ctrl", "↵"] }
         ]
 
@@ -159,6 +312,58 @@ Item {
             width: parent.width
             height: parent.height
             spacing: Appearance.sizes.elevationMargin
+
+            // ── Category Selector Tab Bar ──
+            ListView {
+                id: categoryTabsList
+                Layout.fillWidth: true
+                Layout.preferredHeight: 34
+                orientation: ListView.Horizontal
+                spacing: 6
+                clip: true
+                model: root.categories
+
+                delegate: RippleButton {
+                    id: tabButton
+                    required property var modelData
+                    implicitHeight: 32
+                    implicitWidth: tabContent.implicitWidth + 18
+                    buttonRadius: Appearance.rounding.full
+                    colBackground: root.selectedCategory === modelData.id
+                        ? Appearance.colors.colPrimaryContainer
+                        : Appearance.colors.colSurfaceContainerHigh
+                    colBackgroundHover: root.selectedCategory === modelData.id
+                        ? Appearance.colors.colPrimaryContainerHover
+                        : Appearance.colors.colSurfaceContainerHighestHover
+                    colRipple: root.selectedCategory === modelData.id
+                        ? Appearance.colors.colPrimaryContainerActive
+                        : Appearance.colors.colSurfaceContainerHighestActive
+                    onClicked: root.setCategory(modelData.id)
+
+                    RowLayout {
+                        id: tabContent
+                        anchors.centerIn: parent
+                        spacing: 6
+
+                        MaterialSymbol {
+                            text: String(tabButton.modelData.icon ?? "keyboard")
+                            iconSize: Appearance.font.pixelSize.normal
+                            color: root.selectedCategory === tabButton.modelData.id
+                                ? Appearance.colors.colOnPrimaryContainer
+                                : Appearance.colors.colSubtext
+                        }
+
+                        StyledText {
+                            text: String(tabButton.modelData.label ?? "")
+                            font.pixelSize: Appearance.font.pixelSize.small
+                            font.weight: root.selectedCategory === tabButton.modelData.id ? Font.Bold : Font.Normal
+                            color: root.selectedCategory === tabButton.modelData.id
+                                ? Appearance.colors.colOnPrimaryContainer
+                                : Appearance.colors.colOnSurface
+                        }
+                    }
+                }
+            }
 
             ListView {
                 id: keybindList
@@ -222,6 +427,15 @@ Item {
                                 anchors.margins: Appearance.sizes.elevationMargin
                                 spacing: Appearance.sizes.elevationMargin
 
+                                MaterialSymbol {
+                                    visible: Boolean(binding.itemIcon)
+                                    text: String(binding.itemIcon ?? "")
+                                    iconSize: Appearance.font.pixelSize.normal
+                                    color: root.selectedIndex === rowLoader.index
+                                        ? Appearance.colors.colOnPrimaryContainer
+                                        : Appearance.colors.colPrimary
+                                }
+
                                 ColumnLayout {
                                     Layout.fillWidth: true
                                     spacing: 0
@@ -230,6 +444,7 @@ Item {
                                         Layout.fillWidth: true
                                         text: binding.name
                                         elide: Text.ElideRight
+                                        font.weight: Font.DemiBold
                                         color: root.selectedIndex === rowLoader.index
                                             ? Appearance.colors.colOnPrimaryContainer
                                             : Appearance.colors.colOnSurface
@@ -237,7 +452,15 @@ Item {
 
                                     StyledText {
                                         Layout.fillWidth: true
-                                        text: binding.source === "user" ? Translation.tr("Custom") : binding.section
+                                        text: {
+                                            const parts = [];
+                                            if (root.selectedCategory === "all")
+                                                parts.push(binding.sourceLabel);
+                                            parts.push(binding.section);
+                                            if (binding.context)
+                                                parts.push(binding.context);
+                                            return parts.join(" · ");
+                                        }
                                         elide: Text.ElideRight
                                         font.pixelSize: Appearance.font.pixelSize.smaller
                                         color: root.selectedIndex === rowLoader.index
@@ -281,3 +504,4 @@ Item {
         }
     }
 }
+
