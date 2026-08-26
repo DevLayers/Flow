@@ -122,16 +122,14 @@ if (context.timedBlockHeight(0, 30, comfortablePixelsPerMinute, 4) <= 60)
         self.assertIn("interactive: headerRow.expanded && contentHeight > height", header)
         self.assertIn("Translation.tr(\"%1 more\").arg(String(dayDelegate.hiddenChipCount))", header)
 
-    def test_week_day_columns_shade_pre_dawn_and_evening(self) -> None:
+    def test_week_day_columns_keep_a_uniform_background(self) -> None:
         day_column = (TIMETABLE / "TimetableDayColumn.qml").read_text(encoding="utf-8")
 
-        self.assertIn("readonly property int sunriseMinutes", day_column)
-        self.assertIn("H.parseTimeToMinutes(Weather.data?.sunrise", day_column)
-        self.assertIn("readonly property int sunsetMinutes", day_column)
-        self.assertIn("readonly property bool hasSolarTimes", day_column)
-        self.assertIn("id: preDawnShade", day_column)
-        self.assertIn("id: eveningShade", day_column)
-        self.assertEqual(day_column.count("color: H.withOpacity(Appearance.colors.colLayer0, 0.22)"), 2)
+        self.assertNotIn("sunriseMinutes", day_column)
+        self.assertNotIn("sunsetMinutes", day_column)
+        self.assertNotIn("preDawnShade", day_column)
+        self.assertNotIn("eveningShade", day_column)
+        self.assertIn("color: isToday ? todayHighlightFill : dayIdx % 2 == 0 ? dayBackgroundFill : dayBackgroundFillVariant", day_column)
 
     def test_week_columns_keep_a_stable_calendar_background(self) -> None:
         week = (TIMETABLE / "WeekView.qml").read_text(encoding="utf-8")

@@ -65,13 +65,8 @@ Item {
     height: contentHeight
     clip: true
 
-    readonly property int sunriseMinutes: H.parseTimeToMinutes(Weather.data?.sunrise ?? "") ?? -1
-    readonly property int sunsetMinutes: H.parseTimeToMinutes(Weather.data?.sunset ?? "") ?? -1
-    readonly property bool hasSolarTimes: dayColumn.sunriseMinutes > 0 && dayColumn.sunsetMinutes > dayColumn.sunriseMinutes
-    readonly property int gridStartMinutes: dayColumn.startHour * 60 + dayColumn.startMinute
-
     // Same weekend marker as the month grid: a texture, so it survives the
-    // today fill and the solar shades stacked on the column.
+    // today fill without changing the timed background through the day.
     readonly property bool isWeekend: {
         const date = dayColumn.dayData?.date;
         if (!(date instanceof Date))
@@ -96,35 +91,6 @@ Item {
         lineColor: dayColumn.weekendHatchColor
         lineSpacing: 9
         plateRadius: Appearance.rounding.windowRounding
-    }
-
-    Rectangle {
-        id: preDawnShade
-        visible: dayColumn.hasSolarTimes && height > 0
-        x: 0
-        y: 0
-        width: parent.width
-        height: Math.max(0, Math.min(parent.height, (dayColumn.sunriseMinutes - dayColumn.gridStartMinutes) * dayColumn.pixelsPerMinute))
-        color: H.withOpacity(Appearance.colors.colLayer0, 0.22)
-        topLeftRadius: Appearance.rounding.windowRounding
-        topRightRadius: Appearance.rounding.windowRounding
-        bottomLeftRadius: 0
-        bottomRightRadius: 0
-    }
-
-    Rectangle {
-        id: eveningShade
-        readonly property real sunsetY: (dayColumn.sunsetMinutes - dayColumn.gridStartMinutes) * dayColumn.pixelsPerMinute
-        visible: dayColumn.hasSolarTimes && height > 0
-        x: 0
-        y: Math.max(0, Math.min(parent.height, sunsetY))
-        width: parent.width
-        height: Math.max(0, parent.height - y)
-        color: H.withOpacity(Appearance.colors.colLayer0, 0.22)
-        topLeftRadius: 0
-        topRightRadius: 0
-        bottomLeftRadius: Appearance.rounding.windowRounding
-        bottomRightRadius: Appearance.rounding.windowRounding
     }
 
     // ─── Drag-to-create MouseArea ─────────────
