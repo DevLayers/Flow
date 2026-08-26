@@ -147,12 +147,79 @@ Singleton {
         return root.themes.find(theme => theme.name === name) ?? null;
     }
 
+    /// Everything else on the machine that keeps its own copy of the pointer setting: GTK's ini
+    /// files, KDE's kcminputrc, the X resource database, the X11 default theme that Steam and
+    /// SDL games fall back to, a flatpak override for sandboxed apps, and - when xsettingsd is
+    /// installed - the XSETTINGS keys running X11 apps re-read live. The last three blocks
+    /// update the environments new programs inherit from - the compositor's own (files cannot:
+    /// env.lua is read at launch only), the systemd user manager's and D-Bus activation's - so
+    /// a program started from now on gets the new theme without a re-login. Programs already
+    /// running, and children of an already-running terminal, keep the old value.
+    readonly property string cursorSyncScript: `
+        theme="$1"; size="$2"
+        set_ini() {
+            file="$1"
+            mkdir -p "\${file%/*}"
+            [ -f "$file" ] || printf '[Settings]\\n' > "$file"
+            for pair in "gtk-cursor-theme-name=$theme" "gtk-cursor-theme-size=$size"; do
+                key="\${pair%%=*}"
+                grep -v "^$key=" "$file" > "$file.tmp" && mv "$file.tmp" "$file"
+                printf '%s\\n' "$pair" >> "$file"
+            done
+        }
+        conf="\${XDG_CONFIG_HOME:-$HOME/.config}"
+        set_ini "$conf/gtk-3.0/settings.ini"
+        set_ini "$conf/gtk-4.0/settings.ini"
+        mkdir -p "$HOME/.icons/default"
+        dest="$HOME/.icons/default/index.theme"
+        printf '[Icon Theme]\\nName=Default\\nInherits=%s\\n' "$theme" > "$dest"
+        if command -v kwriteconfig6 >/dev/null 2>&1; then
+            kwriteconfig6 --file kcminputrc --group Mouse --key cursorTheme "$theme"
+            kwriteconfig6 --file kcminputrc --group Mouse --key cursorSize "$size"
+        fi
+        if command -v xrdb >/dev/null 2>&1 && [ -n "\${DISPLAY:-}" ]; then
+            printf 'Xcursor.theme: %s\\nXcursor.size: %s\\n' "$theme" "$size" | xrdb -merge
+        fi
+        if command -v flatpak >/dev/null 2>&1; then
+            flatpak override --user --env=XCURSOR_THEME="$theme" --env=XCURSOR_SIZE="$size"
+        fi
+        if command -v xsettingsd >/dev/null 2>&1 && [ -n "\${DISPLAY:-}" ]; then
+            xconf="$conf/xsettingsd/xsettingsd.conf"
+            mkdir -p "\${xconf%/*}"
+            touch "$xconf"
+            grep -vE '^Gtk/CursorTheme(Name|Size) ' "$xconf" > "$xconf.tmp" && mv "$xconf.tmp" "$xconf"
+            printf 'Gtk/CursorThemeName "%s"\\nGtk/CursorThemeSize %s\\n' "$theme" "$size" >> "$xconf"
+            if pgrep -x xsettingsd >/dev/null 2>&1; then
+                pkill -HUP -x xsettingsd || true
+            else
+                setsid -f xsettingsd >/dev/null 2>&1 || true
+            fi
+        fi
+        if command -v hyprctl >/dev/null 2>&1; then
+            hyprctl eval "hl.env([[XCURSOR_THEME]], [[$theme]])" >/dev/null || true
+            hyprctl eval "hl.env([[XCURSOR_SIZE]], [[$size]])" >/dev/null || true
+            hyprctl eval "hl.env([[HYPRCURSOR_THEME]], [[$theme]])" >/dev/null || true
+            hyprctl eval "hl.env([[HYPRCURSOR_SIZE]], [[$size]])" >/dev/null || true
+        fi
+        if command -v systemctl >/dev/null 2>&1; then
+            systemctl --user set-environment "XCURSOR_THEME=$theme" "XCURSOR_SIZE=$size" \\
+                "HYPRCURSOR_THEME=$theme" "HYPRCURSOR_SIZE=$size" || true
+        fi
+        if command -v dbus-update-activation-environment >/dev/null 2>&1; then
+            dbus-update-activation-environment --systemd "XCURSOR_THEME=$theme" \\
+                "XCURSOR_SIZE=$size" "HYPRCURSOR_THEME=$theme" "HYPRCURSOR_SIZE=$size" || true
+        fi
+    `
+
     /**
      * Set the pointer everywhere at once.
      *
      * The four variables are what a program started later reads. `hyprctl setcursor` is what the
      * compositor draws with right now, and is the reason this is the one thing on the page that
-     * does not need a re-login. gsettings is GTK's own copy, which nothing else updates.
+     * does not need a re-login. gsettings is GTK's own copy, which nothing else updates. The
+     * sync script then walks every other copy - GTK's ini files, KDE apps, the X11 fallback
+     * that Steam reads, the X resource database, flatpaks - so no surface is left drawing its
+     * own idea of the pointer.
      */
     function applyCursor(theme: string, size: int) {
         const name = String(theme ?? "").trim();
@@ -167,7 +234,8 @@ Singleton {
         root.runLater([
             ["hyprctl", "setcursor", name, String(px)],
             ["gsettings", "set", "org.gnome.desktop.interface", "cursor-theme", name],
-            ["gsettings", "set", "org.gnome.desktop.interface", "cursor-size", String(px)]
+            ["gsettings", "set", "org.gnome.desktop.interface", "cursor-size", String(px)],
+            ["bash", "-c", root.cursorSyncScript, "cursor-sync", name, String(px)]
         ]);
     }
 
@@ -669,8 +737,11 @@ Singleton {
     Process {
         id: applyProc
         onExited: (code, status) => {
-            if (code !== 0)
-                console.warn("[HyprlandEnv] failed:", applyProc.command.join(" "), "exit", code);
+            if (code !== 0) {
+                const shown = applyProc.command[0] === "bash"
+                    ? "bash script " + (applyProc.command[3] ?? "") : applyProc.command.join(" ");
+                console.warn("[HyprlandEnv] failed:", shown, "exit", code);
+            }
             root._drainApply();
         }
     }

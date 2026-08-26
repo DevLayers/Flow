@@ -132,7 +132,7 @@ ContentPage {
 
         HyprOptionNote {
             notes: {
-                const out = [{ "icon": "bolt", "text": Translation.tr("The pointer is the one thing here that changes at once: the compositor is told directly, and GTK's own copy of the setting is updated with it. The four variables are written as well, so it survives a reboot.") }];
+                const out = [{ "icon": "bolt", "text": Translation.tr("The pointer is the one thing here that changes at once: the compositor is told directly, and every other copy of the setting follows - GTK, KDE apps, the X11 fallback Steam reads, flatpaks. The four variables are written as well, so it survives a reboot.") }];
                 if (HyprlandEnv.cursorSplit)
                     out.push({ "icon": "warning", "text": Translation.tr("Hyprland is drawing %1 while X11 windows get %2. Picking a theme here sets both.")
                         .arg(HyprlandEnv.envValue("HYPRCURSOR_THEME")).arg(HyprlandEnv.envValue("XCURSOR_THEME")) });
@@ -144,6 +144,31 @@ ContentPage {
                         .arg(tab.currentTheme.title) });
                 return out;
             }
+        }
+    }
+
+    // ── Icons ─────────────────────────────────────────────────────────────────
+    ContentSection {
+        title: Translation.tr("Icons")
+        icon: "apps"
+
+        Component.onCompleted: IconThemes.refreshPacks()
+
+        HyprNavRow {
+            buttonIcon: "category"
+            text: Translation.tr("Icon pack")
+            value: {
+                const entry = IconThemes.packEntry(IconThemes.currentPack);
+                const label = entry ? entry.title : IconThemes.currentPack;
+                return IconThemes.themed ? Translation.tr("%1 · recolored").arg(label) : label;
+            }
+            onOpenSubPage: tab.openSubPage(Qt.resolvedUrl("HyprIconPackPage.qml"))
+        }
+
+        HyprOptionNote {
+            notes: [
+                { "icon": "info", "text": Translation.tr("Not a Hyprland setting - the copies live with GTK, KDE and gsettings - but it sits here next to the pointer, which is set the same everywhere-at-once way.") }
+            ]
         }
     }
 

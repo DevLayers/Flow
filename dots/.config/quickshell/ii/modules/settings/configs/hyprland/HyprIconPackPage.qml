@@ -8,16 +8,16 @@ import qs.modules.common.functions
 import qs.modules.common.widgets
 
 /**
- * Pick the pointer.
+ * Pick the icon pack.
  *
- * Themes are found the way XCursor finds them - XCURSOR_PATH, then ~/.icons, then the data home,
- * then /usr/share/icons - and the first theme of a given name wins, which is what would really
- * happen. Bibata-Modern-Classic exists three times over on this machine and only one of them is
- * ever used, so listing all three would be a lie.
+ * Packs are found the way icon lookup finds them - ~/.icons, then the data home, then
+ * /usr/share/icons - and the first pack of a given name wins. Only real icon packs are listed:
+ * a theme whose index.theme declares no icon directories is a cursor theme, and has its own
+ * page.
  *
- * There is no picture of the cursor here. XCursor files are a binary image format and hyprcursor
- * ships compressed archives; neither is something QML can draw. Choosing one applies it
- * immediately instead, which is a better preview than a thumbnail would be.
+ * When themed icons are on, the desktop draws with DynamicTheme, a recolored copy of a base
+ * pack. Picking here then changes the base and rebuilds the copy, so the choice still shows -
+ * it just arrives wearing the wallpaper's colors.
  */
 Item {
     id: subPageRoot
@@ -29,20 +29,20 @@ Item {
     property string rawQuery: ""
     readonly property string query: subPageRoot.rawQuery.trim().toLowerCase()
 
-    function matchesTheme(theme: var): bool {
+    function matchesPack(pack: var): bool {
         return subPageRoot.query === ""
-            || theme.title.toLowerCase().indexOf(subPageRoot.query) >= 0
-            || theme.name.toLowerCase().indexOf(subPageRoot.query) >= 0;
+            || pack.title.toLowerCase().indexOf(subPageRoot.query) >= 0
+            || pack.name.toLowerCase().indexOf(subPageRoot.query) >= 0;
     }
 
     /// Only for the empty-state text: the rows themselves hide rather than being rebuilt on
     /// every letter typed into the search box.
-    readonly property int matchCount: Array.from(HyprlandEnv.themes)
-        .filter(theme => subPageRoot.matchesTheme(theme)).length
+    readonly property int matchCount: Array.from(IconThemes.packs)
+        .filter(pack => subPageRoot.matchesPack(pack)).length
 
-    /// Fresh from disk each time the picker opens, so a theme installed since the shell
-    /// started still shows up - the walk no longer runs on every config reload.
-    Component.onCompleted: HyprlandEnv.refreshThemes()
+    /// Fresh from disk each time the picker opens, so a pack installed since the shell
+    /// started still shows up.
+    Component.onCompleted: IconThemes.refreshPacks()
 
     function shortDir(dir: string): string {
         const home = FileUtils.trimFileProtocol(String(Directories.home ?? ""));
@@ -80,7 +80,7 @@ Item {
                 spacing: 0
 
                 StyledText {
-                    text: Translation.tr("Cursor theme")
+                    text: Translation.tr("Icon pack")
                     font.pixelSize: Appearance.font.pixelSize.large
                     font.family: Appearance.font.family.title
                     color: Appearance.colors.colOnLayer0
@@ -88,7 +88,9 @@ Item {
 
                 StyledText {
                     Layout.fillWidth: true
-                    text: Translation.tr("Changes as soon as you pick one.")
+                    text: IconThemes.themed
+                        ? Translation.tr("Becomes the base the shell recolors.")
+                        : Translation.tr("Changes as soon as you pick one.")
                     font.pixelSize: Appearance.font.pixelSize.smaller
                     color: Appearance.colors.colSubtext
                     elide: Text.ElideRight
@@ -97,20 +99,31 @@ Item {
         }
 
         ContentSection {
-            title: Translation.tr("Installed themes")
-            icon: "arrow_selector_tool"
+            title: Translation.tr("Installed icon packs")
+            icon: "apps"
+
+            ConfigSwitch {
+                buttonIcon: "magic_button"
+                text: Translation.tr("Recolor the pack to match the wallpaper")
+                checked: IconThemes.themed
+                onCheckedChanged: IconThemes.setThemed(checked)
+
+                StyledToolTip {
+                    text: Translation.tr("On, the desktop draws with a copy of the pack, recolored to the wallpaper's palette. Off, the pack is used exactly as it ships.")
+                }
+            }
 
             MaterialTextField {
                 Layout.fillWidth: true
-                placeholderText: Translation.tr("Search themes")
+                placeholderText: Translation.tr("Search icon packs")
                 onTextChanged: subPageRoot.rawQuery = text
             }
 
             StyledText {
                 Layout.fillWidth: true
-                visible: HyprlandEnv.themesReady && subPageRoot.matchCount === 0
-                text: HyprlandEnv.themes.length === 0
-                    ? Translation.tr("No cursor themes were found. They live in ~/.icons, ~/.local/share/icons or /usr/share/icons, in a folder holding a cursors or hyprcursors directory.")
+                visible: IconThemes.packsReady && subPageRoot.matchCount === 0
+                text: IconThemes.packs.length === 0
+                    ? Translation.tr("No icon packs were found. They live in ~/.icons, ~/.local/share/icons or /usr/share/icons, in a folder holding an index.theme that lists icon directories.")
                     : Translation.tr("Nothing matches \"%1\".").arg(subPageRoot.rawQuery.trim())
                 font.pixelSize: Appearance.font.pixelSize.small
                 color: Appearance.colors.colSubtext
@@ -118,50 +131,53 @@ Item {
             }
 
             Repeater {
-                model: HyprlandEnv.themes
+                model: IconThemes.packs
 
-                delegate: ThemeRow {
+                delegate: PackRow {
                     required property var modelData
 
-                    visible: subPageRoot.matchesTheme(modelData)
-                    theme: modelData
+                    visible: subPageRoot.matchesPack(modelData)
+                    pack: modelData
                 }
             }
 
             HyprOptionNote {
-                notes: [
-                    { "icon": "bolt", "text": Translation.tr("Picking one tells the compositor straight away and brings every other copy of the setting along: GTK, KDE apps, the X11 fallback Steam reads, and flatpaks. With xsettingsd installed, running X11 apps follow at once; the rest keep the old pointer until they are restarted.") },
-                    { "icon": "layers", "text": Translation.tr("A theme with both formats is drawn by hyprcursor, which scales without blurring. X11 windows always use the older format.") }
-                ]
+                notes: {
+                    const out = [];
+                    if (IconThemes.themed)
+                        out.push({ "icon": "magic_button", "text": Translation.tr("Recoloring is on, so the pack you pick becomes the base of the wallpaper-colored copy the desktop draws with. Flip the switch above to use packs as they ship.") });
+                    out.push({ "icon": "bolt", "text": Translation.tr("Picking one updates GTK, KDE and this shell together. Most running apps follow at once; the stubborn ones keep their old icons until restarted.") });
+                    return out;
+                }
             }
         }
     }
 
-    component ThemeRow: RippleButton {
-        id: themeRow
+    component PackRow: RippleButton {
+        id: packRow
 
-        required property var theme
+        required property var pack
 
-        readonly property bool current: themeRow.theme.name === HyprlandEnv.cursorTheme
+        readonly property bool current: packRow.pack.name === IconThemes.currentPack
 
         Layout.fillWidth: true
-        implicitHeight: themeLayout.implicitHeight + 20
+        implicitHeight: packLayout.implicitHeight + 20
         useDynamicRadius: true
 
-        colBackground: themeRow.current ? Appearance.colors.colSecondaryContainer
+        colBackground: packRow.current ? Appearance.colors.colSecondaryContainer
             : Appearance.colors.colLayer2
-        colBackgroundHover: themeRow.current ? Appearance.colors.colSecondaryContainerHover
+        colBackgroundHover: packRow.current ? Appearance.colors.colSecondaryContainerHover
             : Appearance.colors.colLayer2Hover
-        colRipple: themeRow.current ? Appearance.colors.colSecondaryContainerActive
+        colRipple: packRow.current ? Appearance.colors.colSecondaryContainerActive
             : Appearance.colors.colLayer2Active
 
-        onClicked: HyprlandEnv.applyCursor(themeRow.theme.name, HyprlandEnv.cursorSize)
+        onClicked: IconThemes.applyPack(packRow.pack.name)
 
         contentItem: Item {
             anchors.fill: parent
 
             RowLayout {
-                id: themeLayout
+                id: packLayout
                 anchors.fill: parent
                 anchors.leftMargin: 16
                 anchors.rightMargin: 16
@@ -175,10 +191,10 @@ Item {
 
                     StyledText {
                         Layout.fillWidth: true
-                        text: themeRow.theme.title
+                        text: packRow.pack.title
                         elide: Text.ElideRight
                         font.pixelSize: Appearance.font.pixelSize.small
-                        color: themeRow.current ? Appearance.colors.colOnSecondaryContainer
+                        color: packRow.current ? Appearance.colors.colOnSecondaryContainer
                             : Appearance.colors.colOnLayer2
                     }
 
@@ -186,14 +202,11 @@ Item {
                         Layout.fillWidth: true
                         text: {
                             const parts = [];
-                            if (themeRow.theme.title !== themeRow.theme.name) parts.push(themeRow.theme.name);
-                            parts.push(themeRow.theme.hypr && themeRow.theme.xcursor
-                                ? Translation.tr("hyprcursor and X11")
-                                : (themeRow.theme.hypr ? Translation.tr("hyprcursor only")
-                                    : Translation.tr("X11 only")));
-                            if (themeRow.theme.shapes > 0)
-                                parts.push(Translation.tr("%1 shapes").arg(themeRow.theme.shapes));
-                            parts.push(subPageRoot.shortDir(themeRow.theme.dir));
+                            if (packRow.pack.title !== packRow.pack.name) parts.push(packRow.pack.name);
+                            if (!packRow.pack.hasApps) parts.push(Translation.tr("no app icons"));
+                            if (packRow.pack.inherits !== "")
+                                parts.push(Translation.tr("based on %1").arg(packRow.pack.inherits));
+                            parts.push(subPageRoot.shortDir(packRow.pack.dir));
                             return parts.join(" · ");
                         }
                         elide: Text.ElideRight
@@ -204,7 +217,7 @@ Item {
 
                 MaterialSymbol {
                     Layout.alignment: Qt.AlignVCenter
-                    visible: themeRow.current
+                    visible: packRow.current
                     text: "check"
                     iconSize: Appearance.font.pixelSize.large
                     color: Appearance.colors.colOnSecondaryContainer

@@ -707,6 +707,12 @@ def _generate_locked():
 
     # Get icon theme from config or default
     icon_theme_name = config.get("appearance", {}).get("iconTheme", "Papirus-Base")
+    # A caller that just changed the config passes the base explicitly: the config write is
+    # debounced, so reading it back from disk here would race with it.
+    if "--base" in sys.argv:
+        at = sys.argv.index("--base")
+        if at + 1 < len(sys.argv):
+            icon_theme_name = sys.argv[at + 1]
     print(f"Configured icon theme: {icon_theme_name}")
 
     # Locate base theme
@@ -861,6 +867,15 @@ def _generate_locked():
     # ── Atomic swap: replace old DynamicTheme with new one ───────────────
     # Restores TARGET_THEME_PATH global to original value before swapping
     TARGET_THEME_PATH = OLD_TARGET
+    # The caches are built on the staging copy, before the swap: rewriting them inside the
+    # live directory hands a half-written cache to anything resolving icons at that moment,
+    # which crashes it (bad_alloc in KIconTheme) rather than just missing.
+    print("[Phase 3] Updating GTK3 and GTK4 icon caches...")
+    if shutil.which("gtk4-update-icon-cache"):
+        subprocess.run(["gtk4-update-icon-cache", "-f", "-q", "-t", NEW_THEME_PATH], capture_output=True)
+    if shutil.which("gtk-update-icon-cache"):
+        subprocess.run(["gtk-update-icon-cache", "-f", "-q", "-t", NEW_THEME_PATH], capture_output=True)
+
     OLD_PATH = TARGET_THEME_PATH + ".old"
     if os.path.exists(TARGET_THEME_PATH):
         if os.path.exists(OLD_PATH):
@@ -869,12 +884,6 @@ def _generate_locked():
     os.rename(NEW_THEME_PATH, TARGET_THEME_PATH)
     if os.path.exists(OLD_PATH):
         shutil.rmtree(OLD_PATH)
-
-    print("[Phase 3] Updating GTK3 and GTK4 icon caches...")
-    if shutil.which("gtk4-update-icon-cache"):
-        subprocess.run(["gtk4-update-icon-cache", "-f", "-q", "-t", TARGET_THEME_PATH], capture_output=True)
-    if shutil.which("gtk-update-icon-cache"):
-        subprocess.run(["gtk-update-icon-cache", "-f", "-q", "-t", TARGET_THEME_PATH], capture_output=True)
 
     # Save hash + base theme fingerprint so next run can skip if nothing changed
     try:
