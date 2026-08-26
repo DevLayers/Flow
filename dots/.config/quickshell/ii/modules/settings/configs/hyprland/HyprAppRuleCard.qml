@@ -21,9 +21,11 @@ import qs.modules.common.widgets
 ContentSubsection {
     id: card
 
-    required property var rule
+    /// Looked up by id rather than passed as a row object, so the card only hears about its
+    /// own rule and the list of cards keeps its identity while the set of ids is unchanged.
+    required property string ruleId
 
-    readonly property var spec: card.rule?.spec ?? ({})
+    readonly property var spec: HyprlandRules.find("windowrule", card.ruleId) ?? ({})
     readonly property var match: card.spec.match ?? ({})
     readonly property string windowClass: HyprlandRules.patternLabel(String(card.match.class ?? ""))
     readonly property var entry: HyprlandRules.appEntry(card.windowClass)
@@ -42,7 +44,7 @@ ContentSubsection {
     /// `undefined` takes the field out of the rule. Off means "no opinion" here rather than
     /// "false": a rule that says `float = false` is not the same as one that says nothing.
     function put(key: string, newValue: var) {
-        HyprlandRules.putEffect("windowrule", card.rule.id, key, newValue);
+        HyprlandRules.putEffect("windowrule", card.ruleId, key, newValue);
     }
 
     function putMatch(key: string, newValue: var) {
@@ -51,7 +53,7 @@ ContentSubsection {
         if (newValue === undefined || newValue === "") delete match[key];
         else match[key] = newValue;
         next.match = match;
-        HyprlandRules.save("windowrule", card.rule.id, next);
+        HyprlandRules.save("windowrule", card.ruleId, next);
     }
 
     /// Fields that are only written when they hold something, so an empty box means "not set".

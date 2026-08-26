@@ -4,6 +4,7 @@ import QtQuick
 import QtQuick.Layouts
 import qs.services
 import qs.modules.common
+import qs.modules.common.functions
 import qs.modules.common.widgets
 
 /**
@@ -55,7 +56,12 @@ ContentPage {
         return out;
     }
 
-    readonly property var managedKeys: Object.keys(HyprlandGui.managedConfig).sort()
+    property var _memo: ({})
+
+    /// Kept by identity while the key set is unchanged, so editing a value does not rebuild
+    /// the whole "set from this page" list underneath it.
+    readonly property var managedKeys: ObjectUtils.keep(tab._memo, "managedKeys",
+        Object.keys(HyprlandGui.managedConfig).sort())
 
     readonly property var listedSections: Array.from(HyprlandCatalog.sections)
         .filter(entry => entry.id !== "debug" || HyprlandCatalog.showDebug)

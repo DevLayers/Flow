@@ -2,8 +2,10 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import QtQuick.Layouts
+import qs
 import qs.services
 import qs.modules.common
+import qs.modules.common.functions
 import qs.modules.common.widgets
 
 /**
@@ -55,8 +57,11 @@ Rectangle {
         return `${owned} · ${Translation.tr("backed up %1").arg(root.backupAge)}`;
     }
 
+    property var _memo: ({})
+
     /// One line each, and only when there is something to say. `accent` marks the one the user
     /// is expected to act on, so it does not read as another piece of background reporting.
+    /// Kept by identity so the rows below are only rebuilt when their text actually changes.
     readonly property var notes: {
         const list = [];
         if (root.failed)
@@ -79,7 +84,7 @@ Rectangle {
                 accent: false,
                 text: Translation.tr("Overridden after load by Modes, Game Mode or the screen shader: %1").arg(root.status.shadowed.join(", "))
             });
-        return list;
+        return ObjectUtils.keep(root._memo, "notes", list);
     }
 
     Layout.fillWidth: true
@@ -90,7 +95,8 @@ Rectangle {
     Timer {
         interval: 60000
         repeat: true
-        running: root.visible
+        // The page outlives the window being closed, so `visible` alone would tick forever.
+        running: root.visible && GlobalStates.settingsOpen
         onTriggered: root.nowSeconds = Math.floor(Date.now() / 1000)
     }
 

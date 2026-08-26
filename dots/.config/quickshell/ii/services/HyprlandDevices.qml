@@ -5,6 +5,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import Quickshell.Hyprland
+import qs.modules.common.functions
 
 /**
  * The input devices Hyprland can see, split into the ones a person owns and the ones software
@@ -40,6 +41,13 @@ Singleton {
         return Array.from(list ?? []).filter(device => !root.isVirtual(device.name));
     }
 
+    /// `real()` of each list, as properties: the lists above only move when their content does,
+    /// so these keep their identity too and the per-device cards are not rebuilt per rescan.
+    readonly property var realMice: root.real(root.mice)
+    readonly property var realKeyboards: root.real(root.keyboards)
+    readonly property var realTablets: root.real(root.tablets)
+    readonly property var realTouch: root.real(root.touch)
+
     readonly property int hiddenCount:
         (root.mice.length - root.real(root.mice).length)
         + (root.keyboards.length - root.real(root.keyboards).length)
@@ -73,6 +81,11 @@ Singleton {
         }
     }
 
+    function _take(name: string, next: var) {
+        if (ObjectUtils.canon(next) === ObjectUtils.canon(root[name])) return;
+        root[name] = next;
+    }
+
     Process {
         id: devicesProc
         command: ["hyprctl", "-j", "devices"]
@@ -85,10 +98,12 @@ Singleton {
                     console.warn("[HyprlandDevices] cannot parse hyprctl devices:", error);
                     return;
                 }
-                root.mice = parsed.mice ?? [];
-                root.keyboards = parsed.keyboards ?? [];
-                root.tablets = parsed.tablets ?? [];
-                root.touch = parsed.touch ?? [];
+                // Replaced only on change: a rescan follows every reload and every layout
+                // switch, and each one used to rebuild all the per-device cards.
+                root._take("mice", parsed.mice ?? []);
+                root._take("keyboards", parsed.keyboards ?? []);
+                root._take("tablets", parsed.tablets ?? []);
+                root._take("touch", parsed.touch ?? []);
                 root.ready = true;
             }
         }

@@ -4,6 +4,7 @@ import QtQuick
 import QtQuick.Layouts
 import qs.services
 import qs.modules.common
+import qs.modules.common.functions
 import qs.modules.common.widgets
 
 /**
@@ -39,8 +40,16 @@ Item {
     readonly property string optionKey: root.entry?.key ?? ""
     readonly property string kind: root.entry?.kind ?? "text"
 
-    readonly property var optionState: HyprlandGui.resolve(root.optionKey)
-    readonly property bool locked: root.optionState.shellOwnedBy !== ""
+    property var _memo: ({})
+
+    /// One property per layer rather than resolve()'s bundle: the bundle was a fresh object on
+    /// every change anywhere, and with the browser open that re-made every binding on three
+    /// hundred rows per edit. Ownership never changes, "known" changes once; only the value moves.
+    readonly property bool locked: HyprlandGui.shellOwned(root.optionKey) !== ""
+    readonly property bool known: HyprlandGui.effective[root.optionKey] !== undefined
+    readonly property bool isManaged: HyprlandGui.managedConfig.hasOwnProperty(root.optionKey)
+    readonly property bool isShadowed: HyprlandGui.shadowed[root.optionKey] !== undefined
+    readonly property string inheritedFile: String(HyprlandGui.inheritedConfig[root.optionKey]?.file ?? "")
     readonly property var current: HyprlandGui.displayValue(root.optionKey, undefined)
     readonly property string curatedTab: HyprlandCatalog.curatedIn(root.optionKey)
 
@@ -48,16 +57,16 @@ Item {
     readonly property string valueText: {
         if (root.kind === "bool") return "";
         if (root.current !== undefined) return HyprlandCatalog.format(root.kind, root.current);
-        return root.optionState.known ? "" : Translation.tr("not reported");
+        return root.known ? "" : Translation.tr("not reported");
     }
 
     /// What the row says under the key, when there is anything worth saying.
     readonly property string badge: {
         if (root.locked) return Translation.tr("owned by the shell");
-        if (root.optionState.shadowedBy !== null) return Translation.tr("overridden after load");
-        if (root.optionState.isManaged) return Translation.tr("set from here");
-        if (root.optionState.inherited !== null)
-            return Translation.tr("set in %1").arg(root.optionState.inherited.file);
+        if (root.isShadowed) return Translation.tr("overridden after load");
+        if (root.isManaged) return Translation.tr("set from here");
+        if (root.inheritedFile !== "")
+            return Translation.tr("set in %1").arg(root.inheritedFile);
         return "";
     }
 
@@ -72,12 +81,16 @@ Item {
         return "text_fields";
     }
 
-    /// The colours this key holds, if it holds any. A gradient has several.
+    /// The colours this key holds, if it holds any. A gradient has several. Kept by identity,
+    /// or the row of swatches was torn down and rebuilt on every unrelated edit.
     readonly property var swatches: {
-        if (root.current === undefined) return [];
-        if (root.kind === "color") return [HyprlandCatalog.colorParts(root.current).rgb];
-        if (root.kind !== "gradient") return [];
-        return HyprlandCatalog.gradientParts(root.current).colors.map(item => `#${item.slice(2)}`);
+        let out = [];
+        if (root.current !== undefined) {
+            if (root.kind === "color") out = [HyprlandCatalog.colorParts(root.current).rgb];
+            else if (root.kind === "gradient")
+                out = HyprlandCatalog.gradientParts(root.current).colors.map(item => `#${item.slice(2)}`);
+        }
+        return ObjectUtils.keep(root._memo, "swatches", out);
     }
 
     implicitHeight: column.implicitHeight
@@ -302,7 +315,7 @@ Item {
             notes: {
                 if (!root.expanded) return [];
                 const out = [];
-                if (!root.optionState.known)
+                if (!root.known)
                     out.push({ "icon": "help", "text": Translation.tr("Hyprland will not report this one, so the value shown is only what has been written for it. Setting it still works.") });
                 if (root.curatedTab === "input")
                     out.push({ "icon": "widgets", "text": Translation.tr("The Input tab has a control for this that knows what its values mean.") });

@@ -4,6 +4,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import Quickshell
 import qs.modules.common
+import qs.modules.common.functions
 
 /**
  * The rule half of Settings -> Hyprland: what Hyprland will accept, what this page has written,
@@ -241,6 +242,20 @@ Singleton {
     readonly property var rawWindowRules: HyprlandGui.ready ? root.managedOfKind("windowrule", "win:") : []
     readonly property var layerRules: HyprlandGui.ready ? root.managedOfKind("layerrule", "layer:") : []
     readonly property var workspaceRules: HyprlandGui.ready ? root.managedOfKind("workspacerule", "ws:") : []
+
+    property var _memo: ({})
+
+    /// The same lists as ids only, kept by identity while the set is unchanged. The tab's
+    /// Repeaters run on these, so editing one rule redraws that rule's card and no other -
+    /// a toggle used to tear down and rebuild every card in the section.
+    readonly property var appIds: ObjectUtils.keep(root._memo, "appIds",
+        root.apps.map(rule => rule.id))
+    readonly property var rawWindowRuleIds: ObjectUtils.keep(root._memo, "rawWindowRuleIds",
+        root.rawWindowRules.map(rule => rule.id))
+    readonly property var layerRuleIds: ObjectUtils.keep(root._memo, "layerRuleIds",
+        root.layerRules.map(rule => rule.id))
+    readonly property var workspaceRuleIds: ObjectUtils.keep(root._memo, "workspaceRuleIds",
+        root.workspaceRules.map(rule => rule.id))
 
     /// Hand-written `hl.*_rule` calls above the fence. Listed, never edited: a rule the page did
     /// not write has an order and a shape it does not control.

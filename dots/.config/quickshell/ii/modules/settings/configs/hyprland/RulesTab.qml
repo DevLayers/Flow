@@ -51,16 +51,21 @@ ContentPage {
         tab.edit(kind, id);
     }
 
-    /// One row per rule: what it selects, what it does, and a way in.
+    /// One row per rule: what it selects, what it does, and a way in. Looked up by id so a
+    /// change to one rule leaves every other row alone.
     component RuleRow: HyprNavRow {
-        required property string ruleKind
-        required property var rule
+        id: ruleRow
 
-        buttonIcon: ruleKind === "layerrule" ? "layers"
-            : (ruleKind === "workspacerule" ? "space_dashboard" : "filter_alt")
-        text: HyprlandRules.matchSummary(ruleKind, rule.spec)
-        value: HyprlandRules.effectSummary(ruleKind, rule.spec)
-        onOpenSubPage: tab.edit(ruleKind, rule.id)
+        required property string ruleKind
+        required property string ruleId
+
+        readonly property var spec: HyprlandRules.find(ruleRow.ruleKind, ruleRow.ruleId) ?? ({})
+
+        buttonIcon: ruleRow.ruleKind === "layerrule" ? "layers"
+            : (ruleRow.ruleKind === "workspacerule" ? "space_dashboard" : "filter_alt")
+        text: HyprlandRules.matchSummary(ruleRow.ruleKind, ruleRow.spec)
+        value: HyprlandRules.effectSummary(ruleRow.ruleKind, ruleRow.spec)
+        onOpenSubPage: tab.edit(ruleRow.ruleKind, ruleRow.ruleId)
     }
 
     // ── Apps ──────────────────────────────────────────────────────────────────
@@ -77,14 +82,14 @@ ContentPage {
         }
 
         Repeater {
-            model: HyprlandRules.apps
+            model: HyprlandRules.appIds
 
             delegate: HyprAppRuleCard {
                 required property var modelData
 
-                rule: modelData
-                onEditRequested: tab.edit("windowrule", modelData.id)
-                onRemoveRequested: HyprlandRules.remove("windowrule", modelData.id)
+                ruleId: modelData
+                onEditRequested: tab.edit("windowrule", modelData)
+                onRemoveRequested: HyprlandRules.remove("windowrule", modelData)
             }
         }
 
@@ -110,13 +115,13 @@ ContentPage {
         }
 
         Repeater {
-            model: HyprlandRules.rawWindowRules
+            model: HyprlandRules.rawWindowRuleIds
 
             delegate: RuleRow {
                 required property var modelData
 
                 ruleKind: "windowrule"
-                rule: modelData
+                ruleId: modelData
             }
         }
 
@@ -150,13 +155,13 @@ ContentPage {
         }
 
         Repeater {
-            model: HyprlandRules.layerRules
+            model: HyprlandRules.layerRuleIds
 
             delegate: RuleRow {
                 required property var modelData
 
                 ruleKind: "layerrule"
-                rule: modelData
+                ruleId: modelData
             }
         }
 
@@ -195,13 +200,13 @@ ContentPage {
         }
 
         Repeater {
-            model: HyprlandRules.workspaceRules
+            model: HyprlandRules.workspaceRuleIds
 
             delegate: RuleRow {
                 required property var modelData
 
                 ruleKind: "workspacerule"
-                rule: modelData
+                ruleId: modelData
             }
         }
 

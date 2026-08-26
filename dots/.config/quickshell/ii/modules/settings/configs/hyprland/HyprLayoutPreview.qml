@@ -280,25 +280,30 @@ ColumnLayout {
         }
 
         Repeater {
-            model: root.windows
+            // The count as the model: a value change then moves the rectangles that already
+            // exist - which is what lets the Behaviors below actually animate - instead of
+            // tearing every delegate down because the array is a fresh one.
+            model: root.windows.length
 
             delegate: Rectangle {
                 id: windowRect
-                required property var modelData
+                required property int index
 
+                readonly property var slot: root.windows[windowRect.index]
+                    ?? ({ "x": 0, "y": 0, "w": 1, "h": 1, "label": "", "isNew": false })
                 readonly property bool offScreen:
-                    modelData.x < -0.001 || modelData.x + modelData.w > 1.001
+                    windowRect.slot.x < -0.001 || windowRect.slot.x + windowRect.slot.w > 1.001
 
-                x: screenRect.x + Math.round(modelData.x * screenRect.width) + 3
-                y: screenRect.y + Math.round(modelData.y * screenRect.height) + 3
-                width: Math.max(6, Math.round(modelData.w * screenRect.width) - 6)
-                height: Math.max(6, Math.round(modelData.h * screenRect.height) - 6)
+                x: screenRect.x + Math.round(windowRect.slot.x * screenRect.width) + 3
+                y: screenRect.y + Math.round(windowRect.slot.y * screenRect.height) + 3
+                width: Math.max(6, Math.round(windowRect.slot.w * screenRect.width) - 6)
+                height: Math.max(6, Math.round(windowRect.slot.h * screenRect.height) - 6)
                 radius: Appearance.rounding.verysmall
                 opacity: windowRect.offScreen ? 0.35 : 1
-                color: modelData.isNew
+                color: windowRect.slot.isNew
                     ? Appearance.colors.colPrimaryContainer : Appearance.colors.colLayer2
                 border.width: 1
-                border.color: modelData.isNew
+                border.color: windowRect.slot.isNew
                     ? Appearance.colors.colPrimary : Appearance.colors.colOutlineVariant
 
                 Behavior on x { animation: Appearance?.animation.elementMoveFast.numberAnimation.createObject(windowRect) }
@@ -309,11 +314,11 @@ ColumnLayout {
 
                 StyledText {
                     anchors.centerIn: parent
-                    visible: windowRect.modelData.label !== "" && windowRect.width > 22
+                    visible: windowRect.slot.label !== "" && windowRect.width > 22
                         && windowRect.height > 18
-                    text: windowRect.modelData.label
+                    text: windowRect.slot.label
                     font.pixelSize: Appearance.font.pixelSize.smaller
-                    color: windowRect.modelData.isNew
+                    color: windowRect.slot.isNew
                         ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colSubtext
                 }
             }
@@ -321,13 +326,15 @@ ColumnLayout {
     }
 
     Repeater {
-        model: root.captionLines
+        // Count-modelled for the same reason as the windows above: the sentences change in
+        // place instead of the whole footer being rebuilt on every slider release.
+        model: root.captionLines.length
 
         delegate: StyledText {
-            required property string modelData
+            required property int index
 
             Layout.fillWidth: true
-            text: modelData
+            text: root.captionLines[index] ?? ""
             font.pixelSize: Appearance.font.pixelSize.smaller
             color: Appearance.colors.colSubtext
             wrapMode: Text.WordWrap

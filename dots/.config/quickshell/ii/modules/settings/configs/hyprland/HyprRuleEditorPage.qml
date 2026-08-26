@@ -4,6 +4,7 @@ import QtQuick
 import QtQuick.Layouts
 import qs.services
 import qs.modules.common
+import qs.modules.common.functions
 import qs.modules.common.widgets
 
 /**
@@ -50,18 +51,27 @@ Item {
             ?? ({ "key": key, "type": "string", "icon": "code", "label": key });
     }
 
-    readonly property var shownSwitches: subPageRoot.shownKeys
-        .filter(key => subPageRoot.entryFor(key).type === "bool").map(key => subPageRoot.entryFor(key))
-    readonly property var shownFields: subPageRoot.shownKeys
-        .filter(key => subPageRoot.entryFor(key).type !== "bool").map(key => subPageRoot.entryFor(key))
+    property var _memo: ({})
 
-    readonly property var addable: {
+    /// Kept by identity: these feed the Repeaters below, and typing a value into one field
+    /// must not rebuild every other row on the page.
+    readonly property var shownSwitches: ObjectUtils.keep(subPageRoot._memo, "shownSwitches",
+        subPageRoot.shownKeys
+            .filter(key => subPageRoot.entryFor(key).type === "bool")
+            .map(key => subPageRoot.entryFor(key)))
+    readonly property var shownFields: ObjectUtils.keep(subPageRoot._memo, "shownFields",
+        subPageRoot.shownKeys
+            .filter(key => subPageRoot.entryFor(key).type !== "bool")
+            .map(key => subPageRoot.entryFor(key)))
+
+    /// Whether one catalogue chip is offered right now. The chips are built once from the
+    /// whole catalogue and hide themselves instead of being rebuilt: fifty buttons torn down
+    /// per keystroke was what made typing in the add box stutter.
+    function offerable(effect: var): bool {
+        if (subPageRoot.shownKeys.includes(effect.key)) return false;
         const query = subPageRoot.addQuery.trim().toLowerCase();
-        return Array.from(subPageRoot.catalogue).filter(effect => {
-            if (subPageRoot.shownKeys.includes(effect.key)) return false;
-            if (query === "") return true;
-            return effect.key.indexOf(query) >= 0 || effect.label.toLowerCase().indexOf(query) >= 0;
-        });
+        if (query === "") return true;
+        return effect.key.indexOf(query) >= 0 || effect.label.toLowerCase().indexOf(query) >= 0;
     }
 
     readonly property string title: {
@@ -452,11 +462,12 @@ Item {
                 spacing: 6
 
                 Repeater {
-                    model: subPageRoot.addable
+                    model: subPageRoot.catalogue
 
                     delegate: RippleButton {
                         required property var modelData
 
+                        visible: subPageRoot.offerable(modelData)
                         implicitHeight: 32
                         implicitWidth: addRow.implicitWidth + 22
                         buttonRadius: Appearance.rounding.full

@@ -4,6 +4,7 @@ import QtQuick
 import QtQuick.Layouts
 import qs.services
 import qs.modules.common
+import qs.modules.common.functions
 import qs.modules.common.widgets
 
 /**
@@ -26,6 +27,16 @@ Rectangle {
 
     readonly property var report: HyprlandRules.matchReport(root.match)
     readonly property int total: HyprlandData.windowList?.length ?? 0
+
+    property var _memo: ({})
+
+    /// The matched windows as plain rows, kept by identity: the report is a fresh object on
+    /// every window event the compositor sends, and this list is what the Repeater runs on.
+    readonly property var matched: ObjectUtils.keep(root._memo, "matched",
+        root.report.windows.map(window => ({
+            "class": String(window.class ?? ""),
+            "title": String(window.title ?? "")
+        })))
 
     readonly property string headline: {
         if (root.report.broken.length > 0)
@@ -104,7 +115,7 @@ Rectangle {
         }
 
         Repeater {
-            model: root.report.windows
+            model: root.matched
 
             delegate: RowLayout {
                 required property var modelData

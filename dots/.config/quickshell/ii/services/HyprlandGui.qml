@@ -27,6 +27,12 @@ import qs.modules.common.functions
  * every keystroke meant the compositor reloaded mid-thought - a half-typed rule matched nothing,
  * a keybind existed for the moment it took to pick its second half - and there was no way back
  * from a change other than making the opposite one.
+ *
+ * Every derived map below is rebuilt by `_reindex()` and *replaced only when its content
+ * changed*. Identity is the contract: a map that reads equal keeps its old object, a binding
+ * that hands back the same object does not notify, and a Repeater whose model kept its identity
+ * does not rebuild its delegates. When they were ordinary bindings, one staged edit handed six
+ * pages of controls a fresh copy of everything, and the whole shell stuttered on every click.
  */
 Singleton {
     id: root
@@ -87,18 +93,9 @@ Singleton {
     /// The same keys as an object, so watch() does not walk the list once per control.
     property var _watchedSet: ({})
     /// The files whose staged entries differ from what is on disk, and how many entries in
-    /// them changed. What the Save button and the strip above it are reading.
-    readonly property var pending: {
-        const targets = [];
-        let count = 0;
-        for (const target of Object.keys(root._desired)) {
-            const stored = root._stored[target] ?? [];
-            if (JSON.stringify(root._desired[target]) === JSON.stringify(stored)) continue;
-            targets.push(target);
-            count += root._pendingIn(target);
-        }
-        return ({ targets: targets, count: count });
-    }
+    /// them changed. What the Save button and the strip above it are reading. Assigned by
+    /// `_reindex()`, and only when the answer changed.
+    property var pending: ({ targets: [], count: 0 })
 
     readonly property bool dirty: root.pending.targets.length > 0
     property string lastError: ""
@@ -112,121 +109,41 @@ Singleton {
     /// happens for all sorts of reasons that have nothing to do with this page.
     readonly property bool watching: root.subscribers > 0
 
-    /**
-     * Every map the page reads, built in one pass.
-     *
-     * There were ten of these and each one walked all five files on its own, so a single edit
-     * walked the entries forty-five times over before one control had redrawn - which, on a
-     * slider, is forty-five times per frame. They are one pass now, and the properties below
-     * are lookups into it.
+    /*
+     * Every map the page reads. Not bindings: `_reindex()` rebuilds them in one pass whenever
+     * the staged or stored entries move, and each one is handed out again only if its content
+     * changed. Ten independent bindings walked all five files each; one binding for all ten
+     * replaced every map on every edit. This is the shape where neither happens.
      */
-    readonly property var _index: {
-        const managedConfig = {};
-        const managedGlobals = {};
-        const managedEnv = {};
-        const managedDevices = {};
-        const inheritedConfig = {};
-        const inheritedGlobals = {};
-        const inheritedEnv = {};
-        const regionFiles = [];
-        const shadowedKeys = [];
-        let managed = 0;
-        let unrecognised = 0;
-        let backupAt = 0;
-
-        for (const target of root.loadOrder) {
-            for (const entry of root._entriesFor(target)) {
-                if (entry.kind === "raw") {
-                    unrecognised += 1;
-                    continue;
-                }
-                managed += 1;
-                if (entry.kind === "config" && entry.key) {
-                    managedConfig[entry.key] = entry.value;
-                    if (root.shadowed[entry.key] !== undefined) shadowedKeys.push(entry.key);
-                } else if (entry.kind === "global" && entry.name) {
-                    managedGlobals[entry.name] = entry.value;
-                } else if (entry.kind === "env" && entry.name) {
-                    managedEnv[entry.name] = entry.value;
-                } else if (entry.kind === "device" && entry.spec?.name) {
-                    managedDevices[entry.spec.name] = entry.spec;
-                }
-            }
-
-            const file = root.files[target];
-            if (!file) continue;
-            if (file.hasRegion) regionFiles.push(root.targetFiles[target].split("/").pop());
-            const stamp = file.backup?.mtime ?? 0;
-            if (stamp > backupAt) backupAt = stamp;
-
-            const name = String(file.file ?? "").split("/").pop();
-            for (const entry of (file.unmanaged ?? [])) {
-                if (entry.kind === "config" && entry.key) {
-                    inheritedConfig[entry.key] = {
-                        value: entry.value,
-                        line: entry.line ?? 0,
-                        target: target,
-                        file: name,
-                        removable: (entry.span ?? null) !== null
-                    };
-                } else if (entry.kind === "global" && entry.name) {
-                    inheritedGlobals[entry.name] = {
-                        value: entry.value, line: entry.line ?? 0, target: target, file: name
-                    };
-                } else if (entry.kind === "env" && entry.name) {
-                    inheritedEnv[entry.name] = {
-                        value: entry.value, line: entry.line ?? 0, target: target, file: name
-                    };
-                }
-            }
-        }
-
-        return {
-            managedConfig: managedConfig,
-            managedGlobals: managedGlobals,
-            managedEnv: managedEnv,
-            managedDevices: managedDevices,
-            inheritedConfig: inheritedConfig,
-            inheritedGlobals: inheritedGlobals,
-            inheritedEnv: inheritedEnv,
-            status: {
-                managed: managed,
-                unrecognised: unrecognised,
-                files: regionFiles,
-                backupAt: backupAt,
-                shadowed: shadowedKeys
-            }
-        };
-    }
 
     /// key -> value, for every config key this page manages.
-    readonly property var managedConfig: root._index.managedConfig
+    property var managedConfig: ({})
 
     /// key -> { value, file, line, target, removable } for the last hand-written line that sets
     /// it. `removable` is false when the parser could not pin the assignment down, in which case
     /// the page offers no cleanup for it.
-    readonly property var inheritedConfig: root._index.inheritedConfig
+    property var inheritedConfig: ({})
 
     /// global name -> the value this page wrote for it.
-    readonly property var managedGlobals: root._index.managedGlobals
+    property var managedGlobals: ({})
 
     /// global name -> { value, file, line } for the last hand-written assignment of it.
-    readonly property var inheritedGlobals: root._index.inheritedGlobals
+    property var inheritedGlobals: ({})
 
     /// env name -> the value this page wrote for it.
-    readonly property var managedEnv: root._index.managedEnv
+    property var managedEnv: ({})
 
     /// env name -> { value, file, line } for the last hand-written hl.env above the region.
     /// Only custom/env.lua is read here; what hyprland/env.lua sets before it, and what
     /// hyprland/variables.lua sets after it, are the Environment tab's own business.
-    readonly property var inheritedEnv: root._index.inheritedEnv
+    property var inheritedEnv: ({})
 
     /// device name -> the spec this page wrote for it, for the per-device cards.
-    readonly property var managedDevices: root._index.managedDevices
+    property var managedDevices: ({})
 
     /// What the hub's health strip needs, in one place: how much this page owns, how old the
     /// safety net is, and which of our settings something else overrides after load.
-    readonly property var status: root._index.status
+    property var status: ({ managed: 0, unrecognised: 0, files: [], backupAt: 0, shadowed: [] })
 
     signal changed
     signal wrote(string target)
@@ -267,7 +184,7 @@ Singleton {
 
     // ---------------------------------------------------------------- reading
 
-    /// Called by a page that wants live data for as long as it exists.
+    /// Called by a page that wants live data for as long as it is on screen.
     function attach() {
         root.subscribers += 1;
         if (root.subscribers === 1 && root.ready) root.refresh();
@@ -345,7 +262,9 @@ Singleton {
         return root.inheritedConfig[key] ?? null;
     }
 
-    /// Everything a control needs to render itself honestly.
+    /// Everything a control needs to render itself honestly. For one-off reads; a control that
+    /// stays on screen should bind the pieces it needs instead, so it only hears about the
+    /// layer that actually moved.
     function resolve(key: string): var {
         const live = root.effective[key];
         return {
@@ -431,6 +350,35 @@ Singleton {
         root._remove("env", name);
     }
 
+    /**
+     * Run `fn` with every edit it makes staged as one change.
+     *
+     * A shortcut is four edits, a cursor theme four, an environment preset up to nine - and
+     * each one used to replace the staged state on its own, so every list reading it was
+     * rebuilt once per call instead of once per gesture. Inside a batch the edits land in a
+     * working copy; the maps above move once, at the end.
+     */
+    function batch(fn: var) {
+        if (root._batchDepth === 0) {
+            root._batchDesired = Object.assign({}, root._desired);
+            root._batchDirty = false;
+        }
+        root._batchDepth += 1;
+        try {
+            fn();
+        } finally {
+            root._batchDepth -= 1;
+        }
+        if (root._batchDepth > 0) return;
+        const staged = root._batchDesired;
+        root._batchDesired = ({});
+        if (!root._batchDirty) return;
+        root._batchDirty = false;
+        root._desired = staged;
+        root._reindex();
+        root.changed();
+    }
+
     /// Every entry that will be written into one file, in the order it will be written. The
     /// rules page groups these into its own sections itself; nothing else needs the raw list.
     function entriesFor(target: string): var {
@@ -498,9 +446,10 @@ Singleton {
 
     /// Throw the staged edits away and go back to what the files say.
     function rollback() {
-        if (!root.dirty) return;
+        if (Object.keys(root._desired).length === 0) return;
         root._desired = ({});
         root.lastError = "";
+        root._reindex();
         root.changed();
         root.refresh();
     }
@@ -508,6 +457,7 @@ Singleton {
     /// Remove the managed region from every file, leaving hand-written Lua alone.
     function stripAll() {
         root._desired = ({});
+        root._reindex();
         root._writeQueue = Object.keys(root.targetFiles).map(
             target => ({ target: target, strip: true, sent: null, reloadTick: 0 }));
         root._drainWrites();
@@ -526,11 +476,22 @@ Singleton {
     property var _desired: ({})
     /// target -> the entries on disk, cleaned once when the read lands
     property var _stored: ({})
+    /// target -> each stored entry serialised once, when it lands: `byId` answers how many
+    /// entries a staged file changes, `seq` whether it would be written back identical. The
+    /// stored side never mutates in place, so serialising it per comparison was pure waste.
+    property var _storedIndex: ({})
+    /// name -> what the last publish of that derived map serialised to.
+    property var _published: ({})
+    property int _batchDepth: 0
+    property var _batchDesired: ({})
+    property bool _batchDirty: false
     property var _readTargets: []
     property var _optionQueue: []
     property var _writeQueue: []
     property var _diffQueue: []
     property bool _optionBusy: false
+    /// Values fetched this run, folded together and published once when the queue drains.
+    property var _effectiveDraft: null
     property bool _awaitingReload: false
     property bool _refreshAgain: false
     property bool _rereadAfterWrite: false
@@ -551,14 +512,19 @@ Singleton {
      * is on disk.
      *
      * The stored side is cleaned once, when the read lands, and handed out by reference
-     * afterwards. It used to be deep-copied through JSON on every call, and with ten derived
-     * maps asking five files each that came to forty-five copies of every entry per edit -
-     * three milliseconds a frame while a slider was moving. Sharing is safe because nothing
-     * mutates an entry in place: `_upsert` and `_remove` both build a new array and replace
-     * whole entries.
+     * afterwards. Sharing is safe because nothing mutates an entry in place: `_upsert` and
+     * `_remove` both build a new array and replace whole entries.
      */
     function _entriesFor(target: string): var {
         if (root._desired[target] !== undefined) return root._desired[target];
+        return root._stored[target] ?? [];
+    }
+
+    /// The same view for code that is editing: inside a batch, edits build on each other
+    /// through the working copy rather than on the state the batch started from.
+    function _workingEntries(target: string): var {
+        const staged = root._batchDepth > 0 ? root._batchDesired : root._desired;
+        if (staged[target] !== undefined) return staged[target];
         return root._stored[target] ?? [];
     }
 
@@ -574,15 +540,30 @@ Singleton {
         });
     }
 
-    /// The same, but handing back the array already held when nothing in the file changed. One
-    /// write reloads every file; without this, all five would look new to everything reading
-    /// them even though four of them were not touched.
-    function _cleanEntriesInto(target: string, entries: var): var {
-        const cleaned = root._cleanEntries(entries);
+    /// The cleaned entries, unless the array already held for `target` says the same - then
+    /// that one. One write reloads every file; without this, all five would look new to
+    /// everything reading them even though four of them were not touched.
+    function _keepStored(target: string, cleaned: var): var {
         const current = root._stored[target];
-        if (current !== undefined && JSON.stringify(current) === JSON.stringify(cleaned))
+        if (current !== undefined && ObjectUtils.canon(current) === ObjectUtils.canon(cleaned))
             return current;
         return cleaned;
+    }
+
+    /// Replace the stored side, re-serialising only the targets whose array actually moved.
+    function _replaceStored(stored: var) {
+        for (const target of Object.keys(stored)) {
+            if (stored[target] === root._stored[target]) continue;
+            const byId = {};
+            const seq = [];
+            for (const entry of stored[target]) {
+                const json = ObjectUtils.canon(entry);
+                seq.push(json);
+                if (entry.kind !== "raw") byId[`${entry.kind} ${entry.id}`] = json;
+            }
+            root._storedIndex[target] = { byId: byId, seq: seq };
+        }
+        root._stored = stored;
     }
 
     function _findManaged(kind: string, id: string): var {
@@ -601,7 +582,7 @@ Singleton {
             console.warn("[HyprlandGui] ignoring edit before the managed regions were read:", entry.id);
             return;
         }
-        const entries = Array.from(root._entriesFor(target));
+        const entries = Array.from(root._workingEntries(target));
         const index = entries.findIndex(existing => existing.kind === entry.kind && existing.id === entry.id);
         if (index >= 0) entries[index] = entry;
         else entries.push(entry);
@@ -611,41 +592,172 @@ Singleton {
     function _remove(kind: string, id: string) {
         const target = root.targetForKind[kind];
         if (!target || !root.ready) return;
-        const entries = root._entriesFor(target).filter(entry => !(entry.kind === kind && entry.id === id));
+        const entries = root._workingEntries(target).filter(entry => !(entry.kind === kind && entry.id === id));
         root._stage(target, entries);
     }
 
     function _stage(target: string, entries: var) {
+        if (root._batchDepth > 0) {
+            root._batchDesired[target] = entries;
+            root._batchDirty = true;
+            return;
+        }
         const staged = Object.assign({}, root._desired);
         staged[target] = entries;
         root._desired = staged;
+        root._reindex();
         root.changed();
     }
 
-    /// How many entries of one staged file differ from the file on disk. The lines the parser
-    /// could not identify are left out: this page never edits them, so counting them would only
-    /// report a number nobody could act on.
-    function _pendingIn(target: string): int {
-        const before = {};
-        for (const entry of (root._stored[target] ?? []))
-            if (entry.kind !== "raw") before[`${entry.kind}\u0000${entry.id}`] = JSON.stringify(entry);
+    /**
+     * Rebuild every derived map in one pass and publish the ones that changed.
+     *
+     * Called wherever `_desired`, `_stored`, `files` or `shadowed` move. Publishing goes
+     * through a content comparison, so a device edit does not hand every env row a new map,
+     * and a reload that changed nothing hands out nothing at all.
+     */
+    function _reindex() {
+        const managedConfig = {};
+        const managedGlobals = {};
+        const managedEnv = {};
+        const managedDevices = {};
+        const inheritedConfig = {};
+        const inheritedGlobals = {};
+        const inheritedEnv = {};
+        const regionFiles = [];
+        const shadowedKeys = [];
+        let managed = 0;
+        let unrecognised = 0;
+        let backupAt = 0;
+
+        for (const target of root.loadOrder) {
+            for (const entry of root._entriesFor(target)) {
+                if (entry.kind === "raw") {
+                    unrecognised += 1;
+                    continue;
+                }
+                managed += 1;
+                if (entry.kind === "config" && entry.key) {
+                    managedConfig[entry.key] = entry.value;
+                    if (root.shadowed[entry.key] !== undefined) shadowedKeys.push(entry.key);
+                } else if (entry.kind === "global" && entry.name) {
+                    managedGlobals[entry.name] = entry.value;
+                } else if (entry.kind === "env" && entry.name) {
+                    managedEnv[entry.name] = entry.value;
+                } else if (entry.kind === "device" && entry.spec?.name) {
+                    managedDevices[entry.spec.name] = entry.spec;
+                }
+            }
+
+            const file = root.files[target];
+            if (!file) continue;
+            if (file.hasRegion) regionFiles.push(root.targetFiles[target].split("/").pop());
+            const stamp = file.backup?.mtime ?? 0;
+            if (stamp > backupAt) backupAt = stamp;
+
+            const name = String(file.file ?? "").split("/").pop();
+            for (const entry of (file.unmanaged ?? [])) {
+                if (entry.kind === "config" && entry.key) {
+                    inheritedConfig[entry.key] = {
+                        value: entry.value,
+                        line: entry.line ?? 0,
+                        target: target,
+                        file: name,
+                        removable: (entry.span ?? null) !== null
+                    };
+                } else if (entry.kind === "global" && entry.name) {
+                    inheritedGlobals[entry.name] = {
+                        value: entry.value, line: entry.line ?? 0, target: target, file: name
+                    };
+                } else if (entry.kind === "env" && entry.name) {
+                    inheritedEnv[entry.name] = {
+                        value: entry.value, line: entry.line ?? 0, target: target, file: name
+                    };
+                }
+            }
+        }
+
+        root._publish("managedConfig", managedConfig);
+        root._publish("managedGlobals", managedGlobals);
+        root._publish("managedEnv", managedEnv);
+        root._publish("managedDevices", managedDevices);
+        root._publish("inheritedConfig", inheritedConfig);
+        root._publish("inheritedGlobals", inheritedGlobals);
+        root._publish("inheritedEnv", inheritedEnv);
+        root._publish("status", {
+            managed: managed,
+            unrecognised: unrecognised,
+            files: regionFiles,
+            backupAt: backupAt,
+            shadowed: shadowedKeys
+        });
+        root._publish("pending", root._computePending());
+    }
+
+    /// Assign one derived map, only if its content moved since the last publish.
+    function _publish(name: string, next: var) {
+        const json = ObjectUtils.canon(next);
+        if (root._published[name] === json) return;
+        root._published[name] = json;
+        root[name] = next;
+    }
+
+    function _computePending(): var {
+        const targets = [];
+        let count = 0;
+        for (const target of Object.keys(root._desired)) {
+            const diff = root._diffStaged(target);
+            if (diff.same) continue;
+            targets.push(target);
+            count += diff.changed;
+        }
+        return { targets: targets, count: count };
+    }
+
+    /**
+     * How one staged file differs from the file on disk: whether it would be written back
+     * identical, and how many entries changed. The lines the parser could not identify are
+     * left out of the count - this page never edits them, so a number that included them could
+     * not be acted on - but they still count towards `same`, because an order change is one.
+     */
+    function _diffStaged(target: string): var {
+        const desired = root._desired[target] ?? [];
+        const stored = root._stored[target] ?? [];
+        if (desired === stored) return { same: true, changed: 0 };
+        const index = root._storedIndex[target] ?? { byId: {}, seq: [] };
+        let same = desired.length === index.seq.length;
         const seen = {};
         let changed = 0;
-        for (const entry of (root._desired[target] ?? [])) {
+        for (let i = 0; i < desired.length; i++) {
+            const entry = desired[i];
+            const json = ObjectUtils.canon(entry);
+            if (same && index.seq[i] !== json) same = false;
             if (entry.kind === "raw") continue;
-            const id = `${entry.kind}\u0000${entry.id}`;
+            const id = `${entry.kind} ${entry.id}`;
             seen[id] = true;
-            if (before[id] !== JSON.stringify(entry)) changed += 1;
+            if (index.byId[id] !== json) changed += 1;
         }
-        for (const id of Object.keys(before))
+        for (const id of Object.keys(index.byId))
             if (seen[id] !== true) changed += 1;
-        return changed;
+        return { same: same, changed: changed };
     }
 
     function _flush() {
         const queued = {};
         for (const job of root._writeQueue) queued[job.target] = true;
-        const targets = Object.keys(root._desired).filter(target => queued[target] !== true);
+        // A staged file that matches the disk again is not written; it is simply forgotten.
+        const staged = Object.assign({}, root._desired);
+        let dropped = false;
+        for (const target of Object.keys(staged)) {
+            if (root.pending.targets.includes(target)) continue;
+            delete staged[target];
+            dropped = true;
+        }
+        if (dropped) {
+            root._desired = staged;
+            root._reindex();
+        }
+        const targets = root.pending.targets.filter(target => queued[target] !== true);
         if (targets.length === 0) return;
         root._writeQueue = root._writeQueue.concat(
             targets.map(target => ({ target: target, strip: false, sent: null, reloadTick: 0 })));
@@ -664,10 +776,12 @@ Singleton {
     }
 
     /// Every file in one answer. Applied together, so no map is ever built from a mix of the
-    /// file as it was and the file as it is.
+    /// file as it was and the file as it is - and by identity, so a reload that changed
+    /// nothing notifies nobody.
     function _applyReadAll(results: var) {
         const files = Object.assign({}, root.files);
         const stored = Object.assign({}, root._stored);
+        let filesChanged = false;
         for (let i = 0; i < root._readTargets.length; i++) {
             const target = root._readTargets[i];
             const result = results[i];
@@ -678,14 +792,19 @@ Singleton {
                     if (entry.kind !== "config") continue;
                     map[entry.key] = { value: entry.value, line: entry.line };
                 }
-                root.shadowed = map;
+                if (ObjectUtils.canon(map) !== ObjectUtils.canon(root.shadowed)) root.shadowed = map;
                 continue;
             }
-            files[target] = result;
-            stored[target] = root._cleanEntriesInto(target, result.entries);
+            const current = root.files[target];
+            if (current === undefined || ObjectUtils.canon(current) !== ObjectUtils.canon(result)) {
+                files[target] = result;
+                filesChanged = true;
+            }
+            stored[target] = root._keepStored(target, root._cleanEntries(result.entries));
         }
-        root._stored = stored;
-        root.files = files;
+        root._replaceStored(stored);
+        if (filesChanged) root.files = files;
+        root._reindex();
     }
 
     // Effective values ----------------------------------------------------
@@ -721,6 +840,12 @@ Singleton {
             root._drainOptions();
             return;
         }
+        // Published once per run, and only when a value moved: re-reading every watched key
+        // after a reload used to hand every control a new map even though nothing changed.
+        if (root._effectiveDraft !== null) {
+            root.effective = root._effectiveDraft;
+            root._effectiveDraft = null;
+        }
         root.changed();
     }
 
@@ -749,20 +874,24 @@ Singleton {
     }
 
     function _applyOptions(objects: var) {
-        const updated = Object.assign({}, root.effective);
+        let draft = root._effectiveDraft;
         for (const object of objects) {
             if (!object.option) continue;
             const type = Object.keys(object).find(name => name !== "option" && name !== "set");
             let value = type ? object[type] : undefined;
             // hyprctl spells an unset string option "[[EMPTY]]". Controls want "".
             if (value === "[[EMPTY]]") value = "";
-            updated[object.option] = {
+            const held = (draft ?? root.effective)[object.option];
+            if (held !== undefined && held.type === (type ?? "") && held.set === (object.set === true)
+                && ObjectUtils.canon(held.value) === ObjectUtils.canon(value)) continue;
+            if (draft === null) draft = Object.assign({}, root.effective);
+            draft[object.option] = {
                 value: value,
                 type: type ?? "",
                 set: object.set === true
             };
         }
-        root.effective = updated;
+        root._effectiveDraft = draft;
     }
 
     // Writing -------------------------------------------------------------
@@ -844,9 +973,16 @@ Singleton {
         // write hands back the same record a read would, so nothing here is a partial update
         // and the reload it causes needs no read at all.
         if (result.record !== undefined) {
+            const written = root._cleanEntries(result.record.entries ?? []);
+            // Preferred by identity: when the file came back exactly as staged, the staged
+            // array becomes the stored one, and nothing reading this file hears a change it
+            // did not itself make.
+            const kept = (job.sent !== null
+                && ObjectUtils.canon(job.sent) === ObjectUtils.canon(written))
+                ? job.sent : root._keepStored(job.target, written);
             const stored = Object.assign({}, root._stored);
-            stored[job.target] = root._cleanEntriesInto(job.target, result.record.entries ?? []);
-            root._stored = stored;
+            stored[job.target] = kept;
+            root._replaceStored(stored);
             const files = Object.assign({}, root.files);
             files[job.target] = result.record;
             root.files = files;
@@ -860,6 +996,7 @@ Singleton {
         const superseded = job.sent !== null && staged[job.target] !== job.sent;
         if (!superseded) delete staged[job.target];
         root._desired = staged;
+        root._reindex();
 
         root.wrote(job.target);
         if (!result.changed) return;

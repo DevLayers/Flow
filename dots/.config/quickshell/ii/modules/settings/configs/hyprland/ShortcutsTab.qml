@@ -27,13 +27,18 @@ ContentPage {
 
     readonly property string query: tab.rawQuery.trim().toLowerCase()
 
-    readonly property var visibleRows: {
-        const rows = tab.showEverything
-            ? HyprlandBinds.listed.concat(HyprlandBinds.unnamed) : HyprlandBinds.listed;
-        return rows.filter(row => HyprlandBinds.matches(row, tab.query));
+    /// Whether one row is on screen right now. The list itself is grouped once from every row
+    /// and rows hide instead of being torn down: rebuilding a hundred delegates per keystroke
+    /// was most of what typing in the search box used to cost.
+    function shows(row: var): bool {
+        if (!tab.showEverything && !HyprlandBinds.isListed(row)) return false;
+        return HyprlandBinds.matches(row, tab.query);
     }
 
-    readonly property var groups: HyprlandBinds.grouped(tab.visibleRows)
+    readonly property var allRows: HyprlandBinds.listed.concat(HyprlandBinds.unnamed)
+    readonly property int shownCount: tab.allRows.filter(row => tab.shows(row)).length
+
+    readonly property var groups: HyprlandBinds.grouped(tab.allRows)
 
     /// The shell's own launch commands. Not keybinds, but the same question - which program
     /// opens - so they belong on the same page rather than in a corner of their own.
@@ -156,6 +161,7 @@ ContentPage {
 
             required property var modelData
 
+            visible: group.modelData.rows.some(row => tab.shows(row))
             title: group.modelData.name
             icon: {
                 const known = { "Shell": "widgets", "Window": "web_asset", "Workspace": "space_dashboard",
@@ -171,6 +177,7 @@ ContentPage {
                 delegate: HyprShortcutRow {
                     required property var modelData
 
+                    visible: tab.shows(modelData)
                     row: modelData
                     onOpenSubPage: tab.edit(modelData)
                 }
@@ -191,7 +198,7 @@ ContentPage {
 
         StyledText {
             Layout.fillWidth: true
-            visible: tab.query !== "" && tab.visibleRows.length === 0
+            visible: tab.query !== "" && tab.shownCount === 0
             text: Translation.tr("Nothing matches \"%1\".").arg(tab.rawQuery.trim())
             font.pixelSize: Appearance.font.pixelSize.small
             color: Appearance.colors.colSubtext

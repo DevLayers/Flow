@@ -281,6 +281,8 @@ Singleton {
 
     /// Rows for the block this page owns, taken from the pending state rather than the file so
     /// an unsaved edit is on screen immediately.
+    property var _memo: ({})
+
     readonly property var managedRows: {
         const out = [];
         for (const entry of HyprlandGui.keybindEntries) {
@@ -322,7 +324,9 @@ Singleton {
             row.rowId = `${entry.file}:${entry.line}:${entry.key}`;
             out.push(row);
         }
-        return out;
+        // Kept by identity: a save rewrites only the managed block, so the hand-written rows
+        // come back equal and everything derived from them stays put.
+        return ObjectUtils.keep(root._memo, "handWritten", out);
     }
 
     /**
@@ -435,13 +439,40 @@ Singleton {
         return order.map(name => ({ "name": name, "rows": buckets[name] }));
     }
 
+    /// rowId -> everything `matches` searches, lowercased. Filled lazily and dropped whenever
+    /// the rows, the shell's global list or the language move: building one summary runs a
+    /// dozen regular expressions, and the search box asks about every row on every keystroke.
+    property var _searchCache: ({})
+
+    function _searchText(row: var): string {
+        const id = String(row.rowId ?? "");
+        const held = root._searchCache[id];
+        if (held !== undefined) return held;
+        const text = [String(row.description ?? ""), root.comboLabel(row.mods, row.key),
+            String(row.combo ?? ""), root.actionSummary(row.action ?? "")].join("\n").toLowerCase();
+        if (id !== "") root._searchCache[id] = text;
+        return text;
+    }
+
+    onEffectiveChanged: root._searchCache = ({})
+    onGlobalsChanged: root._searchCache = ({})
+
+    Connections {
+        target: Translation
+
+        function onLanguageCodeChanged() {
+            root._searchCache = ({});
+        }
+    }
+
     function matches(row: var, query: string): bool {
         if (query === "") return true;
-        const needle = query.toLowerCase();
-        return String(row.description ?? "").toLowerCase().indexOf(needle) >= 0
-            || root.comboLabel(row.mods, row.key).toLowerCase().indexOf(needle) >= 0
-            || String(row.combo ?? "").toLowerCase().indexOf(needle) >= 0
-            || root.actionSummary(row.action ?? "").toLowerCase().indexOf(needle) >= 0;
+        return root._searchText(row).indexOf(query.toLowerCase()) >= 0;
+    }
+
+    /// A row the list shows without "show everything": named, readable, not inside a key mode.
+    function isListed(row: var): bool {
+        return row.resolved === true && row.hidden !== true && String(row.description ?? "") !== "";
     }
 
     // ---------------------------------------------------------------------- essentials
@@ -515,27 +546,33 @@ Singleton {
         for (const key of Object.keys(opts ?? {}))
             if (opts[key] !== undefined && opts[key] !== false && opts[key] !== "")
                 cleaned[key] = opts[key];
-        HyprlandGui.removeBind(id);
-        HyprlandGui.removeUnbind(id);
-        HyprlandGui.setUnbind(combo, id);
-        HyprlandGui.setBind(id, {
-            "key": combo,
-            "dispatcher": { "__raw": action },
-            "opts": cleaned
+        HyprlandGui.batch(() => {
+            HyprlandGui.removeBind(id);
+            HyprlandGui.removeUnbind(id);
+            HyprlandGui.setUnbind(combo, id);
+            HyprlandGui.setBind(id, {
+                "key": combo,
+                "dispatcher": { "__raw": action },
+                "opts": cleaned
+            });
         });
     }
 
     function removeBind(id: string) {
-        HyprlandGui.removeBind(id);
-        HyprlandGui.removeUnbind(id);
+        HyprlandGui.batch(() => {
+            HyprlandGui.removeBind(id);
+            HyprlandGui.removeUnbind(id);
+        });
     }
 
     /// Take a shortcut away without putting anything in its place. Only meaningful for a bind
     /// that came from a file this page must not edit, which is why it writes a release alone.
     function releaseOnly(id: string, combo: string) {
-        HyprlandGui.removeBind(id);
-        HyprlandGui.removeUnbind(id);
-        HyprlandGui.setUnbind(combo, id);
+        HyprlandGui.batch(() => {
+            HyprlandGui.removeBind(id);
+            HyprlandGui.removeUnbind(id);
+            HyprlandGui.setUnbind(combo, id);
+        });
     }
 
     function isReleased(id: string): bool {
@@ -809,9 +846,11 @@ Singleton {
         const opts = Object.assign({}, draft.opts ?? {});
         if (String(draft.description ?? "").trim() !== "") opts.description = draft.description.trim();
         else delete opts.description;
-        // Moving a shortcut to a different key leaves the old release behind otherwise.
-        if (draft.id && draft.id !== id) root.removeBind(draft.id);
-        root.saveBind(id, combo, root.buildAction(draft.actionId, draft.actionValue), opts);
+        HyprlandGui.batch(() => {
+            // Moving a shortcut to a different key leaves the old release behind otherwise.
+            if (draft.id && draft.id !== id) root.removeBind(draft.id);
+            root.saveBind(id, combo, root.buildAction(draft.actionId, draft.actionValue), opts);
+        });
         root.editId = id;
         root.editRowId = `managed:${id}`;
         root.editIsNew = false;
@@ -875,8 +914,14 @@ Singleton {
                     console.warn("[HyprlandBinds] cannot parse keybind files:", error);
                     return;
                 }
-                root.parsedFiles = parsed.files ?? [];
-                root.parsed = parsed.binds ?? [];
+                // Replaced only on change, so a re-parse that found the same files does not
+                // rebuild the shortcut list and everything hanging off it.
+                const files = parsed.files ?? [];
+                if (ObjectUtils.canon(files) !== ObjectUtils.canon(root.parsedFiles))
+                    root.parsedFiles = files;
+                const binds = parsed.binds ?? [];
+                if (ObjectUtils.canon(binds) !== ObjectUtils.canon(root.parsed))
+                    root.parsed = binds;
                 root.ready = true;
                 probeTimer.restart();
             }
@@ -889,8 +934,9 @@ Singleton {
         stdout: StdioCollector {
             onStreamFinished: {
                 try {
-                    root.live = JSON.parse(text)
+                    const live = JSON.parse(text)
                         .filter(bind => bind.submap !== root.captureSubmap);
+                    if (ObjectUtils.canon(live) !== ObjectUtils.canon(root.live)) root.live = live;
                 } catch (error) {
                     console.warn("[HyprlandBinds] cannot parse hyprctl binds:", error);
                 }
@@ -904,7 +950,9 @@ Singleton {
         stdout: StdioCollector {
             onStreamFinished: {
                 try {
-                    root.globals = JSON.parse(text);
+                    const globals = JSON.parse(text);
+                    if (ObjectUtils.canon(globals) !== ObjectUtils.canon(root.globals))
+                        root.globals = globals;
                 } catch (error) {
                     root.globals = [];
                 }
@@ -926,7 +974,8 @@ Singleton {
                 const map = {};
                 for (const entry of Array.from(parsed.unmanaged ?? []))
                     if (entry.kind === "global" && entry.name) map[entry.name] = entry.value;
-                root.stockVariables = map;
+                if (ObjectUtils.canon(map) !== ObjectUtils.canon(root.stockVariables))
+                    root.stockVariables = map;
                 probeTimer.restart();
             }
         }

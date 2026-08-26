@@ -560,7 +560,7 @@ ContentPage {
         }
 
         Repeater {
-            model: HyprlandDevices.real(HyprlandDevices.keyboards)
+            model: HyprlandDevices.realKeyboards
 
             delegate: HyprDeviceCard {
                 required property var modelData
@@ -571,7 +571,7 @@ ContentPage {
         }
 
         Repeater {
-            model: HyprlandDevices.real(HyprlandDevices.mice)
+            model: HyprlandDevices.realMice
 
             delegate: HyprDeviceCard {
                 required property var modelData
@@ -582,7 +582,7 @@ ContentPage {
         }
 
         Repeater {
-            model: HyprlandDevices.real(HyprlandDevices.tablets)
+            model: HyprlandDevices.realTablets
 
             delegate: HyprDeviceCard {
                 required property var modelData
@@ -593,7 +593,7 @@ ContentPage {
         }
 
         Repeater {
-            model: HyprlandDevices.real(HyprlandDevices.touch)
+            model: HyprlandDevices.realTouch
 
             delegate: HyprDeviceCard {
                 required property var modelData

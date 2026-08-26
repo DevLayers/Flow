@@ -29,10 +29,20 @@ Item {
     property string rawQuery: ""
     readonly property string query: subPageRoot.rawQuery.trim().toLowerCase()
 
-    readonly property var rows: Array.from(HyprlandEnv.themes).filter(theme =>
-        subPageRoot.query === ""
-        || theme.title.toLowerCase().indexOf(subPageRoot.query) >= 0
-        || theme.name.toLowerCase().indexOf(subPageRoot.query) >= 0)
+    function matchesTheme(theme: var): bool {
+        return subPageRoot.query === ""
+            || theme.title.toLowerCase().indexOf(subPageRoot.query) >= 0
+            || theme.name.toLowerCase().indexOf(subPageRoot.query) >= 0;
+    }
+
+    /// Only for the empty-state text: the rows themselves hide rather than being rebuilt on
+    /// every letter typed into the search box.
+    readonly property int matchCount: Array.from(HyprlandEnv.themes)
+        .filter(theme => subPageRoot.matchesTheme(theme)).length
+
+    /// Fresh from disk each time the picker opens, so a theme installed since the shell
+    /// started still shows up - the walk no longer runs on every config reload.
+    Component.onCompleted: HyprlandEnv.refreshThemes()
 
     function shortDir(dir: string): string {
         const home = FileUtils.trimFileProtocol(String(Directories.home ?? ""));
@@ -98,7 +108,7 @@ Item {
 
             StyledText {
                 Layout.fillWidth: true
-                visible: HyprlandEnv.themesReady && subPageRoot.rows.length === 0
+                visible: HyprlandEnv.themesReady && subPageRoot.matchCount === 0
                 text: HyprlandEnv.themes.length === 0
                     ? Translation.tr("No cursor themes were found. They live in ~/.icons, ~/.local/share/icons or /usr/share/icons, in a folder holding a cursors or hyprcursors directory.")
                     : Translation.tr("Nothing matches \"%1\".").arg(subPageRoot.rawQuery.trim())
@@ -108,11 +118,12 @@ Item {
             }
 
             Repeater {
-                model: subPageRoot.rows
+                model: HyprlandEnv.themes
 
                 delegate: ThemeRow {
                     required property var modelData
 
+                    visible: subPageRoot.matchesTheme(modelData)
                     theme: modelData
                 }
             }

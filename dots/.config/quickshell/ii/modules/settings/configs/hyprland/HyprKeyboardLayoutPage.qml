@@ -49,13 +49,15 @@ Item {
     }
 
     function apply(layout: string, variant: string) {
-        HyprlandGui.setKey("input:kb_layout", layout);
-        // An empty variant still has to be written when something else sets one, or the old
-        // value survives; when nothing does, dropping the key is tidier than writing "".
-        if (variant === "" && HyprlandGui.resolve("input:kb_variant").inherited === null)
-            HyprlandGui.resetKey("input:kb_variant");
-        else
-            HyprlandGui.setKey("input:kb_variant", variant);
+        HyprlandGui.batch(() => {
+            HyprlandGui.setKey("input:kb_layout", layout);
+            // An empty variant still has to be written when something else sets one, or the
+            // old value survives; when nothing does, dropping the key is tidier than "".
+            if (variant === "" && HyprlandGui.resolve("input:kb_variant").inherited === null)
+                HyprlandGui.resetKey("input:kb_variant");
+            else
+                HyprlandGui.setKey("input:kb_variant", variant);
+        });
     }
 
     Component.onCompleted: {
@@ -128,6 +130,9 @@ Item {
             Layout.fillHeight: true
             spacing: 2
             clip: true
+            // Filtered per keystroke; replaying the entry animation on every letter reads as
+            // a stutter, not an animation.
+            animateAppearance: false
             model: root.rows
 
             delegate: Item {

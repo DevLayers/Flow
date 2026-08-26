@@ -142,6 +142,9 @@ Item {
             Layout.fillHeight: true
             spacing: 2
             clip: true
+            // Filtered per keystroke; replaying the entry animation on every letter reads as
+            // a stutter, not an animation.
+            animateAppearance: false
             model: subPageRoot.rows
 
             delegate: Item {

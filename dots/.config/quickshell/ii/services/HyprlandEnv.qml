@@ -158,10 +158,12 @@ Singleton {
         const name = String(theme ?? "").trim();
         const px = Math.max(1, Math.round(size));
         if (name === "") return;
-        HyprlandGui.setEnv("HYPRCURSOR_THEME", name);
-        HyprlandGui.setEnv("XCURSOR_THEME", name);
-        HyprlandGui.setEnv("HYPRCURSOR_SIZE", String(px));
-        HyprlandGui.setEnv("XCURSOR_SIZE", String(px));
+        HyprlandGui.batch(() => {
+            HyprlandGui.setEnv("HYPRCURSOR_THEME", name);
+            HyprlandGui.setEnv("XCURSOR_THEME", name);
+            HyprlandGui.setEnv("HYPRCURSOR_SIZE", String(px));
+            HyprlandGui.setEnv("XCURSOR_SIZE", String(px));
+        });
         root.runLater([
             ["hyprctl", "setcursor", name, String(px)],
             ["gsettings", "set", "org.gnome.desktop.interface", "cursor-theme", name],
@@ -170,7 +172,9 @@ Singleton {
     }
 
     function resetCursor() {
-        for (const name of root.cursorVariables) HyprlandGui.removeEnv(name);
+        HyprlandGui.batch(() => {
+            for (const name of root.cursorVariables) HyprlandGui.removeEnv(name);
+        });
     }
 
     // -------------------------------------------------------------------------- presets
@@ -340,15 +344,17 @@ Singleton {
         const variant = entry.variants.find(item => item.id === variantId);
         if (!variant) return;
         const wanted = variant.vars ?? {};
-        for (const name of root.presetNames(id)) {
-            if (wanted[name] !== undefined) continue;
-            // Nothing can unset an environment variable from a config file. Where a file below
-            // this one sets the variable, dropping our line would hand it straight back, so it
-            // is written empty instead - which every toolkit here reads as off.
-            if (root.setBelow(name)) HyprlandGui.setEnv(name, "");
-            else HyprlandGui.removeEnv(name);
-        }
-        for (const name of Object.keys(wanted)) HyprlandGui.setEnv(name, wanted[name]);
+        HyprlandGui.batch(() => {
+            for (const name of root.presetNames(id)) {
+                if (wanted[name] !== undefined) continue;
+                // Nothing can unset an environment variable from a config file. Where a file
+                // below this one sets the variable, dropping our line would hand it straight
+                // back, so it is written empty instead - which every toolkit reads as off.
+                if (root.setBelow(name)) HyprlandGui.setEnv(name, "");
+                else HyprlandGui.removeEnv(name);
+            }
+            for (const name of Object.keys(wanted)) HyprlandGui.setEnv(name, wanted[name]);
+        });
     }
 
     // ------------------------------------------------------------------- the free-form list
@@ -447,8 +453,15 @@ Singleton {
         root.stale = false;
         if (!upstreamProc.running) upstreamProc.running = true;
         if (!lateProc.running) lateProc.running = true;
-        if (!themeProc.running) themeProc.running = true;
+        if (!root.themesReady) root.refreshThemes();
         if (!probeProc.running) probeProc.running = true;
+    }
+
+    /// The theme walk reads every icon directory on the machine, and nothing about a config
+    /// reload changes what is installed - so it runs once, and again only when the picker
+    /// that lists the themes is opened.
+    function refreshThemes() {
+        if (!themeProc.running) themeProc.running = true;
     }
 
     /**
@@ -507,7 +520,9 @@ Singleton {
         command: [HyprlandGui.scriptPath, "read", "--file", root.upstreamFile]
         stdout: StdioCollector {
             onStreamFinished: {
-                root.upstream = root._readEnvList(text);
+                const list = root._readEnvList(text);
+                if (ObjectUtils.canon(list) !== ObjectUtils.canon(root.upstream))
+                    root.upstream = list;
                 root.ready = true;
             }
         }
@@ -517,7 +532,10 @@ Singleton {
         id: lateProc
         command: [HyprlandGui.scriptPath, "read", "--file", root.lateFile]
         stdout: StdioCollector {
-            onStreamFinished: root.late = root._readEnvList(text)
+            onStreamFinished: {
+                const list = root._readEnvList(text);
+                if (ObjectUtils.canon(list) !== ObjectUtils.canon(root.late)) root.late = list;
+            }
         }
     }
 
@@ -583,7 +601,9 @@ Singleton {
                         "title": parts[5] !== "" ? parts[5] : name
                     });
                 }
-                root.themes = out.sort((left, right) => left.title.localeCompare(right.title));
+                const sorted = out.sort((left, right) => left.title.localeCompare(right.title));
+                if (ObjectUtils.canon(sorted) !== ObjectUtils.canon(root.themes))
+                    root.themes = sorted;
                 root.themesReady = true;
             }
         }
@@ -622,7 +642,7 @@ Singleton {
                     const value = line.slice(at + 1).trim();
                     map[key] = value === "yes" ? true : (value === "no" ? false : value);
                 }
-                root.probe = map;
+                if (ObjectUtils.canon(map) !== ObjectUtils.canon(root.probe)) root.probe = map;
             }
         }
     }

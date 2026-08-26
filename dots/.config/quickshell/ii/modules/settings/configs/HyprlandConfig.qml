@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 
 import Qt.labs.synchronizer
 import QtQuick
+import qs
 import QtQuick.Controls
 import QtQuick.Layouts
 import qs.services
@@ -55,9 +56,19 @@ Item {
           "file": "hyprland/AllOptionsTab.qml" }
     ]
 
-    /// A tab keeps its component tree once it has been opened, so switching back is instant and
-    /// the slide animates between two real pages instead of one and a hole.
+    /// A tab keeps its component tree while it stays among the last few used, so switching
+    /// back is instant and the slide animates between two real pages instead of one and a
+    /// hole. Six tabs of controls all alive at once is most of this page's memory, so the
+    /// count is capped: the least recently used one is unloaded, and rebuilds behind its
+    /// placeholder when it is next visited.
     property var visited: [true, false, false, false, false, false]
+    /// Live tabs, most recently used first.
+    property var recent: [0]
+    readonly property int maxLiveTabs: 3
+    /// True while the tab strip is animating between two pages. Only then are the other built
+    /// tabs kept visible: the renderer walks whatever is visible on every frame, and five idle
+    /// pages of controls are a real cost on an integrated GPU.
+    property bool sliding: false
 
     /**
      * False only for the moment the page is being built.
@@ -75,12 +86,23 @@ Item {
         onTriggered: hubRoot.settled = true
     }
 
+    Timer {
+        id: slideSettle
+        interval: 450
+        onTriggered: hubRoot.sliding = false
+    }
+
     function markVisited(index: int) {
-        if (index < 0 || index >= hubRoot.tabs.length || hubRoot.visited[index])
+        if (index < 0 || index >= hubRoot.tabs.length)
             return;
+        const order = [index].concat(Array.from(hubRoot.recent).filter(other => other !== index));
         const next = Array.from(hubRoot.visited);
         next[index] = true;
-        hubRoot.visited = next;
+        while (order.length > hubRoot.maxLiveTabs)
+            next[order.pop()] = false;
+        hubRoot.recent = order;
+        if (String(next) !== String(hubRoot.visited))
+            hubRoot.visited = next;
     }
 
     /// A settings search result knows the file its section was indexed from, not the tab. Map
@@ -120,11 +142,53 @@ Item {
         }
     }
 
+    /// Whether anyone can actually see this page. The settings window is hidden when it
+    /// closes, not destroyed, so this page lives on - and used to stay subscribed: every
+    /// config reload re-ran the readers and re-parsed the bind files for a window nobody had
+    /// open. The subscription now follows the window, and the tabs are unloaded shortly after
+    /// it closes so their controls stop costing memory as well.
+    readonly property bool onScreen: GlobalStates.settingsOpen
+    property bool subscribed: false
+
+    function syncSubscription() {
+        if (hubRoot.onScreen === hubRoot.subscribed)
+            return;
+        hubRoot.subscribed = hubRoot.onScreen;
+        if (hubRoot.subscribed)
+            HyprlandGui.attach();
+        else
+            HyprlandGui.detach();
+    }
+
+    onOnScreenChanged: {
+        hubRoot.syncSubscription();
+        if (hubRoot.onScreen) {
+            retireTimer.stop();
+            hubRoot.markVisited(swipeView.currentIndex);
+        } else {
+            retireTimer.restart();
+        }
+    }
+
+    Timer {
+        id: retireTimer
+        interval: 10000
+        onTriggered: {
+            hubRoot.visited = hubRoot.tabs.map(() => false);
+            hubRoot.recent = [];
+        }
+    }
+
     Component.onCompleted: {
-        HyprlandGui.attach();
+        hubRoot.syncSubscription();
         hubRoot.takePendingTab();
     }
-    Component.onDestruction: HyprlandGui.detach()
+    Component.onDestruction: {
+        if (hubRoot.subscribed) {
+            hubRoot.subscribed = false;
+            HyprlandGui.detach();
+        }
+    }
 
     Connections {
         target: SearchRegistry
@@ -210,6 +274,8 @@ Item {
 
             onCurrentIndexChanged: {
                 hubRoot.markVisited(swipeView.currentIndex);
+                hubRoot.sliding = true;
+                slideSettle.restart();
                 // The tab that is arriving is still incubating, so the restored scroll
                 // position has nothing to land on yet; it is pushed again below when it does.
                 hubRoot.pushContentY();
@@ -235,6 +301,10 @@ Item {
                     required property int index
 
                     readonly property var pageItem: tabLoader.item
+
+                    // Out of the render tree unless on screen or mid-slide. Built tabs keep
+                    // their state either way.
+                    visible: hubRoot.sliding || tabHost.SwipeView.isCurrentItem
 
                     Loader {
                         id: tabLoader

@@ -4,6 +4,7 @@ import QtQuick
 import QtQuick.Layouts
 import qs.services
 import qs.modules.common
+import qs.modules.common.functions
 import qs.modules.common.widgets
 
 /**
@@ -25,11 +26,16 @@ Rectangle {
     /// applies on some hardware - so a section still has one place where the caveats live.
     property var notes: []
 
+    /// Everything below that feeds a Repeater goes through ObjectUtils.keep: the states are
+    /// rebuilt whenever any layer moves, and a model that kept its identity keeps its rows.
+    property var _memo: ({})
+
     // Defensive: a caller whose own `keys` binding throws hands this undefined, and one bad
     // reference there would otherwise take out all six properties below it as well.
     readonly property var optionStates: Array.from(root.keys ?? [])
         .filter(key => String(key ?? "") !== "").map(key => HyprlandGui.resolve(key))
-    readonly property var managed: root.optionStates.filter(state => state.isManaged)
+    readonly property var managed: ObjectUtils.keep(root._memo, "managed",
+        root.optionStates.filter(state => state.isManaged).map(state => ({ "key": state.key })))
     readonly property var inherited: root.optionStates.filter(state => state.inherited !== null)
     readonly property var shadowed: root.optionStates.filter(state => state.shadowedBy !== null)
     readonly property var shellOwned: root.optionStates.filter(state => state.shellOwnedBy !== "")
@@ -64,12 +70,14 @@ Rectangle {
         }
         for (const note of Array.from(root.notes))
             out.push(note);
-        return out;
+        return ObjectUtils.keep(root._memo, "lines", out);
     }
 
     /// Removing a hand-written line is only offered once this page sets the key too, because
     /// then taking it out changes nothing. Otherwise it would silently reset the setting.
-    readonly property var removable: root.inherited.filter(state => state.isManaged && state.inherited.removable)
+    readonly property var removable: ObjectUtils.keep(root._memo, "removable",
+        root.inherited.filter(state => state.isManaged && state.inherited.removable)
+            .map(state => ({ "key": state.key })))
 
     visible: root.lines.length > 0 || root.managed.length > 0
     Layout.fillWidth: true
