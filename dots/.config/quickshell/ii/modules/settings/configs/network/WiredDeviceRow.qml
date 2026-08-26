@@ -45,7 +45,14 @@ Rectangle {
             root.details = ({});
             return;
         }
-        NetworkCommands.readDeviceDetails(root.ifname, result => root.details = result);
+        // Asking about a port is asynchronous, and a port can be unplugged
+        // while the question is still in flight — which destroys this row
+        // before the answer comes back to it.
+        NetworkCommands.readDeviceDetails(root.ifname, result => {
+            if (!root)
+                return;
+            root.details = result;
+        });
     }
 
     component DetailRow: RowLayout {
