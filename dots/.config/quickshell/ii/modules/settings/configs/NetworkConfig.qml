@@ -144,12 +144,29 @@ Item {
         Qt.callLater(root.applyWantedTab);
     }
 
+    /**
+     * True while a sub-page covers the whole page, bar included.
+     *
+     * Nothing that reaches the bar's index in that state can be the user
+     * picking a tab, because there is no bar on screen to pick from.
+     */
+    readonly property bool subPageOpen: subPageOverlay.isOpen
+
+    // Coming back from a sub-page lands on the tab it was opened from, not on
+    // whatever the bar drifted to while it was hidden underneath.
+    onSubPageOpenChanged: if (!root.subPageOpen) Qt.callLater(root.applyWantedTab)
+
     // A move made by a settled bar is the user's — a click, the wheel or the
     // arrow keys — and is the one thing worth remembering. Everything the bar
-    // does to itself on the way up happens before it settles and is ignored.
+    // does to itself on the way up happens before it settles and is ignored,
+    // and so is anything that moves it while a sub-page is in the way.
     onCurrentTabChanged: {
         if (!root.barSettled || root.currentTab < 0 || root.currentTab === root.wantedTab)
             return;
+        if (root.subPageOpen) {
+            Qt.callLater(root.applyWantedTab);
+            return;
+        }
         root.wantedTab = root.currentTab;
         GlobalStates.settingsNetworkTab = root.currentTab;
     }
@@ -161,8 +178,14 @@ Item {
             left: parent.left
             right: parent.right
         }
-        visible: root.tabs.length > 1
-        height: tabBar.visible ? tabBar.implicitHeight : 0
+        // Fading the bar out behind a sub-page still leaves it hit-testable,
+        // and it carries a wheel handler that switches tabs. Scrolling near the
+        // top of a sub-page was landing on that handler and changing the tab
+        // underneath, so the page came back on a different tab than it left.
+        // Opacity is for looks; this is what takes it out of input.
+        visible: root.tabs.length > 1 && subPageOverlay.slideProgress > 0
+        enabled: subPageOverlay.slideProgress > 0
+        height: root.tabs.length > 1 ? tabBar.implicitHeight : 0
         opacity: subPageOverlay.slideProgress
 
         // The model is the number of tabs, not the list itself. The list is a
