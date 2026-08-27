@@ -64,8 +64,11 @@ RippleButton {
     
     Layout.fillWidth: false
     Layout.fillHeight: false
-    implicitWidth: 38
-    implicitHeight: 38
+    // The grid is the tallest thing in the sidebar's bottom group, so the cell
+    // shrinks with the space the calendar is given instead of being clipped.
+    property real cellSize: 38
+    implicitWidth: cellSize
+    implicitHeight: cellSize
     toggled: (isToday == 1)
     buttonRadius: Appearance.rounding.small
     

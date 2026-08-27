@@ -235,6 +235,7 @@ Item {
                 Layout.alignment: Qt.AlignHCenter
                 Layout.fillHeight: true
                 Layout.fillWidth: true
+                Layout.minimumHeight: 120
                 visible: !root.editMode
             }
 
@@ -247,9 +248,15 @@ Item {
             BottomWidgetGroup {
                 id: bottomGroup
                 Layout.alignment: Qt.AlignHCenter
-                Layout.fillHeight: false
+                // The banner costs the column 220px, all of which would come out
+                // of the notification list. Compact gives most of it back.
+                compact: Config.options.sidebar.enableBanner
+                Layout.fillHeight: !bottomGroup.effectivelyCollapsed
                 Layout.fillWidth: true
                 Layout.preferredHeight: implicitHeight
+                Layout.maximumHeight: implicitHeight
+                Layout.minimumHeight: bottomGroup.effectivelyCollapsed ? implicitHeight
+                    : bottomGroup.minExpandedHeight
                 forceCollapsed: root.editMode
             }
         }

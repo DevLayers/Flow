@@ -26,7 +26,17 @@ Rectangle {
     //     }
     // }
 
-    implicitHeight: effectivelyCollapsed ? collapsedBottomWidgetGroupRow.implicitHeight : 350
+    // 350 is the calendar at its natural 38px cell. The sidebar column is within
+    // ~16px of full once a 220px banner is in it, so an expanded group at its
+    // natural size leaves the notification list with nothing to spare: compact
+    // hands 90px back by dropping the cell to 27px, which is a row and a half of
+    // notifications. Below minExpandedHeight the month grid stops being readable.
+    property bool compact: false
+    readonly property real naturalExpandedHeight: 350
+    readonly property real compactExpandedHeight: 260
+    readonly property real minExpandedHeight: 260
+    readonly property real expandedHeight: compact ? compactExpandedHeight : naturalExpandedHeight
+    implicitHeight: effectivelyCollapsed ? collapsedBottomWidgetGroupRow.implicitHeight : expandedHeight
     property int selectedTab: Persistent.states.sidebar.bottomGroup.tab
     property int previousIndex: -1
     property bool collapsed: Persistent.states.sidebar.bottomGroup.collapsed

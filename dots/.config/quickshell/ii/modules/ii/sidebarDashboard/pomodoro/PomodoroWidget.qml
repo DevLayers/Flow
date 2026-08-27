@@ -9,6 +9,10 @@ import QtQuick.Layouts
 Item {
     id: root
     property int entranceTrigger: -1
+    // The bottom group is 260px instead of 350 while the sidebar banner is on.
+    // Fixed chrome sized for the tall box eats the content whole in the short
+    // one, so it gives some back rather than clipping.
+    readonly property bool compact: root.height > 0 && root.height < 300
     property var tabButtonList: [
         {
             "name": Translation.tr("Pomodoro"),
@@ -65,7 +69,7 @@ Item {
 
         Toolbar {
             Layout.alignment: Qt.AlignHCenter
-            Layout.preferredHeight: 52
+            Layout.preferredHeight: root.compact ? 44 : 52
             enableShadow: false
             colBackground: Appearance.colors.colSurfaceContainer
             ToolbarTabBar {
@@ -80,7 +84,7 @@ Item {
         SwipeView {
             id: swipeView
             property bool initialized: false
-            Layout.topMargin: 10
+            Layout.topMargin: root.compact ? 4 : 10
             Layout.fillWidth: true
             Layout.fillHeight: true
             spacing: 10

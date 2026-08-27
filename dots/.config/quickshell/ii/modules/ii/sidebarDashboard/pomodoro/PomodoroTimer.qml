@@ -13,6 +13,16 @@ Item {
     implicitHeight: contentColumn.implicitHeight
     implicitWidth: contentColumn.implicitWidth
 
+    // A 200px dial plus a 35px button row does not fit the 260px bottom group
+    // the sidebar banner leaves room for, and the overflow is clipped rather
+    // than scrolled - the buttons simply vanish. The dial is the elastic part.
+    readonly property real ringGap: 10
+    readonly property real ringSize: {
+        if (root.height <= 0)
+            return 200;
+        return Math.max(110, Math.min(200, root.height - buttonsRow.implicitHeight - root.ringGap));
+    }
+
     property real _ringAnimValue: 0.0
     readonly property real _realRingValue: TimerService.pomodoroSecondsLeft / TimerService.pomodoroLapDuration
     property int entranceTrigger: -1
@@ -56,8 +66,8 @@ Item {
 
     ColumnLayout {
         id: contentColumn
-        anchors.fill: parent
-        spacing: 0
+        anchors.centerIn: parent
+        spacing: root.ringGap
 
         transform: Translate {
             id: contentTranslate
@@ -68,9 +78,9 @@ Item {
         CircularProgress {
             id: circularProgress
             Layout.alignment: Qt.AlignHCenter
-            lineWidth: 8
+            lineWidth: Math.max(5, Math.round(root.ringSize / 25))
             value: root._ringAnimValue
-            implicitSize: 200
+            implicitSize: root.ringSize
             enableAnimation: false
 
             ColumnLayout {
@@ -84,7 +94,7 @@ Item {
                         let seconds = Math.floor(TimerService.pomodoroSecondsLeft % 60).toString().padStart(2, '0');
                         return `${minutes}:${seconds}`;
                     }
-                    font.pixelSize: 40
+                    font.pixelSize: Math.round(Math.max(24, Math.min(40, root.ringSize * 0.25)))
                     color: Appearance.m3colors.m3onSurface
                 }
                 StyledText {
@@ -126,7 +136,7 @@ Item {
                     right: parent.right
                     bottom: parent.bottom
                 }
-                implicitWidth: 36
+                implicitWidth: Math.round(Math.max(26, Math.min(36, root.ringSize * 0.18)))
                 implicitHeight: implicitWidth
 
                 StyledText {
@@ -140,6 +150,7 @@ Item {
 
         // The Start/Stop and Reset buttons
         RowLayout {
+            id: buttonsRow
             Layout.alignment: Qt.AlignHCenter
             spacing: 10
 

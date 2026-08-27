@@ -44,6 +44,17 @@ Item {
 
     width: calendarColumn.width
     implicitHeight: calendarColumn.height + 5
+
+    // A month is a fixed 6 week rows plus the weekday header, so the only way to
+    // fit a shorter box is a smaller cell. Whoever hosts the widget sizes it;
+    // this reads that size back and never grows past the natural 38px.
+    readonly property real headerHeight: 30
+    readonly property real cellSize: {
+        if (root.height <= 0)
+            return 38;
+        const forRows = root.height - 5 - root.headerHeight - calendarColumn.spacing * 7;
+        return Math.max(26, Math.min(38, forRows / 7));
+    }
     Keys.onPressed: (event) => {
         if ((event.key === Qt.Key_PageDown || event.key === Qt.Key_PageUp) && event.modifiers === Qt.NoModifier) {
             if (event.key === Qt.Key_PageDown)
@@ -170,6 +181,7 @@ Item {
                     bold: true
                     enabled: false
                     taskList: []
+                    cellSize: root.cellSize
                 }
 
             }
@@ -198,6 +210,7 @@ Item {
                         gridRow: modelData
                         gridCol: index
                         entranceKey: calendarColumn.parent._entranceKey
+                        cellSize: root.cellSize
                     }
 
                 }
