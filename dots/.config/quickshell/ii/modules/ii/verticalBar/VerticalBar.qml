@@ -55,7 +55,7 @@ Scope {
                     property real targetZone: Appearance.sizes.baseVerticalBarWidth + (Config.options.bar.cornerStyle === 1 ? Appearance.sizes.hyprlandGapsOut : 0)
                     property real minZone: Config.options.appearance.fakeScreenRounding === 3 ? Config.options.appearance.wrappedFrameThickness : 0
 
-                    exclusiveZone: (Config?.options.bar.autoHide.enable && !Config?.options.bar.autoHide.pushWindows) ? minZone : Math.max(minZone, targetZone - (barRoot ? barRoot.hiddenAmount : 0))
+                    exclusiveZone: (Config.options.bar.autoHide.enable && !Config.options.bar.autoHide.pushWindows) ? minZone : Math.max(minZone, targetZone - (barRoot ? barRoot.hiddenAmount : 0))
 
                     implicitWidth: Appearance.sizes.verticalBarWindowWidth + Appearance.rounding.screenRounding
                     color: "transparent"
@@ -85,7 +85,7 @@ Scope {
                         target: HyprlandData
                         function onWindowListChanged() {
                             const monitor = HyprlandData.monitors.find(m => m.name === barRoot.screen.name);
-                            const wsId = monitor?.activeWorkspace?.id;
+                            const wsId = monitor ? (monitor.activeWorkspace ? monitor.activeWorkspace.id : undefined) : undefined;
 
                             const hasWindow = wsId ? HyprlandData.windowList.some(w => w.workspace.id === wsId && !w.floating) : false;
 
@@ -95,7 +95,7 @@ Scope {
 
                     Timer {
                         id: showBarTimer
-                        interval: (Config?.options.bar.autoHide.showWhenPressingSuper.delay ?? 100)
+                        interval: (Config.options.bar.autoHide.showWhenPressingSuper.delay ?? 100)
                         repeat: false
                         onTriggered: {
                             barRoot.superShow = true;
@@ -104,7 +104,7 @@ Scope {
                     Connections {
                         target: GlobalStates
                         function onSuperDownChanged() {
-                            if (!Config?.options.bar.autoHide.showWhenPressingSuper.enable)
+                            if (!Config.options.bar.autoHide.showWhenPressingSuper.enable)
                                 return;
                             if (GlobalStates.superDown)
                                 showBarTimer.restart();
@@ -116,7 +116,7 @@ Scope {
                     }
                     property bool superShow: false
                     property bool mustShow: hoverRegion.containsMouse || superShow || GlobalStates.sidebarLeftOpen || GlobalStates.sidebarRightOpen
-                    property real hiddenAmount: (Config?.options.bar.autoHide.enable && !mustShow) ? Appearance.sizes.verticalBarWindowWidth : 0
+                    property real hiddenAmount: (Config.options.bar.autoHide.enable && !mustShow) ? Appearance.sizes.verticalBarWindowWidth : 0
                     Behavior on hiddenAmount {
                         animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(barRoot)
                     }
@@ -301,15 +301,15 @@ Scope {
     IpcHandler {
         target: "bar"
 
-        function toggle(): void {
+        function toggle() {
             GlobalStates.barOpen = !GlobalStates.barOpen;
         }
 
-        function close(): void {
+        function close() {
             GlobalStates.barOpen = false;
         }
 
-        function open(): void {
+        function open() {
             GlobalStates.barOpen = true;
         }
     }
