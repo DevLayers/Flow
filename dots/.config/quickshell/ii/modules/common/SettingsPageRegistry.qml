@@ -135,7 +135,11 @@ Singleton {
             "name": "Overlays & OSD",
             "icon": "picture_in_picture",
             "component": "modules/settings/configs/OverlaysConfig.qml",
-            "subPages": ["widgets/GameOverlayConfig.qml", "widgets/OnScreenKeyboardConfig.qml"],
+            "subPages": [
+                "widgets/GameOverlayConfig.qml",
+                "widgets/OnScreenKeyboardConfig.qml",
+                "widgets/OsdIndicatorsConfig.qml"
+            ],
             "aliases": ["System Overlays", "Media overlay", "Game overlay"]
         },
         {

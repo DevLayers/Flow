@@ -55,7 +55,9 @@ Item {
             ConfigSwitch {
                 buttonIcon: "visibility"
                 text: Translation.tr("Enable OSD")
+                description: Translation.tr("Choose which indicators show up")
                 checked: Config.options.osd.enable
+                configPage: Qt.resolvedUrl("widgets/OsdIndicatorsConfig.qml")
                 onCheckedChanged: {
                     Config.options.osd.enable = checked;
                 }

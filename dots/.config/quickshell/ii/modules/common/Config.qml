@@ -408,6 +408,31 @@ Singleton {
         }
     }
 
+    // Shared gate for every OSD implementation (default, minimal/material, Waffle).
+    // Unknown indicator ids stay enabled so a new one is opt-out, not opt-in.
+    function osdIndicatorEnabled(indicatorId): bool {
+        if (!root.ready || !root.options.osd)
+            return true;
+        if (!root.options.osd.enable)
+            return false;
+        const indicators = root.options.osd.indicators;
+        if (!indicators)
+            return true;
+        switch (indicatorId) {
+        case "volume":
+            return indicators.volume;
+        case "brightness":
+            return indicators.brightness;
+        case "keyboardBrightness":
+            return indicators.keyboardBrightness;
+        case "playerVolume":
+            return indicators.playerVolume;
+        case "gamma":
+            return indicators.gamma;
+        }
+        return true;
+    }
+
     function isWidgetActive(widgetId) {
         let list = root.options.background.activeWidgets || [];
         for (let i = 0; i < list.length; i++) {
@@ -3596,6 +3621,16 @@ Singleton {
                 property int timeout: 3000
                 property bool showValues: true
                 property bool hideWhenFullscreen: true
+
+                // Per-indicator popups. Turning one off keeps that OSD from showing
+                // on its own; the master `enable` switch above still wins over all.
+                property JsonObject indicators: JsonObject {
+                    property bool volume: true
+                    property bool brightness: true
+                    property bool keyboardBrightness: true
+                    property bool playerVolume: true
+                    property bool gamma: true
+                }
 
                 property JsonObject material: JsonObject {
                     property bool rotateShape: false
