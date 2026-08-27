@@ -3512,6 +3512,12 @@ Singleton {
                     // With automatic mode on, a restored toggle still expires at the next start/end time.
                     property string persistManual: "always"
                 }
+                property JsonObject gamma: JsonObject {
+                    // Below the backlight minimum, brightness keys and the combined
+                    // gamma/brightness slider keep dimming by lowering gamma.
+                    // Turn off to drive the backlight only and leave gamma alone.
+                    property bool dimBelowMinimum: true
+                }
                 property JsonObject antiFlashbang: JsonObject {
                     property bool enable: false
                 }
