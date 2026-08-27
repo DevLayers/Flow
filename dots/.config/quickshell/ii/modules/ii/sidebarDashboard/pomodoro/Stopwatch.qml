@@ -58,7 +58,11 @@ Item {
             
             anchors {
                 top: undefined
+                // Centred in what is left above the buttons, not in the whole
+                // box: the button row is anchored to the bottom, so centring on
+                // the box parks the time low, against them.
                 verticalCenter: parent.verticalCenter
+                verticalCenterOffset: -(controlButtons.height + 6) / 2
                 left: controlButtons.left
                 leftMargin: 6
             }

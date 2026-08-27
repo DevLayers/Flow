@@ -20,6 +20,10 @@ Item {
     StyledListView {
         id: listView
         anchors.fill: parent
+        // The add and sync buttons float over the bottom corners of this list.
+        // Without the reserve the last task sits underneath them with no way to
+        // scroll it clear - the property existed for this and was never applied.
+        bottomMargin: taskListRoot.listBottomPadding
         spacing: taskListRoot.todoListItemSpacing
         animateAppearance: false
         model: ScriptModel {
