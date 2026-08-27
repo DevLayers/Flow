@@ -29,6 +29,7 @@ import qs.modules.ii.sidebarDashboard.idleInhibitor
 import qs.modules.ii.sidebarDashboard.screenShader
 import qs.modules.ii.sidebarDashboard.modes
 import "SidebarSpaceArbitration.js" as SpaceArbitration
+import "SidebarPerformancePolicy.js" as PerformancePolicy
 
 Item {
     id: root
@@ -49,6 +50,42 @@ Item {
     property bool showModesDialog: false
     readonly property bool anyDialogVisible: showAudioOutputDialog || showAudioInputDialog || showBluetoothDialog || showNightLightDialog || showWifiDialog || showDarkModeDialog || showLocalSendDialog || showVpnDialog || showTailscaleDialog || showDnsOverTlsDialog || showIdleInhibitorDialog || showScreenShaderDialog || showModesDialog
     property bool editMode: false
+    property bool isLoadedOnLeft: false
+    readonly property bool dashboardSidebarAnimating: isLoadedOnLeft
+        ? GlobalStates.leftSidebarAnimating
+        : GlobalStates.rightSidebarAnimating
+    readonly property bool entranceAnimationsEnabled: Config.options.sidebar.dashboardEntranceAnimations
+    property int entranceTrigger: -1
+    property bool entrancePending: false
+
+    function queueContentEntrance() {
+        if (!PerformancePolicy.shouldQueueEntranceAnimations(
+                root.entranceAnimationsEnabled, GlobalStates.sidebarRightOpen))
+            return;
+        root.entrancePending = true;
+        root.activateDeferredContent();
+        root.triggerContentEntranceIfReady();
+    }
+
+    function triggerContentEntranceIfReady() {
+        if (!PerformancePolicy.canTriggerEntranceAnimations(
+                root.entrancePending,
+                root.entranceAnimationsEnabled,
+                GlobalStates.sidebarRightOpen,
+                root.dashboardSidebarAnimating
+            ))
+            return;
+        root.activateDeferredContent();
+        root.entrancePending = false;
+        root.entranceTrigger++;
+    }
+
+    onEntranceAnimationsEnabledChanged: {
+        if (entranceAnimationsEnabled)
+            root.queueContentEntrance();
+        else
+            root.entrancePending = false;
+    }
 
     // Compact-space arbitration is runtime-only. When the height that the
     // notification center would receive with the bottom group expanded falls
@@ -78,31 +115,48 @@ Item {
 
     onCompactModeRequiredChanged: compactBottomRequestedExpanded = false
 
-    property int entranceTrigger: -1
+    // The optimized default incubates heavy delegates after the outer motion.
+    // The explicit animation opt-in instead loads them with the open request,
+    // so their entrance choreography starts while the sidebar itself slides.
+    property bool deferredContentReady: false
+    function activateDeferredContent() {
+        deferredContentReady = PerformancePolicy.nextDeferredContentReady(
+            deferredContentReady,
+            GlobalStates.sidebarRightOpen,
+            root.dashboardSidebarAnimating,
+            root.entranceAnimationsEnabled
+        );
+    }
 
-    function triggerContentEntrance() {
-        entranceTrigger++;
+    onDashboardSidebarAnimatingChanged: {
+        if (!dashboardSidebarAnimating) {
+            root.activateDeferredContent();
+            root.triggerContentEntranceIfReady();
+        }
     }
 
     readonly property bool isDynamicIslandTop: !Config.options.bar.vertical && !Config.options.bar.bottom && Config.options.bar.cornerStyle === 3
     readonly property bool isDynamicIslandBottom: !Config.options.bar.vertical && Config.options.bar.bottom && Config.options.bar.cornerStyle === 3
-
-    property bool isLoadedOnLeft: false
 
     Component.onCompleted: {
         if (GlobalStates.requestVolumeDialog) {
             root.showAudioOutputDialog = true;
             GlobalStates.requestVolumeDialog = false;
         }
+        root.activateDeferredContent();
+        if (GlobalStates.sidebarRightOpen)
+            root.queueContentEntrance();
     }
 
     Connections {
         target: GlobalStates
         function onSidebarRightOpenChanged() {
             if (GlobalStates.sidebarRightOpen) {
-                root.triggerContentEntrance();
-            }
-            if (!GlobalStates.sidebarRightOpen) {
+                // Let target-width bindings start the outer animation first.
+                Qt.callLater(root.activateDeferredContent);
+                root.queueContentEntrance();
+            } else {
+                root.entrancePending = false;
                 root.showWifiDialog = false;
                 root.showBluetoothDialog = false;
                 root.showAudioOutputDialog = false;
@@ -190,19 +244,6 @@ Item {
         bottomRightRadius: (GlobalStates.connectModeActive && !GlobalStates.connectSidebarsSeparate && !isConnectDynamicIslandBottom) ? 0 : ((isConnectDynamicIslandBottom && !root.isLoadedOnLeft) ? 0 : defaultRadius)
         bottomLeftRadius: (GlobalStates.connectModeActive && !GlobalStates.connectSidebarsSeparate && !isConnectDynamicIslandBottom) ? 0 : ((isConnectDynamicIslandBottom && root.isLoadedOnLeft) ? 0 : defaultRadius)
 
-        layer.enabled: true
-        layer.effect: OpacityMask {
-            maskSource: Rectangle {
-                width: sidebarRightBackground.width
-                height: sidebarRightBackground.height
-                radius: sidebarRightBackground.radius
-                topLeftRadius: sidebarRightBackground.topLeftRadius
-                topRightRadius: sidebarRightBackground.topRightRadius
-                bottomLeftRadius: sidebarRightBackground.bottomLeftRadius
-                bottomRightRadius: sidebarRightBackground.bottomRightRadius
-            }
-        }
-
         property real dialogBlurProgress: root.anyDialogVisible ? 1.0 : 0.0
         Behavior on dialogBlurProgress {
             NumberAnimation { duration: 320; easing.type: Easing.OutCubic }
@@ -228,7 +269,6 @@ Item {
                 Layout.preferredHeight: 220
                 visible: Config.options.sidebar.enableBanner
                 enabled: visible
-                entranceTrigger: root.entranceTrigger
                 editMode: root.editMode
                 onEditModeToggled: (newEditMode) => root.editMode = newEditMode
             }
@@ -264,6 +304,7 @@ Item {
                 sourceComponent: AndroidQuickPanel {
                     editMode: root.editMode
                     maxContentHeight: root.quickPanelMaxHeight
+                    entranceTrigger: root.entranceTrigger
                     onOpenVpnDialog: root.showVpnDialog = true
                     onOpenTailscaleDialog: root.showTailscaleDialog = true
                     onOpenDnsOverTlsDialog: root.showDnsOverTlsDialog = true
@@ -276,6 +317,10 @@ Item {
                 Layout.fillHeight: true
                 Layout.fillWidth: true
                 Layout.minimumHeight: containmentHeight
+                // This boundary lies inside the dashboard's rounded silhouette
+                // and contains Bottom overshoot without clipping unrelated
+                // header/quick-toggle shadows or allocating an FBO.
+                clip: true
                 readonly property real availableHeight: Math.max(0, mainColumn.height - y)
                 readonly property real packedTakeoverHeight: SpaceArbitration.packedGroupsMinimumHeight(
                         bottomGroup.expandedHeight,
@@ -328,11 +373,13 @@ Item {
                 Loader {
                     id: centerGroup
                     // Notifications remain backed by their global service; only the
-                    // heavy visual center group is discarded while the sidebar is closed.
-                    active: GlobalStates.sidebarRightOpen
+                    // heavy visual center group is incubated after the sidebar
+                    // slide and then kept warm for this dashboard instance.
+                    active: root.deferredContentReady
                     asynchronous: true
                     sourceComponent: CenterWidgetGroup {
                         collapsed: root.notificationsCollapsed
+                        entranceTrigger: root.entranceTrigger
                     }
                     readonly property real collapsedHeight: item?.collapsedHeight ?? 0
                     property real animatedHeight: SpaceArbitration.notificationMaximumHeight(
@@ -362,6 +409,8 @@ Item {
                     anchors.bottom: parent.bottom
                     height: adaptiveGroups.animatedBottomHeight
                     forceCollapsed: root.bottomForceCollapsed
+                    outerSidebarAnimating: root.dashboardSidebarAnimating
+                    entranceTrigger: root.entranceTrigger
                     onCollapseRequested: shouldCollapse => {
                         if (root.compactModeRequired)
                             root.compactBottomRequestedExpanded = !shouldCollapse;
@@ -462,7 +511,6 @@ Item {
 
     component SidebarBanner: Item {
         id: headerRoot
-        property int entranceTrigger: -1
         property bool editMode: false
         signal editModeToggled(bool newEditMode)
         implicitHeight: 220
@@ -954,61 +1002,11 @@ Item {
         property bool editMode: false
         signal editModeToggled(bool newEditMode)
 
-        // Entrance animation properties
-        property real _leftTranslateX: -30
-        property real _rightTranslateX: 30
-        property real _entranceTranslateY: -15
-        property real _entranceOpacity: 0
-        property bool _entranceDone: false
-        readonly property bool _animationsDisabled: (Config.options?.appearance?.animationMultiplier ?? 1.0) <= 0.25
-
-        onEntranceTriggerChanged: {
-            if (_animationsDisabled) {
-                _entranceDone = true;
-                _entranceOpacity = 1;
-                _leftTranslateX = 0;
-                _rightTranslateX = 0;
-                _entranceTranslateY = 0;
-                return;
-            }
-            _entranceDone = false;
-            _entranceOpacity = 0;
-            _leftTranslateX = -30;
-            _rightTranslateX = 30;
-            _entranceTranslateY = -15;
-            Qt.callLater(function() {
-                entranceAnim.start();
-            });
-        }
-
-        Component.onCompleted: {
-            if (_animationsDisabled) {
-                _entranceDone = true;
-                _entranceOpacity = 1;
-                _leftTranslateX = 0;
-                _rightTranslateX = 0;
-                _entranceTranslateY = 0;
-                return;
-            }
-            _entranceDone = false;
-            _entranceOpacity = 0;
-            _leftTranslateX = -30;
-            _rightTranslateX = 30;
-            _entranceTranslateY = -15;
-            Qt.callLater(function() {
-                entranceAnim.start();
-            });
-        }
-
-        SequentialAnimation {
-            id: entranceAnim
-            ParallelAnimation {
-                NumberAnimation { target: systemButtonRowRoot; property: "_entranceOpacity"; from: 0; to: 1; duration: 280; easing.type: Easing.OutCubic }
-                NumberAnimation { target: systemButtonRowRoot; property: "_leftTranslateX"; from: -30; to: 0; duration: 320; easing.type: Easing.OutCubic }
-                NumberAnimation { target: systemButtonRowRoot; property: "_rightTranslateX"; from: 30; to: 0; duration: 340; easing.type: Easing.OutCubic }
-                NumberAnimation { target: systemButtonRowRoot; property: "_entranceTranslateY"; from: -15; to: 0; duration: 300; easing.type: Easing.OutCubic }
-            }
-            PropertyAction { target: systemButtonRowRoot; property: "_entranceDone"; value: true }
+        DashboardEntranceProgress {
+            id: headerEntranceProgress
+            animationSpec: Appearance.animation.elementMove
+            animationsEnabled: Config.options.sidebar.dashboardEntranceAnimations
+            trigger: systemButtonRowRoot.entranceTrigger
         }
 
         Rectangle {
@@ -1019,16 +1017,15 @@ Item {
                 left: parent.left
             }
             color: Appearance.colors.colLayer1
+            opacity: headerEntranceProgress.progress
+            transform: Translate {
+                x: -30 * (1 - headerEntranceProgress.progress)
+                y: -15 * (1 - headerEntranceProgress.progress)
+            }
             readonly property int fullRadius: Config.options.appearance.sharpMode ? Appearance.rounding.full : height / 2
             radius: fullRadius
 
             visible: Config.options.sidebar.dashboardHeader.profileImageType !== "none" || Config.options.sidebar.dashboardHeader.textMode !== "none"
-
-            opacity: systemButtonRowRoot._entranceDone ? 1.0 : systemButtonRowRoot._entranceOpacity
-            transform: Translate {
-                x: systemButtonRowRoot._entranceDone ? 0 : systemButtonRowRoot._leftTranslateX
-                y: systemButtonRowRoot._entranceDone ? 0 : systemButtonRowRoot._entranceTranslateY
-            }
 
             property int rowLeftMargin: Config.options.sidebar.dashboardHeader.profileImageType === "user_profile" ? 6 : 14
             readonly property bool _hasText: Config.options.sidebar.dashboardHeader.textMode !== "none"
@@ -1262,15 +1259,15 @@ Item {
             }
             color: Appearance.colors.colLayer1
             padding: 4
-
-            opacity: systemButtonRowRoot._entranceDone ? 1.0 : systemButtonRowRoot._entranceOpacity
+            opacity: headerEntranceProgress.progress
             transform: Translate {
-                x: systemButtonRowRoot._entranceDone ? 0 : systemButtonRowRoot._rightTranslateX
-                y: systemButtonRowRoot._entranceDone ? 0 : systemButtonRowRoot._entranceTranslateY
+                x: 30 * (1 - headerEntranceProgress.progress)
+                y: -15 * (1 - headerEntranceProgress.progress)
             }
 
             QuickToggleButton {
                 id: editButton
+                rotation: -180 * (1 - headerEntranceProgress.progress)
                 toggled: systemButtonRowRoot.editMode
                 buttonIcon: "edit"
                 onClicked: {
@@ -1281,22 +1278,10 @@ Item {
                     text: Translation.tr("Edit quick toggles") + (!systemButtonRowRoot.editMode ? "" : Config.options.sidebar.quickToggles.style === "android" ? Translation.tr("\nLMB to enable/disable\nDrag handles to resize\nDrag icon to swap position") : Translation.tr("\nLMB to show/hide a toggle"))
                 }
 
-                SequentialAnimation {
-                    id: editEntranceAnim
-                    ScriptAction { script: editButton.rotation = -180 }
-                    NumberAnimation { target: editButton; property: "rotation"; from: -180; to: 0; duration: 400; easing.type: Easing.OutCubic }
-                }
-                Connections {
-                    target: systemButtonRowRoot
-                    function onEntranceTriggerChanged() {
-                        if (systemButtonRowRoot.entranceTrigger >= 0) {
-                            editEntranceAnim.start();
-                        }
-                    }
-                }
             }
             QuickToggleButton {
                 id: reloadButton
+                rotation: -360 * (1 - headerEntranceProgress.progress)
                 toggled: false
                 buttonIcon: "restart_alt"
                 onClicked: {
@@ -1307,22 +1292,10 @@ Item {
                     text: Translation.tr("Reload Hyprland & Quickshell")
                 }
 
-                SequentialAnimation {
-                    id: reloadEntranceAnim
-                    ScriptAction { script: reloadButton.rotation = -360 }
-                    NumberAnimation { target: reloadButton; property: "rotation"; from: -360; to: 0; duration: 500; easing.type: Easing.OutCubic }
-                }
-                Connections {
-                    target: systemButtonRowRoot
-                    function onEntranceTriggerChanged() {
-                        if (systemButtonRowRoot.entranceTrigger >= 0) {
-                            reloadEntranceAnim.start();
-                        }
-                    }
-                }
             }
             QuickToggleButton {
                 id: settingsButton
+                rotation: 90 * (1 - headerEntranceProgress.progress)
                 toggled: false
                 buttonIcon: "settings"
                 onClicked: {
@@ -1333,23 +1306,11 @@ Item {
                     text: Translation.tr("Settings")
                 }
 
-                SequentialAnimation {
-                    id: settingsEntranceAnim
-                    ScriptAction { script: settingsButton.rotation = 90 }
-                    NumberAnimation { target: settingsButton; property: "rotation"; from: 90; to: 0; duration: 350; easing.type: Easing.OutBack }
-                }
-                Connections {
-                    target: systemButtonRowRoot
-                    function onEntranceTriggerChanged() {
-                        if (systemButtonRowRoot.entranceTrigger >= 0) {
-                            settingsEntranceAnim.start();
-                        }
-                    }
-                }
             }
 
             QuickToggleButton {
                 id: powerButton
+                rotation: -90 * (1 - headerEntranceProgress.progress)
                 toggled: false
                 buttonIcon: "power_settings_new"
                 onClicked: {
@@ -1359,19 +1320,6 @@ Item {
                     text: Translation.tr("Session")
                 }
 
-                SequentialAnimation {
-                    id: powerEntranceAnim
-                    ScriptAction { script: powerButton.rotation = -90 }
-                    NumberAnimation { target: powerButton; property: "rotation"; from: -90; to: 0; duration: 350; easing.type: Easing.OutBack }
-                }
-                Connections {
-                    target: systemButtonRowRoot
-                    function onEntranceTriggerChanged() {
-                        if (systemButtonRowRoot.entranceTrigger >= 0) {
-                            powerEntranceAnim.start();
-                        }
-                    }
-                }
             }
         }
     }

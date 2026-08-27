@@ -6,6 +6,7 @@ import qs.modules.common
 import qs.modules.common.models.quickToggles
 import qs.modules.common.functions
 import qs.modules.common.widgets
+import qs.modules.ii.sidebarDashboard
 import "QuickToggleCatalog.js" as QuickToggleCatalog
 
 Item {
@@ -57,97 +58,24 @@ Item {
         animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(root)
     }
 
-    // Entrance animation
     property int entranceTrigger: -1
-    property real _entranceOpacity: 1.0
-    property real _entranceScale: 1.0
-    property real _entranceTranslateY: 0
-    property bool _entranceDone: true
+    readonly property bool entranceAnimationsEnabled: Config.options.sidebar.dashboardEntranceAnimations
+    readonly property bool entrancePageActive: root.pageIndex === -1 || !root.panel
+        || root.panel.currentPage === root.pageIndex
 
-    property real currentSliderValue: root.sliderValue
+    DashboardEntranceProgress {
+        id: entranceProgress
+        animationSpec: Appearance.animation.elementMove
+        animationsEnabled: root.entranceAnimationsEnabled
+        trigger: root.entranceTrigger
+        pageActive: root.entrancePageActive
+        delayIndex: Math.min(Math.max(root.buttonIndex, 0), 15)
+        baseDelayRatio: 0.35
+        staggerRatio: 0.1
+    }
+
+    property real currentSliderValue: root.sliderValue * entranceProgress.progress
     property int _activeValueAnimDuration: 0
-
-    readonly property bool _animationsDisabled: (Config.options?.appearance?.animationMultiplier ?? 1.0) <= 0.25
-
-    onSliderValueChanged: {
-        if (_entranceDone && !sliderDelayTimer.running) {
-            currentSliderValue = root.sliderValue;
-        }
-    }
-
-    function resetAndAnimateSlider() {
-        if (_animationsDisabled) {
-            _activeValueAnimDuration = 0;
-            currentSliderValue = root.sliderValue;
-            return;
-        }
-        // Step 1: Instant reset to 0 without animation
-        _activeValueAnimDuration = 0;
-        currentSliderValue = 0;
-        
-        // Step 2: Set animation duration and assign final target value after entrance delay
-        sliderDelayTimer.restart();
-    }
-
-    Timer {
-        id: sliderDelayTimer
-        interval: 180 + Math.min(Math.max(root.buttonIndex, 0), 15) * 40
-        repeat: false
-        onTriggered: {
-            _activeValueAnimDuration = _animationsDisabled ? 0 : 650;
-            currentSliderValue = root.sliderValue;
-        }
-    }
-
-    onEntranceTriggerChanged: {
-        if (_animationsDisabled) {
-            _entranceDone = true;
-            _entranceOpacity = 1;
-            _entranceScale = 1;
-            _entranceTranslateY = 0;
-            _activeValueAnimDuration = 0;
-            currentSliderValue = root.sliderValue;
-            return;
-        }
-        // Only animate when the sidebar is opening on the current page (or for fixed sliders)
-        if (root.pageIndex !== -1 && root.panel && root.panel.currentPage !== root.pageIndex) {
-            _entranceDone = true;
-            _entranceOpacity = 1;
-            _entranceScale = 1;
-            _entranceTranslateY = 0;
-            _activeValueAnimDuration = 0;
-            currentSliderValue = root.sliderValue;
-            return;
-        }
-        _entranceDone = false;
-        _entranceOpacity = 0;
-        _entranceScale = 0.85;
-        _entranceTranslateY = 20;
-        resetAndAnimateSlider();
-        Qt.callLater(function() {
-            entranceAnim.start();
-        });
-    }
-
-    Component.onCompleted: {
-        _entranceDone = true;
-        _entranceOpacity = 1;
-        _entranceScale = 1;
-        _entranceTranslateY = 0;
-        _activeValueAnimDuration = 0;
-        currentSliderValue = root.sliderValue;
-    }
-
-    SequentialAnimation {
-        id: entranceAnim
-        PauseAnimation { duration: 150 + Math.min(Math.max(root.buttonIndex, 0), 15) * 55 }
-        ParallelAnimation {
-            NumberAnimation { target: root; property: "_entranceOpacity"; from: 0; to: 1; duration: 280; easing.type: Easing.OutCubic }
-            NumberAnimation { target: root; property: "_entranceScale"; from: 0.85; to: 1.0; duration: 350; easing.type: Easing.OutBack }
-            NumberAnimation { target: root; property: "_entranceTranslateY"; from: 20; to: 0; duration: 320; easing.type: Easing.OutCubic }
-        }
-        PropertyAction { target: root; property: "_entranceDone"; value: true }
-    }
 
     property string tooltipText: ""
 
@@ -202,9 +130,9 @@ Item {
         width: root.width
         height: root.height
 
-        scale: (root.isDragging ? 1.05 : 1.0) * (root._entranceDone ? 1.0 : root._entranceScale)
+        scale: (root.isDragging ? 1.05 : 1.0) * (0.85 + 0.15 * entranceProgress.progress)
         opacity: {
-            if (!root._entranceDone) return root._entranceOpacity;
+            if (entranceProgress.progress < 1) return entranceProgress.progress;
             if (root.isUnused) return 0.5;
             if (root.editMode && !root.isDragging) return 0.9;
             if (root.isDragging) return 0.95;
@@ -214,15 +142,15 @@ Item {
         
         transform: Translate {
             x: root.isDragging ? root.dragOffsetX : 0
-            y: (root.isDragging ? root.dragOffsetY : 0) + (root._entranceDone ? 0 : root._entranceTranslateY)
+            y: (root.isDragging ? root.dragOffsetY : 0) + 20 * (1 - entranceProgress.progress)
         }
         
         Behavior on scale {
-            enabled: !entranceAnim.running
+            enabled: !entranceProgress.running
             animation: Appearance.animation.clickBounce.numberAnimation.createObject(visualButton)
         }
         Behavior on opacity {
-            enabled: !entranceAnim.running
+            enabled: !entranceProgress.running
             animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(visualButton)
         }
 

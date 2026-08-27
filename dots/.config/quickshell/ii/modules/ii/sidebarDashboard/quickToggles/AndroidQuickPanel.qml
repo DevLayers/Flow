@@ -19,27 +19,14 @@ AbstractQuickPanel {
     // Current page index
     property int currentPage: 0
 
-    // Entrance animation trigger
     property int entranceTrigger: -1
-
-    function triggerContentEntrance() {
-        entranceTrigger++;
-    }
 
     Connections {
         target: GlobalStates
         function onSidebarRightOpenChanged() {
-            if (GlobalStates.sidebarRightOpen) {
-                root.triggerContentEntrance();
-            } else if (editController.active) {
+            if (!GlobalStates.sidebarRightOpen && editController.active) {
                 editController.cancel();
             }
-        }
-    }
-
-    Component.onCompleted: {
-        if (GlobalStates.sidebarRightOpen) {
-            root.triggerContentEntrance();
         }
     }
 

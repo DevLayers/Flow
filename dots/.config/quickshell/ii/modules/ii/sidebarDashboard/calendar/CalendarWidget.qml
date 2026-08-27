@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Layouts
 import "calendar_layout.js" as CalendarLayout
+import "CalendarEventIndex.js" as CalendarEventIndex
 import qs
 import qs.modules.common
 import qs.modules.common.widgets
@@ -11,16 +12,34 @@ Item {
     property int monthShift: 0
     property int _entranceKey: 0
     property int entranceTrigger: -1
+    readonly property bool entranceAnimationsEnabled: Config.options.sidebar.dashboardEntranceAnimations
     property var viewingDate: CalendarLayout.getDateInXMonthsTime(monthShift)
     property var calendarLayout: CalendarLayout.getCalendarLayout(viewingDate, monthShift === 0, Config.options.time.firstDayOfWeek)
+
+    // Build one index when the event collection changes instead of scanning
+    // every event independently from each of the 42 day delegates.
+    readonly property var tasksByDate: CalendarEventIndex.groupEvents(
+        CalendarService.events,
+        CalendarService.khalAvailable
+    )
+
+    function tasksForDate(year, month, day) {
+        return CalendarEventIndex.tasksForDate(root.tasksByDate, year, month, day);
+    }
+
+    onEntranceTriggerChanged: {
+        if (entranceAnimationsEnabled && entranceTrigger >= 0)
+            _entranceKey++;
+    }
+
+    onMonthShiftChanged: {
+        if (entranceAnimationsEnabled)
+            _entranceKey++;
+    }
 
     property real _monthTextOpacity: 1.0
     property real _monthTextTranslateX: 0
     property int _lastDirection: 1 // 1 = next (slide left), -1 = prev (slide right)
-
-    onEntranceTriggerChanged: {
-        _entranceKey++;
-    }
 
     function changeMonth(delta) {
         if (delta === 0) return;
@@ -39,8 +58,6 @@ Item {
             NumberAnimation { target: root; property: "_monthTextTranslateX"; from: root._lastDirection * 25; to: 0; duration: 280; easing.type: Easing.OutCubic }
         }
     }
-
-    onMonthShiftChanged: _entranceKey++
 
     width: Math.max(calendarHeader.implicitWidth, calendarGridColumn.implicitWidth)
     implicitHeight: root.headerHeight
@@ -216,10 +233,15 @@ Item {
                         delegate: CalendarDayButton {
                             day: calendarLayout[modelData][index].day
                             isToday: calendarLayout[modelData][index].today
-                            taskList: CalendarService.getTasksByDate(new Date(calendarLayout[modelData][index].year, calendarLayout[modelData][index].month, calendarLayout[modelData][index].day))
+                            taskList: root.tasksForDate(
+                                calendarLayout[modelData][index].year,
+                                calendarLayout[modelData][index].month,
+                                calendarLayout[modelData][index].day
+                            )
                             gridRow: modelData
                             gridCol: index
                             entranceKey: root._entranceKey
+                            entranceAnimationsEnabled: root.entranceAnimationsEnabled
                             cellSize: root.cellSize
                         }
                     }

@@ -194,6 +194,20 @@ Item {
                 }
             }
 
+            ConfigSwitch {
+                buttonIcon: "animation"
+                text: Translation.tr("Dashboard entrance animations")
+                checked: Config.options.sidebar.dashboardEntranceAnimations
+                onCheckedChanged: {
+                    if (Config.ready && checked !== Config.options.sidebar.dashboardEntranceAnimations)
+                        Config.options.sidebar.dashboardEntranceAnimations = checked;
+                }
+
+                StyledToolTip {
+                    text: Translation.tr("Restores decorative staggered animations for the dashboard header, quick toggles, notifications, calendar, tasks, and timers. They begin with the sidebar opening request and may cost some opening performance.")
+                }
+            }
+
             ContentSubsection {
                 title: Translation.tr("Sidebar position")
                 icon: "switch_right"

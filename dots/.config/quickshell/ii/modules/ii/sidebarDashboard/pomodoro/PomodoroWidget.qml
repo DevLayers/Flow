@@ -99,16 +99,12 @@ Item {
             Loader {
                 active: root.selectedTab === 0
                 asynchronous: true
-                sourceComponent: PomodoroTimer {
-                    entranceTrigger: root.entranceTrigger
-                }
+                sourceComponent: PomodoroTimer { entranceTrigger: root.entranceTrigger }
             }
             Loader {
                 active: root.selectedTab === 1
                 asynchronous: true
-                sourceComponent: Stopwatch {
-                    entranceTrigger: root.entranceTrigger
-                }
+                sourceComponent: Stopwatch { entranceTrigger: root.entranceTrigger }
             }
         }
     }

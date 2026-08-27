@@ -1,7 +1,7 @@
 import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
-import Qt5Compat.GraphicalEffects
+import qs.modules.ii.sidebarDashboard
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -23,43 +23,51 @@ Item {
         return Math.max(110, Math.min(200, root.height - buttonsRow.implicitHeight - root.ringGap));
     }
 
-    property real _ringAnimValue: 0.0
     readonly property real _realRingValue: TimerService.pomodoroSecondsLeft / TimerService.pomodoroLapDuration
+    property real _ringAnimValue: _realRingValue
     property int entranceTrigger: -1
+    readonly property bool entranceAnimationsEnabled: Config.options.sidebar.dashboardEntranceAnimations
 
-    onEntranceTriggerChanged: {
-        circularProgress.enableAnimation = false;
-        _ringAnimValue = 0.0;
+    function finishEntrance() {
+        if (entranceController.item)
+            entranceController.item.stop();
+        contentTranslate.y = 0;
+        _ringAnimValue = Qt.binding(function() { return root._realRingValue; });
+    }
+
+    function beginEntrance() {
+        if (!entranceAnimationsEnabled || entranceTrigger < 0) {
+            finishEntrance();
+            return;
+        }
+        _ringAnimValue = 0;
         contentTranslate.y = 20;
         Qt.callLater(function() {
-            ringOpenSeq.start();
-            contentEntranceAnim.start();
+            if (root.entranceAnimationsEnabled && entranceController.item)
+                entranceController.item.restart();
         });
     }
 
-    SequentialAnimation {
-        id: contentEntranceAnim
-        PauseAnimation { duration: 50 }
-        NumberAnimation { target: contentTranslate; property: "y"; from: 20; to: 0; duration: 380; easing.type: Easing.OutCubic }
-    }
+    onEntranceTriggerChanged: beginEntrance()
+    onEntranceAnimationsEnabledChanged: entranceAnimationsEnabled ? beginEntrance() : finishEntrance()
+    Component.onCompleted: beginEntrance()
 
-    SequentialAnimation {
-        id: ringOpenSeq
-        PauseAnimation { duration: 50 }
-        NumberAnimation {
-            target: root
-            property: "_ringAnimValue"
-            from: 0.0
-            to: root._realRingValue
-            duration: 800
-            easing.type: Easing.OutCubic
-        }
-        ScriptAction {
-            script: {
-                circularProgress.enableAnimation = true;
-                _ringAnimValue = Qt.binding(function() {
-                    return TimerService.pomodoroSecondsLeft / TimerService.pomodoroLapDuration;
-                });
+    Loader {
+        id: entranceController
+        active: root.entranceAnimationsEnabled
+        sourceComponent: Item {
+            function restart() { animation.restart(); }
+            function stop() { animation.stop(); }
+            SequentialAnimation {
+                id: animation
+                PauseAnimation { duration: Math.round(Appearance.animation.elementMove.duration * 0.1) }
+                ParallelAnimation {
+                    SidebarGroupAnimation { target: contentTranslate; property: "y"; from: 20; to: 0; animationSpec: Appearance.animation.elementMove }
+                    SidebarGroupAnimation { target: root; property: "_ringAnimValue"; from: 0; to: root._realRingValue; animationSpec: Appearance.animation.elementMove }
+                }
+                ScriptAction {
+                    script: root._ringAnimValue = Qt.binding(function() { return root._realRingValue; })
+                }
             }
         }
     }
@@ -68,11 +76,7 @@ Item {
         id: contentColumn
         anchors.centerIn: parent
         spacing: root.ringGap
-
-        transform: Translate {
-            id: contentTranslate
-            y: 20
-        }
+        transform: Translate { id: contentTranslate; y: 0 }
 
         // The Pomodoro timer circle
         CircularProgress {
@@ -81,6 +85,8 @@ Item {
             lineWidth: Math.max(5, Math.round(root.ringSize / 25))
             value: root._ringAnimValue
             implicitSize: root.ringSize
+            // The service changes in one-second steps. Interpolating every
+            // step for 800ms kept the Shape layer rendering almost constantly.
             enableAnimation: false
 
             ColumnLayout {

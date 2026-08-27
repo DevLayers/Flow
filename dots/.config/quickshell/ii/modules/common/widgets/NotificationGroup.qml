@@ -27,6 +27,7 @@ MouseArea { // Notification group area
     // the full group and expansion reveals the remaining notifications.
     property int lazyLimit: 1
     property int entranceTrigger: -1
+    property bool entranceAnimationsEnabled: false
     property int globalIndex: 0
 
     // Entrance animation properties
@@ -35,33 +36,69 @@ MouseArea { // Notification group area
     property real _entranceTranslateY: 50
     property bool _entranceDone: false
 
-    onEntranceTriggerChanged: {
+    function finishEntrance() {
+        entranceAnim.stop();
+        _entranceDone = true;
+        _entranceOpacity = 1;
+        _entranceScale = 1;
+        _entranceTranslateY = 0;
+    }
+
+    function startEntrance() {
         _entranceDone = false;
         _entranceOpacity = 0;
         _entranceScale = 0.65;
         _entranceTranslateY = 50;
         Qt.callLater(function() {
-            entranceAnim.start();
+            if (root.popup || root.entranceAnimationsEnabled)
+                entranceAnim.start();
         });
     }
 
+    onEntranceTriggerChanged: {
+        if (popup || entranceAnimationsEnabled)
+            root.startEntrance();
+        else
+            root.finishEntrance();
+    }
+
+    onEntranceAnimationsEnabledChanged: {
+        if (!popup && !entranceAnimationsEnabled)
+            root.finishEntrance();
+    }
+
     Component.onCompleted: {
-        _entranceDone = false;
-        _entranceOpacity = 0;
-        _entranceScale = 0.65;
-        _entranceTranslateY = 50;
-        Qt.callLater(function() {
-            entranceAnim.start();
-        });
+        if (popup || (entranceAnimationsEnabled && entranceTrigger >= 0))
+            root.startEntrance();
+        else
+            root.finishEntrance();
     }
 
     SequentialAnimation {
         id: entranceAnim
-        PauseAnimation { duration: 150 + Math.min(Math.max(root.globalIndex, 0), 15) * 65 }
+        PauseAnimation {
+            duration: Math.round(Appearance.animation.elementMove.duration
+                * (0.35 + Math.min(Math.max(root.globalIndex, 0), 15) * 0.15))
+        }
         ParallelAnimation {
-            NumberAnimation { target: root; property: "_entranceOpacity"; from: 0; to: 1; duration: 320; easing.type: Easing.OutCubic }
-            NumberAnimation { target: root; property: "_entranceScale"; from: 0.65; to: 1.0; duration: 420; easing.type: Easing.OutBack; easing.overshoot: 0.8 }
-            NumberAnimation { target: root; property: "_entranceTranslateY"; from: 50; to: 0; duration: 380; easing.type: Easing.OutQuart }
+            NumberAnimation {
+                target: root; property: "_entranceOpacity"; from: 0; to: 1
+                duration: Appearance.animation.elementMove.duration
+                easing.type: Appearance.animation.elementMove.type
+                easing.bezierCurve: Appearance.animation.elementMove.bezierCurve
+            }
+            NumberAnimation {
+                target: root; property: "_entranceScale"; from: 0.65; to: 1
+                duration: Appearance.animation.elementMove.duration
+                easing.type: Appearance.animation.elementMove.type
+                easing.bezierCurve: Appearance.animation.elementMove.bezierCurve
+            }
+            NumberAnimation {
+                target: root; property: "_entranceTranslateY"; from: 50; to: 0
+                duration: Appearance.animation.elementMove.duration
+                easing.type: Appearance.animation.elementMove.type
+                easing.bezierCurve: Appearance.animation.elementMove.bezierCurve
+            }
         }
         PropertyAction { target: root; property: "_entranceDone"; value: true }
     }
