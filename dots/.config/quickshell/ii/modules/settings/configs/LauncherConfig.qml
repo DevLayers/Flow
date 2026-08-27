@@ -18,254 +18,118 @@ Item {
         forceWidth: false
         opacity: subPageOverlay.slideProgress
 
+        // ── Search Basics ─────────────────────────────────────────────────────
         ContentSection {
             icon: "tune"
-            title: Translation.tr("Search Behavior & Positioning")
-            tooltip: Translation.tr("Controls how the normal result list is ranked, positioned and sized. Panel-specific options are under Search modules.")
+            title: Translation.tr("Search basics")
+            tooltip: Translation.tr("Matching algorithms, result priority, and clipboard search.")
 
             ColumnLayout {
                 Layout.fillWidth: true
                 spacing: Appearance.sizes.elevationMargin / 2
 
-                ConfigSwitch {
-                    buttonIcon: "trending_up"
-                    text: Translation.tr("Frequency-based ranking")
-                    description: Translation.tr("Learns from launches and moves frequently used results closer to the top. Data stays on this device.")
-                    checked: Config.options.search.frecency
-                    onCheckedChanged: Config.options.search.frecency = checked
+                ConfigSubpageRow {
+                    buttonIcon: "travel_explore"
+                    title: Translation.tr("Search matching")
+                    description: Translation.tr("Frequency-based ranking, typos, fuzzy matching and layout correction")
+                    summary: (Config.options.search.typoTolerance.enable ? Translation.tr("Typo correction on") : Translation.tr("Typo correction off")) + " · " + Translation.tr("Strictness %1%").arg(Math.round(Config.options.search.typoTolerance.threshold * 100))
+                    onClicked: subPageOverlay.open(Qt.resolvedUrl("widgets/LauncherSearchMatchingConfig.qml"))
                 }
-                ConfigSwitch {
-                    buttonIcon: "stars"
-                    text: Translation.tr("Best match row")
-                    description: Translation.tr("Renders the top result as one prominent row carrying its own actions, and the rest as a single uniform list. You read one line instead of scanning seven groups.")
-                    checked: Config.options.search.bestMatch.enable
-                    onCheckedChanged: Config.options.search.bestMatch.enable = checked
+
+                ConfigSubpageRow {
+                    buttonIcon: "low_priority"
+                    title: Translation.tr("Results & priority")
+                    description: Translation.tr("Best Match layout and result group priority")
+                    summary: Config.options.search.bestMatch.enable ? Translation.tr("Best match on") : Translation.tr("Standard layout")
+                    onClicked: subPageOverlay.open(Qt.resolvedUrl("widgets/LauncherResultsConfig.qml"))
                 }
-                ConfigSpinBox {
-                    icon: "bolt"
-                    text: Translation.tr("Actions shown on the best match")
-                    value: Config.options.search.bestMatch.secondaryActions
-                    from: 0
-                    to: 6
-                    stepSize: 1
-                    enabled: Config.options.search.bestMatch.enable
-                    onValueChanged: Config.options.search.bestMatch.secondaryActions = value
-                    StyledToolTip {
-                        text: Translation.tr("Actions from the result itself, placed on the row and reachable with Alt+1…n. The action panel (Ctrl+K) still holds every one of them.")
-                    }
-                }
-                ConfigSwitch {
-                    buttonIcon: "reorder"
-                    text: Translation.tr("Hide group captions in best match mode")
-                    description: Translation.tr("With one answer at the top, the remaining results read better as one list. Turn this off to keep the category groups underneath it.")
-                    checked: Config.options.search.bestMatch.uniformList
-                    enabled: Config.options.search.bestMatch.enable
-                    onCheckedChanged: Config.options.search.bestMatch.uniformList = checked
-                }
-                ConfigSwitch {
-                    buttonIcon: "keyboard_alt"
-                    text: Translation.tr("Correct wrong keyboard layout")
-                    description: Translation.tr("Maps a query typed with another layout active back through the physical keys, so ‘ашкуащч’ still finds Firefox. Cyrillic is transliterated as well.")
-                    checked: Config.options.search.typoTolerance.keyboardLayouts
-                    onCheckedChanged: Config.options.search.typoTolerance.keyboardLayouts = checked
-                }
-                ConfigSwitch {
-                    buttonIcon: "spellcheck"
-                    text: Translation.tr("Typo-tolerant matching (Myers)")
-                    description: Translation.tr("When nothing matches exactly, a bit-parallel edit-distance pass finds the app you meant — ‘disccord’, ‘telgeram’, ‘vscdoe’. It runs only on an otherwise empty result, so it never crowds a query that already worked.")
-                    checked: Config.options.search.typoTolerance.enable
-                    onCheckedChanged: Config.options.search.typoTolerance.enable = checked
-                }
-                ConfigSlider {
-                    buttonIcon: "tune"
-                    text: Translation.tr("Typo tolerance strictness")
-                    value: Config.options.search.typoTolerance.threshold
-                    from: 0.15
-                    to: 0.6
-                    stepSize: 0.05
-                    enabled: Config.options.search.typoTolerance.enable
-                    onValueChanged: Config.options.search.typoTolerance.threshold = value
-                    StyledToolTip {
-                        text: Translation.tr("How close a name has to be before the typo pass offers it. Lower catches more mangled queries and lets more unrelated names through.")
-                    }
-                }
-                ConfigSlider {
-                    buttonIcon: "filter_alt"
-                    text: Translation.tr("Result relevance floor")
-                    value: Config.options.search.fuzzyThreshold
-                    from: 0.0
-                    to: 0.7
-                    stepSize: 0.05
-                    onValueChanged: Config.options.search.fuzzyThreshold = value
-                    StyledToolTip {
-                        text: Translation.tr("Fuzzy matching accepts any scattered subsequence, so without a floor ‘file’ reaches names that merely contain those letters somewhere. Raise it for a shorter, stricter list.")
-                    }
-                }
-                ConfigSwitch {
-                    buttonIcon: "apps"
-                    text: Translation.tr("Always list apps on empty query")
-                    description: Translation.tr("Shows applications before you type instead of keeping Search as a compact empty field.")
-                    checked: Config.options.search.alwaysListApps
-                    onCheckedChanged: {
-                        Config.options.search.alwaysListApps = checked;
-                        if (checked)
-                            Config.options.overview.enable = false;
-                    }
-                }
-                NoticeBox {
-                    Layout.fillWidth: true
-                    visible: Config.options.search.alwaysListApps
-                    materialIcon: "apps"
-                    text: Translation.tr("Search now opens directly with applications. The workspace Overview has been disabled and remains locked until this option is turned off.")
-                }
-                ConfigSwitch {
-                    buttonIcon: "center_focus_strong"
-                    text: Translation.tr("Center Search on Screen")
-                    description: Translation.tr("Places Search at the screen center; disable it to keep the Overview-aligned position.")
-                    checked: Config.options.search.positionStyle === "center"
-                    onCheckedChanged: Config.options.search.positionStyle = checked ? "center" : "default"
-                }
-                ConfigSlider {
-                    buttonIcon: "vertical_align_center"
-                    text: Translation.tr("Centered search vertical position")
-                    value: Config.options.search.centerVerticalRatio * 100
-                    from: 10
-                    to: 90
-                    stepSize: 1
-                    usePercentTooltip: true
-                    enabled: Config.options.search.positionStyle === "center"
-                    onValueChanged: Config.options.search.centerVerticalRatio = value / 100
-                }
-                ConfigSlider {
-                    buttonIcon: "search"
-                    text: Translation.tr("Search base width (px)")
-                    value: Config.options.search.baseWidth
-                    from: 360
-                    to: 1000
-                    stepSize: 10
-                    usePercentTooltip: false
-                    onValueChanged: Config.options.search.baseWidth = value
+
+                ConfigSubpageRow {
+                    buttonIcon: "content_paste"
+                    title: Translation.tr("Clipboard")
+                    description: Translation.tr("History, previews, detectors and clipboard search")
+                    summary: Translation.tr("Detectors and clipboard settings")
+                    onClicked: subPageOverlay.open(Qt.resolvedUrl("ClipboardConfig.qml"))
                 }
             }
         }
 
-        ContentSection {
-            id: resultPrioritySection
-            icon: "low_priority"
-            title: Translation.tr("Result priority")
-            tooltip: Translation.tr("Order the groups results are shown in, and choose which ones appear at all.")
-
-            // ContentSection reparents its children into an inner layout, so
-            // the list below reaches this by id rather than through `parent`.
-            readonly property var orderedIds: Array.from(Config.options.search.sectionOrder ?? [])
-                .map(entry => String(entry?.id ?? entry ?? ""))
-                .filter(id => id.length > 0)
-
-            ColumnLayout {
-                Layout.fillWidth: true
-                spacing: Appearance.sizes.elevationMargin / 2
-
-                NoticeBox {
-                    Layout.fillWidth: true
-                    materialIcon: "reorder"
-                    text: Translation.tr("Drag a group to change where its results appear. Removing one hides its results entirely — add it back from the selector below.")
-                }
-
-                ConfigListView {
-                    // Not a bar layout: no group owns a "centered" slot here.
-                    barSection: -1
-                    listModel: Config.options.search.sectionOrder
-                    availableComponents: SearchResultSectionRegistry.getAvailableComponents(resultPrioritySection.orderedIds)
-                    addButtonText: Translation.tr("Add group")
-                    infoProvider: id => SearchResultSectionRegistry.getComponent(id)
-                    // A result group is only ever an id and a position, so that
-                    // is all the stored entry carries. Taking the bar's
-                    // per-entry shape would write fields into config.json that
-                    // mean nothing here.
-                    normalizeEntry: entry => ({
-                            id: entry.id
-                        })
-                    onUpdated: newList => {
-                        Config.options.search.sectionOrder = newList;
-                    }
-                }
-            }
-        }
-
+        // ── Search Workspace & Panels ─────────────────────────────────────────
         ContentSection {
             icon: "extension"
             title: Translation.tr("Search workspace")
-            tooltip: Translation.tr("Configure every searchable panel and see the words or prefixes that open it.")
+            tooltip: Translation.tr("Configure every searchable panel, appearance, snippets, and shortcuts.")
 
             ColumnLayout {
                 Layout.fillWidth: true
                 spacing: Appearance.sizes.elevationMargin / 2
 
-                SubPageEntryButton {
-                    entryIcon: "dashboard_customize"
-                    entryTitle: Translation.tr("Search modules")
-                    entryDescription: Translation.tr("Enable panels and tune their data sources")
+                ConfigSubpageRow {
+                    buttonIcon: "dashboard_customize"
+                    title: Translation.tr("Search modules")
+                    description: Translation.tr("Enable panels and tune their data sources")
                     onClicked: subPageOverlay.open(Qt.resolvedUrl("widgets/LauncherModulesConfig.qml"))
                 }
-                SubPageEntryButton {
-                    entryIcon: "link"
-                    entryTitle: Translation.tr("Quicklinks")
-                    entryDescription: Translation.tr("Aliases that open or copy URLs")
-                    onClicked: subPageOverlay.open(Qt.resolvedUrl("widgets/LauncherQuicklinksConfig.qml"))
-                }
-                SubPageEntryButton {
-                    entryIcon: "content_cut"
-                    entryTitle: Translation.tr("Text snippets")
-                    entryDescription: Translation.tr("Reusable text with clipboard and date tokens")
-                    onClicked: subPageOverlay.open(Qt.resolvedUrl("widgets/LauncherSnippetsConfig.qml"))
-                }
-                SubPageEntryButton {
-                    entryIcon: "keyboard"
-                    entryTitle: Translation.tr("Search shortcuts")
-                    entryDescription: Translation.tr("Keyboard reference and conflict-safe defaults")
-                    onClicked: subPageOverlay.open(Qt.resolvedUrl("widgets/LauncherShortcutsConfig.qml"))
-                }
-                SubPageEntryButton {
-                    entryIcon: "palette"
-                    entryTitle: Translation.tr("Panel appearance")
-                    entryDescription: Translation.tr("Accent surfaces, hints and dimensions")
+
+                ConfigSubpageRow {
+                    buttonIcon: "palette"
+                    title: Translation.tr("Panel appearance")
+                    description: Translation.tr("Screen position, dimensions, accents, hints, and suggestions")
                     onClicked: subPageOverlay.open(Qt.resolvedUrl("widgets/LauncherAppearanceConfig.qml"))
                 }
-                SubPageEntryButton {
-                    entryIcon: "privacy_tip"
-                    entryTitle: Translation.tr("Data & privacy")
-                    entryDescription: Translation.tr("Frequency, histories, favorites and recent content")
+
+                ConfigSubpageRow {
+                    buttonIcon: "link"
+                    title: Translation.tr("Quicklinks")
+                    description: Translation.tr("Aliases that open or copy URLs")
+                    onClicked: subPageOverlay.open(Qt.resolvedUrl("widgets/LauncherQuicklinksConfig.qml"))
+                }
+
+                ConfigSubpageRow {
+                    buttonIcon: "content_cut"
+                    title: Translation.tr("Text snippets")
+                    description: Translation.tr("Reusable text with clipboard and date tokens")
+                    onClicked: subPageOverlay.open(Qt.resolvedUrl("widgets/LauncherSnippetsConfig.qml"))
+                }
+
+                ConfigSubpageRow {
+                    buttonIcon: "keyboard"
+                    title: Translation.tr("Search shortcuts")
+                    description: Translation.tr("Keyboard reference and conflict-safe defaults")
+                    onClicked: subPageOverlay.open(Qt.resolvedUrl("widgets/LauncherShortcutsConfig.qml"))
+                }
+
+                ConfigSubpageRow {
+                    buttonIcon: "privacy_tip"
+                    title: Translation.tr("Data & privacy")
+                    description: Translation.tr("Frequency, histories, favorites and recent content")
                     onClicked: subPageOverlay.open(Qt.resolvedUrl("widgets/LauncherDataConfig.qml"))
                 }
             }
         }
 
+        // ── Advanced ──────────────────────────────────────────────────────────
         ContentSection {
             icon: "construction"
             title: Translation.tr("Advanced")
-            tooltip: Translation.tr("Customize explicit triggers, aliases and empty-query suggestions.")
+            tooltip: Translation.tr("Customize explicit prefix triggers and custom app aliases.")
 
             ColumnLayout {
                 Layout.fillWidth: true
                 spacing: Appearance.sizes.elevationMargin / 2
 
-                SubPageEntryButton {
-                    entryIcon: "tune"
-                    entryTitle: Translation.tr("Prefixes")
-                    entryDescription: Translation.tr("Prefix triggers and search engine behavior")
+                ConfigSubpageRow {
+                    buttonIcon: "tune"
+                    title: Translation.tr("Prefixes")
+                    description: Translation.tr("Prefix triggers and search engine behavior")
                     onClicked: subPageOverlay.open(Qt.resolvedUrl("widgets/LauncherPrefixesConfig.qml"))
                 }
-                SubPageEntryButton {
-                    entryIcon: "shortcut"
-                    entryTitle: Translation.tr("Aliases")
-                    entryDescription: Translation.tr("Applications, commands and Search panels")
+
+                ConfigSubpageRow {
+                    buttonIcon: "shortcut"
+                    title: Translation.tr("Aliases")
+                    description: Translation.tr("Applications, commands and Search panels")
                     onClicked: subPageOverlay.open(Qt.resolvedUrl("widgets/LauncherAliasesConfig.qml"))
-                }
-                SubPageEntryButton {
-                    entryIcon: "auto_awesome"
-                    entryTitle: Translation.tr("Suggestions")
-                    entryDescription: Translation.tr("Empty-query content and app suggestions")
-                    onClicked: subPageOverlay.open(Qt.resolvedUrl("widgets/LauncherSuggestionsConfig.qml"))
                 }
             }
         }

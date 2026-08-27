@@ -46,9 +46,8 @@ Singleton {
             "name": "Bar",
             "icon": "space_bar",
             "component": "modules/settings/configs/BarConfig.qml",
-            "subPages": ["widgets/BarWidgetsWaffleConfig.qml", "widgets/ActiveWindowConfig.qml", "widgets/MediaPlayerConfig.qml", "widgets/UtilButtonsConfig.qml", "widgets/KeyboardLayoutConfig.qml", "widgets/SystemMonitorConfig.qml", "widgets/IndicatorsConfig.qml", "widgets/SportsConfig.qml", "widgets/BluetoothConfig.qml", "widgets/SystemTrayConfig.qml", "widgets/BatteryConfig.qml", "widgets/DashboardButtonConfig.qml", "widgets/ClockDateWidgetConfig.qml", "widgets/WaffleTweaksConfig.qml", "widgets/DockToPanelConfig.qml", "widgets/BarScrollActionsConfig.qml", "widgets/BarTooltipsConfig.qml", "widgets/BarPopupsConfig.qml"],
-            "searchSources": ["sections/BarLayoutSection.qml", "sections/BarBehaviorSection.qml", "sections/BarMonitorsSection.qml"],
-            "aliases": ["Bar & Status Bar", "Status Bar", "Shell mode", "Waffle"]
+            "subPages": ["widgets/BarAppearanceConfig.qml", "widgets/BarLayoutConfig.qml", "widgets/BarWidgetsWaffleConfig.qml", "widgets/ActiveWindowConfig.qml", "widgets/MediaPlayerConfig.qml", "widgets/UtilButtonsConfig.qml", "widgets/KeyboardLayoutConfig.qml", "widgets/SystemMonitorConfig.qml", "widgets/IndicatorsConfig.qml", "widgets/SportsConfig.qml", "widgets/BluetoothConfig.qml", "widgets/SystemTrayConfig.qml", "widgets/BatteryConfig.qml", "widgets/DashboardButtonConfig.qml", "widgets/ClockDateWidgetConfig.qml", "widgets/WaffleTweaksConfig.qml", "widgets/DockToPanelConfig.qml", "widgets/BarScrollActionsConfig.qml", "widgets/BarTooltipsConfig.qml", "widgets/BarPopupsConfig.qml"],
+            "aliases": ["Bar & Status Bar", "Status Bar", "Shell mode", "Waffle", "Bar appearance", "Bar layout", "Bar style", "Brand icon"]
         },
         {
             "id": "wallpaper",
@@ -87,8 +86,15 @@ Singleton {
             "name": "Dock",
             "icon": "dock_to_bottom",
             "component": "modules/settings/configs/DockConfig.qml",
-            "subPages": [],
-            "aliases": []
+            "subPages": [
+                "widgets/DockContentConfig.qml",
+                "widgets/DockAppearanceConfig.qml",
+                "widgets/DockAppGroupsConfig.qml",
+                "widgets/DockLivePreviewConfig.qml",
+                "widgets/DockMagnificationConfig.qml",
+                "widgets/DockPresetsManager.qml"
+            ],
+            "aliases": ["Dock Content", "Dock Widgets", "Dock Appearance", "Taskbar", "Pinned apps", "Magnification", "Smart grouping"]
         },
         {
             "id": "workspaces",
@@ -119,8 +125,11 @@ Singleton {
             "name": "Dynamic Island",
             "icon": "water_drop",
             "component": "modules/settings/configs/DynamicIslandConfig.qml",
-            "subPages": [],
-            "aliases": []
+            "subPages": [
+                "widgets/DynamicIslandStatusConfig.qml",
+                "widgets/DynamicIslandActivitiesConfig.qml"
+            ],
+            "aliases": ["Notch", "Floating notch", "Status notches", "Activity notches", "Dynamic Island in bar center"]
         },
         {
             "id": "overlays",
@@ -143,8 +152,8 @@ Singleton {
             "name": "Screenshots & Recording",
             "icon": "screenshot_region",
             "component": "modules/settings/configs/ScreenCaptureConfig.qml",
-            "subPages": ["widgets/ScreenRecordingConfig.qml"],
-            "aliases": ["Region Selector", "Screenshot", "Screen recording", "Google Lens", "wf-recorder", "OBS"]
+            "subPages": ["widgets/ScreenRecordingConfig.qml", "widgets/ScreenCaptureLensConfig.qml"],
+            "aliases": ["Region Selector", "Screenshot", "Screen recording", "Google Lens", "wf-recorder", "OBS", "Circle to Search"]
         },
         {
             "id": "notifications",
@@ -160,6 +169,9 @@ Singleton {
             "icon": "search",
             "component": "modules/settings/configs/LauncherConfig.qml",
             "subPages": [
+                "widgets/LauncherSearchMatchingConfig.qml",
+                "widgets/LauncherResultsConfig.qml",
+                "ClipboardConfig.qml",
                 "widgets/LauncherSuggestionsConfig.qml",
                 "widgets/LauncherPrefixesConfig.qml",
                 "widgets/LauncherAliasesConfig.qml",
@@ -170,7 +182,7 @@ Singleton {
                 "widgets/LauncherAppearanceConfig.qml",
                 "widgets/LauncherDataConfig.qml"
             ],
-            "aliases": ["App Search", "Search Prefixes", "App Aliases", "Search Modules", "Quicklinks", "Search Shortcuts", "Launcher Privacy"]
+            "aliases": ["App Search", "Search Prefixes", "App Aliases", "Search Modules", "Quicklinks", "Search Shortcuts", "Launcher Privacy", "Search matching", "Typo tolerance", "Fuzzy matching", "Best match", "Result priority", "Clipboard", "Clipboard History", "Content detectors"]
         },
         {
             "id": "dictation",
@@ -181,20 +193,17 @@ Singleton {
             "aliases": ["Speech to text", "Voice typing", "Voxtype", "Whisper", "Transcription", "Dictate"]
         },
         {
-            "id": "clipboard",
-            "name": "Clipboard",
-            "icon": "content_paste",
-            "component": "modules/settings/configs/ClipboardConfig.qml",
-            "subPages": [],
-            "aliases": ["Clipboard History Search"]
-        },
-        {
             "id": "cheatSheet",
             "name": "Cheat Sheet",
             "icon": "help",
             "component": "modules/settings/configs/CheatSheetConfig.qml",
-            "subPages": [],
-            "aliases": []
+            "subPages": [
+                "widgets/CheatSheetAppearanceConfig.qml",
+                "widgets/TimetableConfig.qml",
+                "widgets/CheatsheetAminoAcidsConfig.qml",
+                "widgets/CheatsheetCommandsConfig.qml"
+            ],
+            "aliases": ["Shortcuts", "Keybinds", "Timetable", "Gmail", "Amino acids", "Commands reference", "Periodic table"]
         },
         {
             "id": "windows",
@@ -225,8 +234,11 @@ Singleton {
             "name": "Touch & Gestures",
             "icon": "touch_app",
             "component": "modules/settings/configs/TouchGesturesConfig.qml",
-            "subPages": [],
-            "aliases": ["Touchscreen", "Touch", "Swipe", "Gestures", "Edge gestures", "Tablet"]
+            "subPages": [
+                "widgets/TouchEdgeGesturesConfig.qml",
+                "widgets/TouchSensitivityConfig.qml"
+            ],
+            "aliases": ["Touchscreen", "Touch", "Swipe", "Gestures", "Edge gestures", "Tablet", "Calibration", "Touchpad"]
         },
         {
             "id": "mediaMusic",
@@ -257,9 +269,22 @@ Singleton {
             "name": "AI Assistant",
             "icon": "neurology",
             "component": "modules/settings/configs/AiAssistantConfig.qml",
-            "subPages": ["ai/AdvancedAiConfig.qml", "ai/CustomModelsConfig.qml", "ai/RagConfig.qml", "ai/AiRemoteAccessConfig.qml"],
-            "searchSources": ["ai/AiUsageDashboard.qml"],
-            "aliases": ["Core Services", "Gemini", "AI", "System prompt", "Tokens", "Usage"]
+            "subPages": [
+                "ai/AiContextMemoryConfig.qml",
+                "ai/AiConversationAppearanceConfig.qml",
+                "ai/AiNotificationsConfig.qml",
+                "ai/AiUsageCostConfig.qml",
+                "ai/AiPromptPrivacyConfig.qml",
+                "ai/AiModelsKeysConfig.qml",
+                "ai/AiToolsPermissionsConfig.qml",
+                "ai/AiFilesVisionVoiceConfig.qml",
+                "ai/RagConfig.qml",
+                "ai/AiRequestLimitsConfig.qml",
+                "ai/AiRemoteAccessConfig.qml",
+                "ai/AdvancedAiConfig.qml",
+                "ai/CustomModelsConfig.qml"
+            ],
+            "aliases": ["Core Services", "Gemini", "AI", "System prompt", "Tokens", "Usage", "Context", "Memory", "Formatting", "Thinking", "Cost", "Privacy"]
         },
         {
             "id": "tasksAccounts",
@@ -290,8 +315,11 @@ Singleton {
             "name": "App Usage",
             "icon": "bar_chart",
             "component": "modules/settings/configs/UsageStatsConfig.qml",
-            "subPages": [],
-            "aliases": ["Usage stats", "Screen time", "App usage", "Digital wellbeing", "Energy per app", "RAPL", "History retention"]
+            "subPages": [
+                "widgets/UsageStatsOverlayConfig.qml",
+                "widgets/UsageStatsCollectionConfig.qml"
+            ],
+            "aliases": ["Usage stats", "Screen time", "App usage", "Digital wellbeing", "Energy per app", "RAPL", "History retention", "Sampler"]
         },
         {
             "id": "network",
@@ -346,6 +374,15 @@ Singleton {
             "hidden": true
         },
         {
+            "id": "clipboard",
+            "name": "Clipboard",
+            "icon": "content_paste",
+            "component": "modules/settings/configs/ClipboardConfig.qml",
+            "subPages": [],
+            "aliases": ["Clipboard History Search", "Clipboard"],
+            "hidden": true
+        },
+        {
             "id": "search",
             "name": "Search Results",
             "icon": "search",
@@ -375,7 +412,7 @@ Singleton {
         {
             "id": "tools",
             "name": "Tools",
-            "pageIds": ["launcher", "clipboard", "dictation", "screenCapture", "notifications", "overlays", "modes", "cheatSheet"]
+            "pageIds": ["launcher", "dictation", "screenCapture", "notifications", "overlays", "modes", "cheatSheet"]
         },
         {
             "id": "servicesIntegrations",

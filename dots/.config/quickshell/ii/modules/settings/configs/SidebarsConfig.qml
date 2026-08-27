@@ -228,15 +228,18 @@ Item {
         ContentSection {
             title: Translation.tr("Quick Toggles & Sliders")
             icon: "tune"
+            tooltip: Translation.tr("Configure quick toggle layout, Android columns and capsule sliders.")
 
-            ServiceCard {
-                usePrimaryContainer: true
-                cardIcon: "tune"
-                cardHue: 190
-                cardShape: "Cookie9Sided"
-                title: Translation.tr("Quick toggles and slider settings")
-                description: Translation.tr("Configure toggle styles, Android column count, capsule sliders, and fixed sliders")
-                onOpenCard: sidebarsRoot.activeSubPage = Qt.resolvedUrl("widgets/SidebarQuickTogglesConfig.qml")
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: Appearance.sizes.elevationMargin / 2
+
+                ConfigSubpageRow {
+                    buttonIcon: "tune"
+                    title: Translation.tr("Quick toggles and slider settings")
+                    description: Translation.tr("Configure toggle styles, Android column count, capsule sliders, and fixed sliders")
+                    onClicked: sidebarsRoot.activeSubPage = Qt.resolvedUrl("widgets/SidebarQuickTogglesConfig.qml")
+                }
             }
         }
 

@@ -81,55 +81,56 @@ ContentPage {
         }
     }
 
-    WarningBox {
+    ColumnLayout {
         Layout.fillWidth: true
-        Layout.bottomMargin: 8
-        visible: page.opts.overlayEnabled && page.keybindChecked && !page.keybindFound
-        materialIcon: "keyboard_off"
-        text: Translation.tr("Hyprland has no binding for the manager, so Super + Y does nothing. "
-            + "Re-run the setup script with --hypr to install the Hyprland config, "
-            + "or bind quickshell:modesToggle yourself.")
-        isFirst: true
-        isLast: true
-    }
+        spacing: 2
 
-    KeyboardShortcutBox {
-        Layout.fillWidth: true
-        visible: page.opts.overlayEnabled
-        text: Translation.tr("Open the Modes & Routines manager")
-        keys: ["Super", "Y"]
-    }
-
-    NoticeBox {
-        Layout.fillWidth: true
-        Layout.bottomMargin: 8
-        materialIcon: "tune"
-        text: {
-            const modes = Modes.modes.length;
-            const routines = Modes.routines.length;
-            const line = Translation.tr("%1 mode(s) and %2 routine(s) set up.").arg(modes).arg(routines);
-            if (Modes.active)
-                return line + " " + Translation.tr("%1 is on right now.").arg(Modes.activeMode?.name ?? "");
-            return line + " " + Translation.tr("Nothing is on right now.");
+        WarningBox {
+            Layout.fillWidth: true
+            visible: page.opts.overlayEnabled && page.keybindChecked && !page.keybindFound
+            materialIcon: "keyboard_off"
+            text: Translation.tr("Hyprland has no binding for the manager, so Super + Y does nothing. "
+                + "Re-run the setup script with --hypr to install the Hyprland config, "
+                + "or bind quickshell:modesToggle yourself.")
         }
 
-        RippleButton {
-            id: openButton
-            implicitHeight: 34
-            horizontalPadding: 16
-            buttonRadius: Appearance.rounding.full
-            colBackground: Appearance.colors.colPrimary
-            colBackgroundHover: Appearance.colors.colPrimaryHover
-            colRipple: Appearance.colors.colPrimaryActive
-            enabled: page.opts.overlayEnabled
-            opacity: enabled ? 1 : 0.5
-            onClicked: GlobalStates.modesOpen = true
+        KeyboardShortcutBox {
+            Layout.fillWidth: true
+            visible: page.opts.overlayEnabled
+            text: Translation.tr("Open the Modes & Routines manager")
+            keys: ["Super", "Y"]
+        }
 
-            contentItem: StyledText {
-                text: Translation.tr("Open the manager")
-                horizontalAlignment: Text.AlignHCenter
-                verticalAlignment: Text.AlignVCenter
-                color: Appearance.colors.colOnPrimary
+        NoticeBox {
+            Layout.fillWidth: true
+            materialIcon: "tune"
+            text: {
+                const modes = Modes.modes.length;
+                const routines = Modes.routines.length;
+                const line = Translation.tr("%1 mode(s) and %2 routine(s) set up.").arg(modes).arg(routines);
+                if (Modes.active)
+                    return line + " " + Translation.tr("%1 is on right now.").arg(Modes.activeMode?.name ?? "");
+                return line + " " + Translation.tr("Nothing is on right now.");
+            }
+
+            RippleButton {
+                id: openButton
+                implicitHeight: 34
+                horizontalPadding: 16
+                buttonRadius: Appearance.rounding.full
+                colBackground: Appearance.colors.colPrimary
+                colBackgroundHover: Appearance.colors.colPrimaryHover
+                colRipple: Appearance.colors.colPrimaryActive
+                enabled: page.opts.overlayEnabled
+                opacity: enabled ? 1 : 0.5
+                onClicked: GlobalStates.modesOpen = true
+
+                contentItem: StyledText {
+                    text: Translation.tr("Open the manager")
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                    color: Appearance.colors.colOnPrimary
+                }
             }
         }
     }

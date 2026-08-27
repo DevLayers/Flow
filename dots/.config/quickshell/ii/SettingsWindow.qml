@@ -282,6 +282,20 @@ FloatingWindow {
         if (!pending || pending === "")
             return;
 
+        if (pending === "clipboard") {
+            const launcherIndex = root.pageIndexById("launcher");
+            if (launcherIndex >= 0) {
+                root.currentPage = launcherIndex;
+                const targetSubPage = "ClipboardConfig.qml";
+                if (pageLoader.status === Loader.Ready) {
+                    Qt.callLater(() => root.restoreSubPagePath(targetSubPage));
+                } else {
+                    root.pendingSubPage = targetSubPage;
+                }
+                return;
+            }
+        }
+
         const directIndex = root.pageIndexById(pending);
         if (directIndex >= 0) {
             const samePage = root.currentPage === directIndex;

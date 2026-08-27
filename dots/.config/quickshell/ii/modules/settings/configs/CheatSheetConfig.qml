@@ -32,124 +32,35 @@ Item {
             keys: ["Super", "/"]
         }
 
+        // ── Cheatsheet Style & Layout ─────────────────────────────────────────
         ContentSection {
-            title: Translation.tr("General Options")
+            title: Translation.tr("Key Symbols & Typography")
             icon: "keyboard"
+            tooltip: Translation.tr("Super key icons, modifier key symbols, split buttons, and font sizes.")
 
             ColumnLayout {
                 Layout.fillWidth: true
-                spacing: 4
+                spacing: Appearance.sizes.elevationMargin / 2
 
-                ContentSubsection {
-                    title: Translation.tr("Super key symbol")
-                    icon: "keyboard_command_key"
-                    Layout.fillWidth: true
-
-                    ConfigSelectionArray {
-                        currentValue: Config.options.cheatsheet.superKey
-                        onSelected: (newValue) => {
-                            Config.options.cheatsheet.superKey = newValue;
-                        }
-                        options: (["󰖳", "", "󰨡", "", "󰌽", "󰣇", "", "", "", "", "", "󱄛", "", "", "", "⌘", "󰀲", "󰟍", ""]).map((icon) => {
-                            return {
-                                "displayName": icon,
-                                "value": icon
-                            };
-                        })
-                    }
-
+                ConfigSubpageRow {
+                    buttonIcon: "keyboard_command_key"
+                    title: Translation.tr("Key symbols & typography")
+                    description: Translation.tr("Super glyph, mod symbols, mouse icons, split buttons and font size")
+                    summary: Translation.tr("Super: %1 · Key font: %2pt").arg(Config.options.cheatsheet.superKey).arg(Config.options.cheatsheet.fontSize.key)
+                    onClicked: subPageOverlay.open(Qt.resolvedUrl("widgets/CheatSheetAppearanceConfig.qml"))
                 }
-
-                ConfigSwitch {
-                    buttonIcon: "󰘵"
-                    text: Translation.tr("Use macOS-like symbols for mods keys")
-                    checked: Config.options.cheatsheet.useMacSymbol
-                    onCheckedChanged: {
-                        Config.options.cheatsheet.useMacSymbol = checked;
-                    }
-                }
-
-                ConfigSwitch {
-                    buttonIcon: "󱊶"
-                    text: Translation.tr("Use symbols for function keys")
-                    checked: Config.options.cheatsheet.useFnSymbol
-                    onCheckedChanged: {
-                        Config.options.cheatsheet.useFnSymbol = checked;
-                    }
-                }
-
-                ConfigSwitch {
-                    buttonIcon: "󰍽"
-                    text: Translation.tr("Use symbols for mouse")
-                    checked: Config.options.cheatsheet.useMouseSymbol
-                    onCheckedChanged: {
-                        Config.options.cheatsheet.useMouseSymbol = checked;
-                    }
-                }
-
-                ConfigSwitch {
-                    buttonIcon: "highlight_keyboard_focus"
-                    text: Translation.tr("Split buttons")
-                    checked: Config.options.cheatsheet.splitButtons
-                    onCheckedChanged: {
-                        Config.options.cheatsheet.splitButtons = checked;
-                    }
-                }
-
-                ConfigSwitch {
-                    buttonIcon: "filter_alt"
-                    text: Translation.tr("Filter unbinds")
-                    checked: Config.options.cheatsheet.filterUnbinds
-                    onCheckedChanged: {
-                        Config.options.cheatsheet.filterUnbinds = checked;
-                    }
-                }
-
             }
-
-            Item {
-                Layout.preferredHeight: 16
-            }
-
-            ColumnLayout {
-                Layout.fillWidth: true
-                spacing: 4
-
-                ConfigSpinBox {
-                    icon: "format_size"
-                    text: Translation.tr("Keybind font size")
-                    value: Config.options.cheatsheet.fontSize.key
-                    from: 8
-                    to: 30
-                    stepSize: 1
-                    onValueChanged: {
-                        Config.options.cheatsheet.fontSize.key = value;
-                    }
-                }
-
-                ConfigSpinBox {
-                    icon: "text_fields"
-                    text: Translation.tr("Description font size")
-                    value: Config.options.cheatsheet.fontSize.comment
-                    from: 8
-                    to: 30
-                    stepSize: 1
-                    onValueChanged: {
-                        Config.options.cheatsheet.fontSize.comment = value;
-                    }
-                }
-
-            }
-
         }
 
+        // ── Cheatsheet Widgets ────────────────────────────────────────────────
         ContentSection {
-            title: Translation.tr("Toggle Widgets")
+            title: Translation.tr("Cheatsheet Widgets")
             icon: "widgets"
+            tooltip: Translation.tr("Enable or configure interactive reference panels in the cheatsheet.")
 
             ColumnLayout {
                 Layout.fillWidth: true
-                spacing: 4
+                spacing: Appearance.sizes.elevationMargin / 2
 
                 ConfigSwitch {
                     buttonIcon: "calendar_month"
@@ -237,9 +148,7 @@ Item {
 
     ConfigSubPageHost {
         id: subPageOverlay
-
         anchors.fill: parent
         z: 10
     }
-
 }

@@ -2574,57 +2574,17 @@ Item {
         visible: root.driveSubPageMode
         icon: "tune"
         title: Translation.tr("Advanced Drive Settings")
+        tooltip: Translation.tr("Transfer limits, retention, network triggers and notifications.")
 
-        RippleButton {
-            id: advancedDriveButton
+        ColumnLayout {
             Layout.fillWidth: true
-            implicitHeight: advancedDriveRow.implicitHeight + 32
-            buttonRadius: Appearance.rounding.full
-            colBackground: Appearance.colors.colTertiaryContainer
-            colBackgroundHover: Appearance.colors.colTertiaryContainerHover
-            colRipple: Appearance.colors.colTertiaryContainerActive
-            onClicked: root.activeSubPage = Qt.resolvedUrl("widgets/AdvancedDriveConfig.qml")
+            spacing: Appearance.sizes.elevationMargin / 2
 
-            contentItem: RowLayout {
-                id: advancedDriveRow
-                anchors.fill: parent
-                anchors.margins: 16
-                spacing: 12
-
-                MaterialShapeWrappedMaterialSymbol {
-                    text: "tune"
-                    shape: MaterialShape.Shape.Circle
-                    iconSize: Appearance.font.pixelSize.large
-                    padding: 8
-                    color: Appearance.colors.colTertiary
-                    colSymbol: Appearance.colors.colOnTertiary
-                }
-
-                ColumnLayout {
-                    Layout.fillWidth: true
-                    spacing: 2
-
-                    StyledText {
-                        Layout.fillWidth: true
-                        text: Translation.tr("Advanced Drive Settings")
-                        font.pixelSize: Appearance.font.pixelSize.normal
-                        color: Appearance.colors.colOnTertiaryContainer
-                    }
-
-                    StyledText {
-                        Layout.fillWidth: true
-                        text: Translation.tr("Transfer limits, retention, network triggers and notifications")
-                        color: Appearance.colors.colOnTertiaryContainer
-                        opacity: 0.82
-                        wrapMode: Text.WordWrap
-                    }
-                }
-
-                MaterialSymbol {
-                    text: "arrow_forward"
-                    iconSize: Appearance.font.pixelSize.large
-                    color: Appearance.colors.colOnTertiaryContainer
-                }
+            ConfigSubpageRow {
+                buttonIcon: "tune"
+                title: Translation.tr("Advanced Drive Settings")
+                description: Translation.tr("Transfer limits, retention, network triggers and notifications")
+                onClicked: root.activeSubPage = Qt.resolvedUrl("widgets/AdvancedDriveConfig.qml")
             }
         }
     }

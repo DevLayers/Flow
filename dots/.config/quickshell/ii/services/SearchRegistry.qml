@@ -227,7 +227,7 @@ Item {
             "ConfigPresetsView", "HelperLinkBox", "NoticeBox", "ShortcutBox",
             "MaterialTextField", "Flow", "RowLayout", "ColumnLayout", "ServiceCard",
             "RippleButtonWithIcon", "ConfigListView", "ColorPreviewButton", "StyledComboBox",
-            "MonitorPicker"
+            "MonitorPicker", "ConfigSubpageRow"
         ];
         for (let t of types) {
             let blocks = extractBlocks(text, t);
@@ -237,7 +237,8 @@ Item {
                             || extractProperty(b.inner, "tooltip")
                             || extractProperty(b.inner, "value")
                             || extractProperty(b.inner, "placeholderText")
-                            || extractProperty(b.inner, "description");
+                            || extractProperty(b.inner, "description")
+                            || extractProperty(b.inner, "summary");
                 items.push({
                     type: t,
                     text: textProp,
