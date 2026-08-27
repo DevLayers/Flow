@@ -12,6 +12,8 @@ Item {
     property bool showBackButton: false
     signal goBack()
 
+    property alias activeSubPage: subPageOverlay.activeSubPage
+
     function cleanDockFolderPath(path: string): string {
         let cleanPath = String(path ?? "").trim().replace(/^file:\/\//, "");
         try {
@@ -52,8 +54,10 @@ Item {
     }
 
     ContentPage {
+        id: page
         anchors.fill: parent
         forceWidth: false
+        opacity: subPageOverlay.slideProgress
 
         RowLayout {
             visible: root.showBackButton
@@ -218,6 +222,72 @@ Item {
                             iconSize: 18
                             fill: parent.parent.active ? 1 : 0
                             color: parent.parent.active ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colSubtext
+                        }
+                    }
+                }
+
+                // Live Preview Tile (com botão de navegação)
+                Rectangle {
+                    Layout.fillWidth: true
+                    implicitHeight: 48
+                    radius: Appearance.rounding.normal
+                    color: (Config.options.dock.enableLivePreviewWidget ?? false) ? Appearance.colors.colPrimaryContainer : Appearance.colors.colLayer2
+
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: 12
+                        anchors.rightMargin: 8
+                        spacing: 8
+
+                        RippleButton {
+                            Layout.fillWidth: true
+                            Layout.fillHeight: true
+                            buttonRadius: Appearance.rounding.normal
+                            colBackground: "transparent"
+                            colBackgroundHover: "transparent"
+                            colRipple: "transparent"
+                            onClicked: Config.options.dock.enableLivePreviewWidget = !(Config.options.dock.enableLivePreviewWidget ?? false)
+
+                            RowLayout {
+                                anchors.fill: parent
+                                spacing: 8
+
+                                MaterialSymbol {
+                                    text: "live_tv"
+                                    iconSize: 20
+                                    fill: (Config.options.dock.enableLivePreviewWidget ?? false) ? 1 : 0
+                                    color: (Config.options.dock.enableLivePreviewWidget ?? false) ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnLayer2
+                                }
+
+                                StyledText {
+                                    Layout.fillWidth: true
+                                    text: Translation.tr("Live Preview")
+                                    font.pixelSize: Appearance.font.pixelSize.small
+                                    font.bold: (Config.options.dock.enableLivePreviewWidget ?? false)
+                                    color: (Config.options.dock.enableLivePreviewWidget ?? false) ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnLayer2
+                                }
+                            }
+                        }
+
+                        RippleButton {
+                            implicitWidth: 32
+                            implicitHeight: 32
+                            buttonRadius: Appearance.rounding.full
+                            colBackground: (Config.options.dock.enableLivePreviewWidget ?? false) ? Appearance.colors.colPrimary : Appearance.colors.colLayer3
+                            colBackgroundHover: Appearance.colors.colLayer3Hover
+                            colRipple: Appearance.colors.colLayer3Active
+                            onClicked: root.activeSubPage = Qt.resolvedUrl("DockLivePreviewConfig.qml")
+
+                            MaterialSymbol {
+                                anchors.centerIn: parent
+                                text: "settings"
+                                iconSize: 16
+                                color: (Config.options.dock.enableLivePreviewWidget ?? false) ? Appearance.colors.colOnPrimary : Appearance.colors.colOnLayer3
+                            }
+
+                            StyledToolTip {
+                                text: Translation.tr("Configure Live Preview settings")
+                            }
                         }
                     }
                 }
@@ -620,5 +690,11 @@ Item {
                 }
             }
         }
+    }
+
+    ConfigSubPageHost {
+        id: subPageOverlay
+        anchors.fill: parent
+        z: 10
     }
 }
