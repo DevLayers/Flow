@@ -96,6 +96,12 @@ Item {
                 text: Translation.tr("Toggle the widgets and utility buttons visible on the dock.")
             }
 
+            NoticeBox {
+                Layout.fillWidth: true
+                materialIcon: "memory"
+                text: Translation.tr("Adding more widgets to the dock increases CPU usage. Media and Live Preview are the most demanding, so enable only the widgets you need.")
+            }
+
             GridLayout {
                 id: dockButtonsGrid
                 Layout.fillWidth: true

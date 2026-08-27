@@ -66,6 +66,11 @@ Item {
 
     readonly property bool requestDockShow: (previewPopupLoader.item && previewPopupLoader.item.visible) || anyContextMenuOpen
 
+    // PanelWindow.visible stays true while the auto-hide surface is moved off
+    // screen. Expensive visual widgets must follow reveal, not only the
+    // lifetime of the panel window.
+    readonly property bool dockWidgetsActive: root.dockRevealed && root.dockWindowVisible
+
     readonly property real maxWindowPreviewHeight: 200
     readonly property real maxWindowPreviewWidth: 300
     readonly property real windowControlsHeight: 30
@@ -2521,11 +2526,15 @@ Item {
             width: root.isVertical ? root.buttonSlotSize : root.buttonSlotSize * 3
             height: root.isVertical ? root.buttonSlotSize : root.buttonSlotHeight
             readonly property int _index: parent._index
-            DockMediaWidget {
-                anchors.centerIn: parent
-                isVertical: root.isVertical
-                dockContent: root
-                delegateIndex: mediaItemRoot._index
+            Loader {
+                anchors.fill: parent
+                active: root.dockWidgetsActive
+                sourceComponent: DockMediaWidget {
+                    anchors.centerIn: parent
+                    isVertical: root.isVertical
+                    dockContent: root
+                    delegateIndex: mediaItemRoot._index
+                }
             }
         }
     }
@@ -2569,15 +2578,19 @@ Item {
             width: root.isVertical ? root.buttonSlotSize : root.buttonSlotSize * root.livePreviewWidgetSlots
             height: root.isVertical ? root.buttonSlotSize : root.buttonSlotHeight
             readonly property int _index: parent._index
-            DockLivePreviewWidget {
-                anchors.centerIn: parent
-                isVertical: root.isVertical
-                dockContent: root
-                dockRevealed: root.dockRevealed
-                dockWindowVisible: root.dockWindowVisible
-                delegateIndex: livePreviewItemRoot._index
-                onPickerRequested: {
-                    // Picker wiring belongs to the following live-preview phase.
+            Loader {
+                anchors.fill: parent
+                active: root.dockWidgetsActive
+                sourceComponent: DockLivePreviewWidget {
+                    anchors.centerIn: parent
+                    isVertical: root.isVertical
+                    dockContent: root
+                    dockRevealed: root.dockRevealed
+                    dockWindowVisible: root.dockWindowVisible
+                    delegateIndex: livePreviewItemRoot._index
+                    onPickerRequested: {
+                        // Picker wiring belongs to the following live-preview phase.
+                    }
                 }
             }
         }

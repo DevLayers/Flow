@@ -88,9 +88,10 @@ Item {
             title: Translation.tr("Result priority")
             tooltip: Translation.tr("Order the groups results are shown in, and choose which ones appear at all.")
 
-            readonly property var orderedIds: Array.from(Config.options.search.sectionOrder ?? [])
-                .map(entry => String(entry?.id ?? entry ?? ""))
-                .filter(id => id.length > 0)
+            readonly property var orderedIds: {
+                const list = Array.from(Config.options.search.sectionOrder ?? []);
+                return list.map(entry => String((entry && entry.id) ? entry.id : (entry || ""))).filter(id => id.length > 0);
+            }
 
             ColumnLayout {
                 Layout.fillWidth: true
