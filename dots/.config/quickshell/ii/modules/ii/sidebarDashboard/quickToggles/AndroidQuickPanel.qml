@@ -173,6 +173,23 @@ AbstractQuickPanel {
     // Dynamic height based on current page + page indicators
     readonly property real currentContentHeight: pageHeight(currentPage) + (editMode ? 14 : 0)
 
+    // How tall the panel is allowed to get, handed down by whoever hosts it.
+    // Negative means unconstrained, which is what a host that does not measure
+    // itself gets. Everything above the tray is fixed, so the tray gets what is
+    // left of the budget and scrolls the rest.
+    property real maxContentHeight: -1
+    // Every unused toggle wears an add badge that hangs 6px past its own top and
+    // right edge (EditableQuickToggleItem). Outside a clip that just draws over
+    // the panel padding; inside one it gets sliced, so the tray has to hand those
+    // 6px back on both sides.
+    readonly property real trayBadgeOverhang: 6
+    readonly property real trayMaxHeight: {
+        if (root.maxContentHeight <= 0)
+            return -1;
+        return Math.max(root.baseCellHeight,
+            root.maxContentHeight - unusedTogglesLoader.y - root.padding * 2);
+    }
+
     implicitHeight: contentItem.implicitHeight + root.padding * 2
     Behavior on implicitHeight {
         animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
@@ -618,50 +635,77 @@ AbstractQuickPanel {
 
         // Unused toggles (edit mode)
         FadeLoader {
+            id: unusedTogglesLoader
             shown: root.editMode
             anchors {
                 left: parent.left
                 right: parent.right
+                // Reach into the panel's own padding so the rightmost badges
+                // are inside the clip instead of against it.
+                rightMargin: -root.padding
             }
             sourceComponent: Item {
-                id: unusedCanvas
-                implicitHeight: Math.max(0, root.packedUnusedToggles.rowsUsed
-                    * (root.baseCellHeight + root.spacing) - root.spacing)
-                height: implicitHeight
+                id: trayViewport
+                implicitHeight: trayFlickable.implicitHeight
 
-                StableQuickToggleModel {
-                    id: unusedToggleModel
-                    sourceValues: root.positionedUnusedToggles
+                StyledFlickable {
+                    id: trayFlickable
+                    anchors.fill: parent
+                    readonly property real fullHeight: unusedCanvas.implicitHeight + root.trayBadgeOverhang
+                    implicitHeight: root.trayMaxHeight < 0 ? fullHeight
+                        : Math.min(fullHeight, root.trayMaxHeight)
+                    contentWidth: width
+                    contentHeight: fullHeight
+                    clip: true
+
+                    Item {
+                        id: unusedCanvas
+                        y: root.trayBadgeOverhang
+                        width: trayFlickable.width
+                        implicitHeight: Math.max(0, root.packedUnusedToggles.rowsUsed
+                            * (root.baseCellHeight + root.spacing) - root.spacing)
+                        height: implicitHeight
+
+                        StableQuickToggleModel {
+                            id: unusedToggleModel
+                            sourceValues: root.positionedUnusedToggles
+                        }
+
+                        Repeater {
+                            model: unusedToggleModel
+                            delegate: AndroidToggleDelegateChooser {
+
+                                editMode: root.editMode
+                                baseCellWidth: root.baseCellWidth
+                                baseCellHeight: root.baseCellHeight
+                                spacing: root.spacing
+                                isUnused: true
+                                pageIndex: root.currentPage
+                                gridColumns: root.columns
+                                panel: root
+                                gridRef: unusedCanvas
+
+                                onOpenAudioOutputDialog: root.openAudioOutputDialog()
+                                onOpenAudioInputDialog: root.openAudioInputDialog()
+                                onOpenBluetoothDialog: root.openBluetoothDialog()
+                                onOpenNightLightDialog: root.openNightLightDialog()
+                                onOpenWifiDialog: root.openWifiDialog()
+                                onOpenDarkModeDialog: root.openDarkModeDialog()
+                                onOpenLocalSendDialog: root.openLocalSendDialog()
+                                onOpenVpnDialog: root.openVpnDialog()
+                                onOpenTailscaleDialog: root.openTailscaleDialog()
+                                onOpenDnsOverTlsDialog: root.openDnsOverTlsDialog()
+                                onOpenIdleInhibitorDialog: root.openIdleInhibitorDialog()
+                                onOpenScreenShaderDialog: root.openScreenShaderDialog()
+                                onOpenModesDialog: root.openModesDialog()
+                            }
+                        }
+                    }
                 }
 
-                Repeater {
-                    model: unusedToggleModel
-                    delegate: AndroidToggleDelegateChooser {
-
-                        editMode: root.editMode
-                        baseCellWidth: root.baseCellWidth
-                        baseCellHeight: root.baseCellHeight
-                        spacing: root.spacing
-                        isUnused: true
-                        pageIndex: root.currentPage
-                        gridColumns: root.columns
-                        panel: root
-                        gridRef: unusedCanvas
-
-                        onOpenAudioOutputDialog: root.openAudioOutputDialog()
-                        onOpenAudioInputDialog: root.openAudioInputDialog()
-                        onOpenBluetoothDialog: root.openBluetoothDialog()
-                        onOpenNightLightDialog: root.openNightLightDialog()
-                        onOpenWifiDialog: root.openWifiDialog()
-                        onOpenDarkModeDialog: root.openDarkModeDialog()
-                        onOpenLocalSendDialog: root.openLocalSendDialog()
-                        onOpenVpnDialog: root.openVpnDialog()
-                        onOpenTailscaleDialog: root.openTailscaleDialog()
-                        onOpenDnsOverTlsDialog: root.openDnsOverTlsDialog()
-                        onOpenIdleInhibitorDialog: root.openIdleInhibitorDialog()
-                        onOpenScreenShaderDialog: root.openScreenShaderDialog()
-                        onOpenModesDialog: root.openModesDialog()
-                    }
+                ScrollEdgeFade {
+                    target: trayFlickable
+                    color: root.color
                 }
             }
         }

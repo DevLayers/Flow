@@ -108,6 +108,27 @@ Item {
     implicitHeight: sidebarRightBackground.implicitHeight
     implicitWidth: sidebarRightBackground.implicitWidth
 
+    // Edit mode grows the quick panel by a tray of every toggle that is not on a
+    // page, which has no natural cap and runs straight past the bottom of the
+    // sidebar. Hand the panel the height the column can actually give it, so it
+    // can cap and scroll that tray itself.
+    readonly property real quickPanelMaxHeight: {
+        let available = mainColumn.height;
+        const fixedHeights = [
+            sidebarBanner.visible ? sidebarBanner.Layout.preferredHeight : -1,
+            headerRow.visible ? headerRow.implicitHeight + headerRow.Layout.topMargin : -1,
+            centerGroup.visible ? centerGroup.implicitHeight : -1,
+            editModeSpacer.visible ? 0 : -1,
+            bottomGroup.visible ? bottomGroup.implicitHeight : -1
+        ];
+        for (let i = 0; i < fixedHeights.length; i++) {
+            if (fixedHeights[i] < 0)
+                continue;
+            available -= fixedHeights[i] + mainColumn.spacing;
+        }
+        return Math.max(0, available);
+    }
+
     Loader {
         id: sidebarRightShadowLoader
         active: (!GlobalStates.connectModeActive || GlobalStates.connectSidebarsSeparate || root.isDynamicIslandTop || root.isDynamicIslandBottom) && !root.anyDialogVisible
@@ -142,6 +163,7 @@ Item {
         }
 
         ColumnLayout {
+            id: mainColumn
             anchors.fill: parent
             anchors.margins: sidebarPadding
             spacing: sidebarPadding
@@ -155,6 +177,7 @@ Item {
 
             // SIDEBAR BANNER
             SidebarBanner {
+                id: sidebarBanner
                 Layout.fillWidth: true
                 Layout.preferredHeight: 220
                 visible: Config.options.sidebar.enableBanner
@@ -194,6 +217,7 @@ Item {
                 styleName: "android"
                 sourceComponent: AndroidQuickPanel {
                     editMode: root.editMode
+                    maxContentHeight: root.quickPanelMaxHeight
                     onOpenVpnDialog: root.showVpnDialog = true
                     onOpenTailscaleDialog: root.showTailscaleDialog = true
                     onOpenDnsOverTlsDialog: root.showDnsOverTlsDialog = true
@@ -215,6 +239,7 @@ Item {
             }
 
             Item {
+                id: editModeSpacer
                 Layout.fillHeight: true
                 visible: root.editMode
             }
