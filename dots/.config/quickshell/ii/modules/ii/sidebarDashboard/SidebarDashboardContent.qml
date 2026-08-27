@@ -28,6 +28,7 @@ import qs.modules.ii.sidebarDashboard.dnsOverTls
 import qs.modules.ii.sidebarDashboard.idleInhibitor
 import qs.modules.ii.sidebarDashboard.screenShader
 import qs.modules.ii.sidebarDashboard.modes
+import "SidebarSpaceArbitration.js" as SpaceArbitration
 
 Item {
     id: root
@@ -48,6 +49,34 @@ Item {
     property bool showModesDialog: false
     readonly property bool anyDialogVisible: showAudioOutputDialog || showAudioInputDialog || showBluetoothDialog || showNightLightDialog || showWifiDialog || showDarkModeDialog || showLocalSendDialog || showVpnDialog || showTailscaleDialog || showDnsOverTlsDialog || showIdleInhibitorDialog || showScreenShaderDialog || showModesDialog
     property bool editMode: false
+
+    // Compact-space arbitration is runtime-only. When the height that the
+    // notification center would receive with the bottom group expanded falls
+    // below its useful minimum, exactly one of the two groups stays expanded.
+    // Notifications win when compact mode first activates; a manual expansion
+    // request from the bottom group hands the space to it until it is collapsed.
+    property bool compactBottomRequestedExpanded: false
+    readonly property real expandedNotificationsHeightBudget: SpaceArbitration.expandedCenterBudget(
+        adaptiveGroups.availableHeight,
+        bottomGroup.expandedHeight,
+        sidebarPadding
+    )
+    readonly property real minimumExpandedNotificationsHeight: centerGroup.item?.minimumExpandedHeight ?? 0
+    readonly property bool compactModeRequired: SpaceArbitration.requiresCompactMode(
+        expandedNotificationsHeightBudget,
+        minimumExpandedNotificationsHeight,
+        !editMode && centerGroup.visible && bottomGroup.visible
+    )
+    readonly property var compactSpaceResolution: SpaceArbitration.resolve(
+        compactModeRequired,
+        compactBottomRequestedExpanded,
+        bottomGroup.collapsed,
+        editMode
+    )
+    readonly property bool notificationsCollapsed: compactSpaceResolution.notificationsCollapsed
+    readonly property bool bottomForceCollapsed: compactSpaceResolution.bottomForcedCollapsed
+
+    onCompactModeRequiredChanged: compactBottomRequestedExpanded = false
 
     property int entranceTrigger: -1
 
@@ -118,7 +147,6 @@ Item {
             sidebarBanner.visible ? sidebarBanner.Layout.preferredHeight : -1,
             headerRow.visible ? headerRow.implicitHeight + headerRow.Layout.topMargin : -1,
             centerGroup.visible ? centerGroup.implicitHeight : -1,
-            editModeSpacer.visible ? 0 : -1,
             bottomGroup.visible ? bottomGroup.implicitHeight : -1
         ];
         for (let i = 0; i < fixedHeights.length; i++) {
@@ -225,39 +253,110 @@ Item {
                 }
             }
 
-            Loader {
-                id: centerGroup
-                // Notifications remain backed by their global service; only the
-                // heavy visual center group is discarded while the sidebar is closed.
-                active: GlobalStates.sidebarRightOpen
-                asynchronous: true
-                sourceComponent: CenterWidgetGroup {}
-                Layout.alignment: Qt.AlignHCenter
-                Layout.fillHeight: true
-                Layout.fillWidth: true
-                Layout.minimumHeight: 120
-                visible: !root.editMode
-            }
-
             Item {
-                id: editModeSpacer
+                id: adaptiveGroups
                 Layout.fillHeight: true
-                visible: root.editMode
-            }
-
-            BottomWidgetGroup {
-                id: bottomGroup
-                Layout.alignment: Qt.AlignHCenter
-                // The banner costs the column 220px, all of which would come out
-                // of the notification list. Compact gives most of it back.
-                compact: Config.options.sidebar.enableBanner
-                Layout.fillHeight: !bottomGroup.effectivelyCollapsed
                 Layout.fillWidth: true
-                Layout.preferredHeight: implicitHeight
-                Layout.maximumHeight: implicitHeight
-                Layout.minimumHeight: bottomGroup.effectivelyCollapsed ? implicitHeight
-                    : bottomGroup.minExpandedHeight
-                forceCollapsed: root.editMode
+                Layout.minimumHeight: containmentHeight
+                readonly property real availableHeight: Math.max(0, mainColumn.height - y)
+                readonly property real packedTakeoverHeight: SpaceArbitration.packedGroupsMinimumHeight(
+                        bottomGroup.expandedHeight,
+                        centerGroup.collapsedHeight,
+                        targetSpacing
+                    )
+                readonly property real targetContainmentHeight: root.notificationsCollapsed
+                    ? packedTakeoverHeight
+                    : availableHeight
+                property real containmentHeight: targetContainmentHeight
+                readonly property real targetSpacing: SpaceArbitration.dashboardSpacing(
+                    root.notificationsCollapsed,
+                    root.sidebarPadding
+                )
+                readonly property real targetBottomHeight: bottomGroup.effectivelyCollapsed
+                    ? bottomGroup.collapsedHeight
+                    : root.notificationsCollapsed
+                        ? SpaceArbitration.expandedBottomFillHeight(
+                            availableHeight,
+                            bottomGroup.expandedHeight,
+                            centerGroup.collapsedHeight,
+                            targetSpacing
+                        )
+                        : bottomGroup.expandedHeight
+                readonly property real expandedCenterTargetHeight: Math.max(
+                    0,
+                    availableHeight - targetBottomHeight - targetSpacing
+                )
+                property real groupSpacing: targetSpacing
+                property real animatedBottomHeight: targetBottomHeight
+
+                Behavior on containmentHeight {
+                    NumberAnimation {
+                        duration: Appearance.animation.elementMove.duration
+                        easing.type: Appearance.animation.elementMove.type
+                        easing.bezierCurve: Appearance.animation.elementMove.bezierCurve
+                    }
+                }
+
+                Behavior on groupSpacing {
+                    NumberAnimation {
+                        duration: Appearance.animation.elementMove.duration
+                        easing.type: Appearance.animation.elementMove.type
+                        easing.bezierCurve: Appearance.animation.elementMove.bezierCurve
+                    }
+                }
+
+                Behavior on animatedBottomHeight {
+                    NumberAnimation {
+                        duration: Appearance.animation.elementMove.duration
+                        easing.type: Appearance.animation.elementMove.type
+                        easing.bezierCurve: Appearance.animation.elementMove.bezierCurve
+                    }
+                }
+
+                Loader {
+                    id: centerGroup
+                    // Notifications remain backed by their global service; only the
+                    // heavy visual center group is discarded while the sidebar is closed.
+                    active: GlobalStates.sidebarRightOpen
+                    asynchronous: true
+                    sourceComponent: CenterWidgetGroup {
+                        collapsed: root.notificationsCollapsed
+                    }
+                    readonly property real collapsedHeight: item?.collapsedHeight ?? 0
+                    property real animatedHeight: SpaceArbitration.notificationMaximumHeight(
+                        root.notificationsCollapsed,
+                        collapsedHeight,
+                        adaptiveGroups.expandedCenterTargetHeight
+                    )
+
+                    Behavior on animatedHeight {
+                        NumberAnimation {
+                            duration: Appearance.animation.elementMove.duration
+                            easing.type: Appearance.animation.elementMove.type
+                            easing.bezierCurve: Appearance.animation.elementMove.bezierCurve
+                        }
+                    }
+
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.bottom: bottomGroup.top
+                    anchors.bottomMargin: adaptiveGroups.groupSpacing
+                    height: animatedHeight
+                    visible: !root.editMode
+                }
+
+                BottomWidgetGroup {
+                    id: bottomGroup
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.bottom: parent.bottom
+                    height: adaptiveGroups.animatedBottomHeight
+                    forceCollapsed: root.bottomForceCollapsed
+                    onCollapseRequested: shouldCollapse => {
+                        if (root.compactModeRequired)
+                            root.compactBottomRequestedExpanded = !shouldCollapse;
+                    }
+                }
             }
         }
     }

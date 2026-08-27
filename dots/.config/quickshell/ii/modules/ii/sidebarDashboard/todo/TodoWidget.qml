@@ -10,9 +10,8 @@ Item {
     id: root
 
     property int entranceTrigger: -1
-    // The bottom group is 260px instead of 350 while the sidebar banner is on.
-    // Fixed chrome sized for the tall box eats the content whole in the short
-    // one, so it gives some back rather than clipping.
+    // Defensive fallback for alternate hosts smaller than the dashboard's
+    // fixed 350px bottom group.
     readonly property bool compact: root.height > 0 && root.height < 300
 
     property var tabButtonList: [

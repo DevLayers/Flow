@@ -26,22 +26,19 @@ Rectangle {
     //     }
     // }
 
-    // 350 is the calendar at its natural 38px cell. The sidebar column is within
-    // ~16px of full once a 220px banner is in it, so an expanded group at its
-    // natural size leaves the notification list with nothing to spare: compact
-    // hands 90px back by dropping the cell to 27px, which is a row and a half of
-    // notifications. Below minExpandedHeight the month grid stops being readable.
-    property bool compact: false
+    // The expanded group keeps the calendar's natural 38px-cell height. Space
+    // pressure is handled by the notification/bottom arbiter, not by shrinking
+    // the selected widget when the sidebar banner is enabled.
     readonly property real naturalExpandedHeight: 350
-    readonly property real compactExpandedHeight: 260
-    readonly property real minExpandedHeight: 260
-    readonly property real expandedHeight: compact ? compactExpandedHeight : naturalExpandedHeight
-    implicitHeight: effectivelyCollapsed ? collapsedBottomWidgetGroupRow.implicitHeight : expandedHeight
+    readonly property real expandedHeight: naturalExpandedHeight
+    readonly property real collapsedHeight: collapsedBottomWidgetGroupRow.implicitHeight
+    implicitHeight: effectivelyCollapsed ? collapsedHeight : expandedHeight
     property int selectedTab: Persistent.states.sidebar.bottomGroup.tab
     property int previousIndex: -1
     property bool collapsed: Persistent.states.sidebar.bottomGroup.collapsed
     property bool forceCollapsed: false
     readonly property bool effectivelyCollapsed: collapsed || forceCollapsed
+    signal collapseRequested(bool shouldCollapse)
     property var tabs: [
         {
             "type": "calendar",
@@ -89,6 +86,7 @@ Rectangle {
 
     function setCollapsed(state) {
         Persistent.states.sidebar.bottomGroup.collapsed = state;
+        root.collapseRequested(state);
     }
 
     state: effectivelyCollapsed ? "collapsed" : "expanded"
@@ -198,7 +196,7 @@ Rectangle {
             Layout.margins: 10
             Layout.leftMargin: 0
             // text: `${DateTime.collapsedCalendarFormat}   •   ${remainingTasks} task${remainingTasks > 1 ? "s" : ""}`
-            text: Translation.tr("%1   •   %2 tasks").arg(DateTime.collapsedCalendarFormat).arg(remainingTasks)
+            text: Translation.tr("%1   •   %2 tasks").arg(DateTime.collapsedCalendarFormat).arg(String(remainingTasks))
             font.pixelSize: Appearance.font.pixelSize.large
             color: Appearance.colors.colOnLayer1
         }

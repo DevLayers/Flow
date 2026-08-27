@@ -12,7 +12,22 @@ Rectangle {
     id: root
     radius: Appearance.rounding.normal
     color: Appearance.colors.colLayer1
-    implicitHeight: 250
+    clip: true
+
+    property bool collapsed: false
+    readonly property real contentMargin: 5
+    property real verticalContentMargin: collapsed ? 0 : contentMargin
+    readonly property real collapsedHeight: notificationList.collapsedHeight
+    readonly property real minimumExpandedHeight: notificationList.minimumExpandedHeight + contentMargin * 2
+    implicitHeight: collapsed ? collapsedHeight : 250
+
+    Behavior on verticalContentMargin {
+        NumberAnimation {
+            duration: Appearance.animation.elementMove.duration
+            easing.type: Appearance.animation.elementMove.type
+            easing.bezierCurve: Appearance.animation.elementMove.bezierCurve
+        }
+    }
 
     property int entranceTrigger: -1
 
@@ -30,8 +45,13 @@ Rectangle {
     }
 
     NotificationList {
+        id: notificationList
         anchors.fill: parent
-        anchors.margins: 5
+        anchors.leftMargin: root.contentMargin
+        anchors.rightMargin: root.contentMargin
+        anchors.topMargin: root.verticalContentMargin
+        anchors.bottomMargin: root.verticalContentMargin
+        collapsed: root.collapsed
         entranceTrigger: root.entranceTrigger
     }
 }

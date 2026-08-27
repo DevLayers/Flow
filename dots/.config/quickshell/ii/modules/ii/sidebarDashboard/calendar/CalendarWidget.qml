@@ -42,17 +42,24 @@ Item {
 
     onMonthShiftChanged: _entranceKey++
 
-    width: calendarColumn.width
-    implicitHeight: calendarColumn.height + 5
+    width: Math.max(calendarHeader.implicitWidth, calendarGridColumn.implicitWidth)
+    implicitHeight: root.headerHeight
+        + root.calendarSpacing
+        + calendarGridColumn.implicitHeight
+        + root.calendarSpacing
 
     // A month is a fixed 6 week rows plus the weekday header, so the only way to
     // fit a shorter box is a smaller cell. Whoever hosts the widget sizes it;
     // this reads that size back and never grows past the natural 38px.
     readonly property real headerHeight: 30
+    readonly property real calendarSpacing: 5
     readonly property real cellSize: {
         if (root.height <= 0)
             return 38;
-        const forRows = root.height - 5 - root.headerHeight - calendarColumn.spacing * 7;
+        const gridViewportHeight = root.height
+            - root.headerHeight
+            - root.calendarSpacing * 2;
+        const forRows = gridViewportHeight - calendarGridColumn.spacing * 6;
         return Math.max(26, Math.min(38, forRows / 7));
     }
     Keys.onPressed: (event) => {
@@ -94,131 +101,131 @@ Item {
         }
     }
 
-    ColumnLayout {
-        id: calendarColumn
+    // The controls share the top line with the bottom group's collapse button.
+    // The month grid gets its own viewport so extra fill height is distributed
+    // around the grid instead of pushing the controls away from the top.
+    RowLayout {
+        id: calendarHeader
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.top: parent.top
+        spacing: root.calendarSpacing
 
-        anchors.centerIn: parent
-        spacing: 5
+        CalendarHeaderButton {
+            clip: true
+            buttonText: `${monthShift != 0 ? "• " : ""}${viewingDate.toLocaleDateString(Qt.locale(), "MMMM yyyy")}`
+            tooltipText: (monthShift === 0) ? "" : Translation.tr("Jump to current month")
+            downAction: () => {
+                root.changeMonth(-monthShift);
+            }
+            contentItem: StyledText {
+                text: parent.buttonText
+                horizontalAlignment: Text.AlignHCenter
+                font.pixelSize: Appearance.font.pixelSize.larger
+                color: Appearance.colors.colOnLayer1
+                opacity: root._monthTextOpacity
+                transform: Translate {
+                    x: root._monthTextTranslateX
+                }
+            }
+        }
 
-        // Calendar header
-        RowLayout {
+        Item {
             Layout.fillWidth: true
-            spacing: 5
-
-            CalendarHeaderButton {
-                clip: true
-                buttonText: `${monthShift != 0 ? "• " : ""}${viewingDate.toLocaleDateString(Qt.locale(), "MMMM yyyy")}`
-                tooltipText: (monthShift === 0) ? "" : Translation.tr("Jump to current month")
-                downAction: () => {
-                    root.changeMonth(-monthShift);
-                }
-                contentItem: StyledText {
-                    text: parent.buttonText
-                    horizontalAlignment: Text.AlignHCenter
-                    font.pixelSize: Appearance.font.pixelSize.larger
-                    color: Appearance.colors.colOnLayer1
-                    opacity: root._monthTextOpacity
-                    transform: Translate {
-                        x: root._monthTextTranslateX
-                    }
-                }
-            }
-
-            Item {
-                Layout.fillWidth: true
-                Layout.fillHeight: false
-            }
-
-            CalendarHeaderButton {
-                forceCircle: true
-                downAction: () => {
-                    root.changeMonth(-1);
-                }
-
-                contentItem: MaterialSymbol {
-                    text: "chevron_left"
-                    iconSize: Appearance.font.pixelSize.larger
-                    horizontalAlignment: Text.AlignHCenter
-                    color: Appearance.colors.colOnLayer1
-                }
-
-            }
-
-            CalendarHeaderButton {
-                forceCircle: true
-                downAction: () => {
-                    root.changeMonth(1);
-                }
-
-                contentItem: MaterialSymbol {
-                    text: "chevron_right"
-                    iconSize: Appearance.font.pixelSize.larger
-                    horizontalAlignment: Text.AlignHCenter
-                    color: Appearance.colors.colOnLayer1
-                }
-
-            }
-
-        }
-
-        // Week days row
-        RowLayout {
-            id: weekDaysRow
-
-            Layout.alignment: Qt.AlignHCenter
             Layout.fillHeight: false
-            spacing: 5
-
-            Repeater {
-                id: buttonRepeater
-                model: CalendarLayout.weekDays.map((_, i) => {
-                    return CalendarLayout.weekDays[(i + Config.options.time.firstDayOfWeek) % 7];
-                })
-
-                delegate: CalendarDayButton {
-                    day: Translation.tr(modelData.day)
-                    isToday: modelData.today
-                    bold: true
-                    enabled: false
-                    taskList: []
-                    cellSize: root.cellSize
-                }
-
-            }
-
         }
 
-        // Real week rows
-        Repeater {
-            id: calendarRows
+        CalendarHeaderButton {
+            forceCircle: true
+            downAction: () => {
+                root.changeMonth(-1);
+            }
 
-            // model: calendarLayout
-            model: 6
+            contentItem: MaterialSymbol {
+                text: "chevron_left"
+                iconSize: Appearance.font.pixelSize.larger
+                horizontalAlignment: Text.AlignHCenter
+                color: Appearance.colors.colOnLayer1
+            }
+        }
 
-            delegate: RowLayout {
+        CalendarHeaderButton {
+            forceCircle: true
+            downAction: () => {
+                root.changeMonth(1);
+            }
+
+            contentItem: MaterialSymbol {
+                text: "chevron_right"
+                iconSize: Appearance.font.pixelSize.larger
+                horizontalAlignment: Text.AlignHCenter
+                color: Appearance.colors.colOnLayer1
+            }
+        }
+    }
+
+    Item {
+        id: calendarGridViewport
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.top: calendarHeader.bottom
+        anchors.bottom: parent.bottom
+        anchors.topMargin: root.calendarSpacing
+        anchors.bottomMargin: root.calendarSpacing
+
+        ColumnLayout {
+            id: calendarGridColumn
+            anchors.centerIn: parent
+            spacing: root.calendarSpacing
+
+            RowLayout {
+                id: weekDaysRow
                 Layout.alignment: Qt.AlignHCenter
                 Layout.fillHeight: false
-                spacing: 5
+                spacing: root.calendarSpacing
 
                 Repeater {
-                    model: Array(7).fill(modelData)
+                    id: buttonRepeater
+                    model: CalendarLayout.weekDays.map((_, i) => {
+                        return CalendarLayout.weekDays[(i + Config.options.time.firstDayOfWeek) % 7];
+                    })
 
                     delegate: CalendarDayButton {
-                        day: calendarLayout[modelData][index].day
-                        isToday: calendarLayout[modelData][index].today
-                        taskList: CalendarService.getTasksByDate(new Date(calendarLayout[modelData][index].year, calendarLayout[modelData][index].month, calendarLayout[modelData][index].day))
-                        gridRow: modelData
-                        gridCol: index
-                        entranceKey: calendarColumn.parent._entranceKey
+                        day: Translation.tr(modelData.day)
+                        isToday: modelData.today
+                        bold: true
+                        enabled: false
+                        taskList: []
                         cellSize: root.cellSize
                     }
-
                 }
-
             }
 
-        }
+            Repeater {
+                id: calendarRows
+                model: 6
 
+                delegate: RowLayout {
+                    Layout.alignment: Qt.AlignHCenter
+                    Layout.fillHeight: false
+                    spacing: root.calendarSpacing
+
+                    Repeater {
+                        model: Array(7).fill(modelData)
+
+                        delegate: CalendarDayButton {
+                            day: calendarLayout[modelData][index].day
+                            isToday: calendarLayout[modelData][index].today
+                            taskList: CalendarService.getTasksByDate(new Date(calendarLayout[modelData][index].year, calendarLayout[modelData][index].month, calendarLayout[modelData][index].day))
+                            gridRow: modelData
+                            gridCol: index
+                            entranceKey: root._entranceKey
+                            cellSize: root.cellSize
+                        }
+                    }
+                }
+            }
+        }
     }
 
 }
