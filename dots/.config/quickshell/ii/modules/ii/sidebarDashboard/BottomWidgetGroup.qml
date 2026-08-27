@@ -76,14 +76,6 @@ Rectangle {
         entranceTrigger++;
     }
 
-    Behavior on implicitHeight {
-        NumberAnimation {
-            duration: Appearance.animation.elementMove.duration
-            easing.type: Appearance.animation.elementMove.type
-            easing.bezierCurve: Appearance.animation.elementMove.bezierCurve
-        }
-    }
-
     function setCollapsed(state) {
         Persistent.states.sidebar.bottomGroup.collapsed = state;
         root.collapseRequested(state);
@@ -108,11 +100,9 @@ Rectangle {
         Transition {
             from: "*"
             to: "*"
-            NumberAnimation {
+            SidebarGroupAnimation {
                 properties: "opacity"
-                duration: Appearance.animation.elementMove.duration / 2
-                easing.type: Appearance.animation.elementMove.type
-                easing.bezierCurve: Appearance.animation.elementMove.bezierCurve
+                animationSpec: Appearance.animation.elementMove
             }
         }
     ]
@@ -179,14 +169,13 @@ Rectangle {
                     angle: 0
                 }
 
-                NumberAnimation {
+                SidebarGroupAnimation {
                     id: chevronUpAnim
                     target: chevronUpRotation
                     property: "angle"
                     from: 180
                     to: 0
-                    duration: 300
-                    easing.type: Easing.OutCubic
+                    animationSpec: Appearance.animation.elementMove
                 }
             }
         }
@@ -297,14 +286,13 @@ Rectangle {
                         angle: 0
                     }
 
-                    NumberAnimation {
+                    SidebarGroupAnimation {
                         id: chevronDownAnim
                         target: chevronDownRotation
                         property: "angle"
                         from: -180
                         to: 0
-                        duration: 300
-                        easing.type: Easing.OutCubic
+                        animationSpec: Appearance.animation.elementMove
                     }
                 }
             }

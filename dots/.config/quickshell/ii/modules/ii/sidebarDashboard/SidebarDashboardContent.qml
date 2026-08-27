@@ -147,7 +147,11 @@ Item {
             sidebarBanner.visible ? sidebarBanner.Layout.preferredHeight : -1,
             headerRow.visible ? headerRow.implicitHeight + headerRow.Layout.topMargin : -1,
             centerGroup.visible ? centerGroup.implicitHeight : -1,
-            bottomGroup.visible ? bottomGroup.implicitHeight : -1
+            bottomGroup.visible
+                ? (bottomGroup.effectivelyCollapsed
+                    ? bottomGroup.collapsedHeight
+                    : bottomGroup.expandedHeight)
+                : -1
         ];
         for (let i = 0; i < fixedHeights.length; i++) {
             if (fixedHeights[i] < 0)
@@ -171,6 +175,7 @@ Item {
         id: sidebarRightBackground
 
         anchors.fill: parent
+        clip: true
         implicitHeight: Math.max(0, parent.height - Appearance.sizes.hyprlandGapsOut * 2)
         implicitWidth: sidebarWidth - Appearance.sizes.hyprlandGapsOut * 2
         color: (GlobalStates.connectModeActive && !GlobalStates.connectSidebarsSeparate) ? "transparent" : (Config.options.bar.expressiveColors ? activeTheme.barBackground : Appearance.colors.colLayer0)
@@ -184,6 +189,19 @@ Item {
         topLeftRadius: ((isConnectDynamicIslandTop && root.isLoadedOnLeft) || (isConnectDynamicIslandBottom && !root.isLoadedOnLeft)) ? 0 : defaultRadius
         bottomRightRadius: (GlobalStates.connectModeActive && !GlobalStates.connectSidebarsSeparate && !isConnectDynamicIslandBottom) ? 0 : ((isConnectDynamicIslandBottom && !root.isLoadedOnLeft) ? 0 : defaultRadius)
         bottomLeftRadius: (GlobalStates.connectModeActive && !GlobalStates.connectSidebarsSeparate && !isConnectDynamicIslandBottom) ? 0 : ((isConnectDynamicIslandBottom && root.isLoadedOnLeft) ? 0 : defaultRadius)
+
+        layer.enabled: true
+        layer.effect: OpacityMask {
+            maskSource: Rectangle {
+                width: sidebarRightBackground.width
+                height: sidebarRightBackground.height
+                radius: sidebarRightBackground.radius
+                topLeftRadius: sidebarRightBackground.topLeftRadius
+                topRightRadius: sidebarRightBackground.topRightRadius
+                bottomLeftRadius: sidebarRightBackground.bottomLeftRadius
+                bottomRightRadius: sidebarRightBackground.bottomRightRadius
+            }
+        }
 
         property real dialogBlurProgress: root.anyDialogVisible ? 1.0 : 0.0
         Behavior on dialogBlurProgress {
@@ -290,26 +308,20 @@ Item {
                 property real animatedBottomHeight: targetBottomHeight
 
                 Behavior on containmentHeight {
-                    NumberAnimation {
-                        duration: Appearance.animation.elementMove.duration
-                        easing.type: Appearance.animation.elementMove.type
-                        easing.bezierCurve: Appearance.animation.elementMove.bezierCurve
+                    SidebarGroupAnimation {
+                        animationSpec: Appearance.animation.elementMove
                     }
                 }
 
                 Behavior on groupSpacing {
-                    NumberAnimation {
-                        duration: Appearance.animation.elementMove.duration
-                        easing.type: Appearance.animation.elementMove.type
-                        easing.bezierCurve: Appearance.animation.elementMove.bezierCurve
+                    SidebarGroupAnimation {
+                        animationSpec: Appearance.animation.elementMove
                     }
                 }
 
                 Behavior on animatedBottomHeight {
-                    NumberAnimation {
-                        duration: Appearance.animation.elementMove.duration
-                        easing.type: Appearance.animation.elementMove.type
-                        easing.bezierCurve: Appearance.animation.elementMove.bezierCurve
+                    SidebarGroupAnimation {
+                        animationSpec: Appearance.animation.elementMove
                     }
                 }
 
@@ -330,10 +342,8 @@ Item {
                     )
 
                     Behavior on animatedHeight {
-                        NumberAnimation {
-                            duration: Appearance.animation.elementMove.duration
-                            easing.type: Appearance.animation.elementMove.type
-                            easing.bezierCurve: Appearance.animation.elementMove.bezierCurve
+                        SidebarGroupAnimation {
+                            animationSpec: Appearance.animation.elementMove
                         }
                     }
 
@@ -890,8 +900,21 @@ Item {
         required property string styleName
         Layout.alignment: item?.Layout.alignment ?? Qt.AlignHCenter
         Layout.fillWidth: item?.Layout.fillWidth ?? false
+        Layout.preferredHeight: animatedPanelHeight
         visible: active
         active: Config.options.sidebar.quickToggles.style === styleName
+        clip: true
+        property real animatedPanelHeight: item?.implicitHeight ?? 0
+
+        // Animate the panel at its single layout boundary. Animating nested
+        // heights makes the outer target move on every frame and stretches the
+        // perceived transition beyond the configured duration.
+        Behavior on animatedPanelHeight {
+            SidebarGroupAnimation {
+                animationSpec: Appearance.animation.elementMove
+            }
+        }
+
         Connections {
             target: quickPanelImplLoader.item
             function onOpenAudioOutputDialog() {

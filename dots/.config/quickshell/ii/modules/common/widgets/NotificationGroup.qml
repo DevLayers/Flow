@@ -19,6 +19,10 @@ MouseArea { // Notification group area
     property bool expanded: false
     property bool popup: false
     property real zoom: 1.0
+    readonly property var expansionAnimationSpec: popup
+        ? Appearance.animation.elementMoveFast
+        : Appearance.animation.elementMove
+    property bool expansionTransitionActive: false
     // Keep only the latest collapsed preview; the count button still exposes
     // the full group and expansion reveals the remaining notifications.
     property int lazyLimit: 1
@@ -64,8 +68,13 @@ MouseArea { // Notification group area
 
     onExpandedChanged: {
         if (expanded) {
-            lazyLimit = Math.min(8, root.notificationCount);
-            if (lazyLimit < root.notificationCount) {
+            // The sidebar needs one stable final height for its group motion.
+            // Popup groups keep batched creation to protect their short-lived
+            // surface from a large synchronous delegate burst.
+            lazyLimit = root.popup
+                ? Math.min(8, root.notificationCount)
+                : root.notificationCount;
+            if (root.popup && lazyLimit < root.notificationCount) {
                 lazyLoadTimer.restart();
             }
         } else {
@@ -177,10 +186,7 @@ MouseArea { // Notification group area
     }
 
     function toggleExpanded() {
-        if (expanded)
-            implicitHeightAnim.enabled = true;
-        else
-            implicitHeightAnim.enabled = false;
+        root.expansionTransitionActive = true;
         root.expanded = !root.expanded;
     }
 
@@ -268,14 +274,18 @@ MouseArea { // Notification group area
         implicitHeight: row.implicitHeight + root.padding * 2
 
         Behavior on implicitHeight {
-            id: implicitHeightAnim
             // Only animate implicitHeight when manually expanding/collapsing.
             // When NOT expanded, new notifications arriving can cause row.implicitHeight
             // to momentarily resolve to a lower value (before layout settles), triggering
             // this Behavior and animating the card to a wrong intermediate height — which
             // desynchronizes the outer ListView's item positions, producing the overlap look.
-            enabled: root.expanded
-            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+            enabled: root.expansionTransitionActive
+            NumberAnimation {
+                duration: root.expansionAnimationSpec.duration
+                easing.type: root.expansionAnimationSpec.type
+                easing.bezierCurve: root.expansionAnimationSpec.bezierCurve
+                onFinished: root.expansionTransitionActive = false
+            }
         }
 
         RowLayout { // Left column for icon, right column for content
@@ -301,7 +311,11 @@ MouseArea { // Notification group area
                 spacing: expanded ? (root.multipleNotifications ? (notificationGroup?.notifications[root.notificationCount - 1].image != "") ? 35 : 5 : 0) : 0
                 // spacing: 00
                 Behavior on spacing {
-                    animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                    NumberAnimation {
+                        duration: root.expansionAnimationSpec.duration
+                        easing.type: root.expansionAnimationSpec.type
+                        easing.bezierCurve: root.expansionAnimationSpec.bezierCurve
+                    }
                 }
 
                 Item { // App name (or summary when there's only 1 notif) and time
@@ -369,6 +383,7 @@ MouseArea { // Notification group area
                         zoom: root.zoom
                         fontSize: topRow.fontSize
                         iconSize: Appearance.font.pixelSize.normal * root.zoom
+                        animationSpec: root.expansionAnimationSpec
                         onClicked: {
                             root.toggleExpanded();
                         }
@@ -403,7 +418,11 @@ MouseArea { // Notification group area
                     }
 
                     Behavior on spacing {
-                        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                        NumberAnimation {
+                            duration: root.expansionAnimationSpec.duration
+                            easing.type: root.expansionAnimationSpec.type
+                            easing.bezierCurve: root.expansionAnimationSpec.bezierCurve
+                        }
                     }
 
                     Repeater {
@@ -418,6 +437,7 @@ MouseArea { // Notification group area
                             qmlParent: notificationsColumn
                             notificationObject: modelData
                             expanded: root.expanded
+                            animationSpec: root.expansionAnimationSpec
                             zoom: root.zoom
                             onlyNotification: (root.notificationCount === 1)
                             visible: root.expanded || (index < 1)

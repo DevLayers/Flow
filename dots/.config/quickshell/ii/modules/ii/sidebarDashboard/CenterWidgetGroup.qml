@@ -22,10 +22,8 @@ Rectangle {
     implicitHeight: collapsed ? collapsedHeight : 250
 
     Behavior on verticalContentMargin {
-        NumberAnimation {
-            duration: Appearance.animation.elementMove.duration
-            easing.type: Appearance.animation.elementMove.type
-            easing.bezierCurve: Appearance.animation.elementMove.bezierCurve
+        SidebarGroupAnimation {
+            animationSpec: Appearance.animation.elementMove
         }
     }
 

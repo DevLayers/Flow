@@ -1,5 +1,6 @@
 import qs.modules.common
 import qs.modules.common.widgets
+import qs.modules.ii.sidebarDashboard
 import qs.services
 import Qt5Compat.GraphicalEffects
 import QtQuick
@@ -112,10 +113,8 @@ Item {
         enabled: !root.collapsed
 
         Behavior on opacity {
-            NumberAnimation {
-                duration: Appearance.animation.elementMove.duration / 2
-                easing.type: Appearance.animation.elementMove.type
-                easing.bezierCurve: Appearance.animation.elementMove.bezierCurve
+            SidebarGroupAnimation {
+                animationSpec: Appearance.animation.elementMove
             }
         }
 

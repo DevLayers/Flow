@@ -143,6 +143,12 @@ Singleton {
         }
     }
 
+    function recheckKhal() {
+        if (khalCheckProcess.running)
+            return;
+        khalCheckProcess.running = true;
+    }
+
     Process {
         id: khalPathsProcess
         running: false

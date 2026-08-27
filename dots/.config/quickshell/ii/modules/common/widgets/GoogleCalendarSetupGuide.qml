@@ -10,6 +10,10 @@ ColumnLayout {
     Layout.fillWidth: true
     spacing: 10
 
+    // When true, also shows the manual sync row. The Timetable settings page
+    // hosts its own sync controls, so it opts out to avoid duplicating them.
+    property bool showSync: true
+
     readonly property var setupSteps: [
         Translation.tr("Open Google Cloud Console and create or select the project shared with Gmail, Tasks and Drive."),
         Translation.tr("Enable the Google Calendar API in APIs & Services → Library."),
@@ -20,16 +24,26 @@ ColumnLayout {
         Translation.tr("Point khal at the synchronized directory (khal configure). Timetable then reads locally and syncs each completed edit in the background.")
     ]
 
-    NoticeBox {
+    ColumnLayout {
         Layout.fillWidth: true
-        materialIcon: "sync"
-        text: Translation.tr("Google Calendar ↔ vdirsyncer ↔ khal ↔ Timetable. New events appear locally first; after khal saves the ICS file, II synchronizes the affected writable calendar in the background.")
-    }
+        spacing: 0
 
-    NoticeBox {
-        Layout.fillWidth: true
-        materialIcon: "key"
-        text: Translation.tr("Use the same Google Cloud OAuth Desktop credentials as the other Google integrations: GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in ii/.env. When configuring the vdirsyncer google_calendar storage, copy this same pair instead of creating another OAuth client.")
+        NoticeBox {
+            Layout.fillWidth: true
+            materialIcon: "sync"
+            text: Translation.tr("Google Calendar ↔ vdirsyncer ↔ khal ↔ Timetable. New events appear locally first; after khal saves the ICS file, II synchronizes the affected writable calendar in the background.")
+        }
+
+        Item {
+            Layout.fillWidth: true
+            Layout.preferredHeight: 6
+        }
+
+        NoticeBox {
+            Layout.fillWidth: true
+            materialIcon: "key"
+            text: Translation.tr("Use the same Google Cloud OAuth Desktop credentials as the other Google integrations: GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in ii/.env. When configuring the vdirsyncer google_calendar storage, copy this same pair instead of creating another OAuth client.")
+        }
     }
 
     WarningBox {
@@ -55,13 +69,21 @@ ColumnLayout {
             required property int index
             required property string modelData
             Layout.fillWidth: true
-            spacing: 8
+            spacing: 10
 
-            StyledText {
-                text: String(index + 1) + "."
-                font.pixelSize: Appearance.font.pixelSize.small
-                font.weight: Font.DemiBold
-                color: Appearance.colors.colPrimary
+            Rectangle {
+                implicitWidth: 24
+                implicitHeight: 24
+                radius: width / 2
+                color: Appearance.colors.colPrimaryContainer
+
+                StyledText {
+                    anchors.centerIn: parent
+                    text: String(index + 1)
+                    font.pixelSize: Appearance.font.pixelSize.smaller
+                    font.weight: Font.Bold
+                    color: Appearance.colors.colOnPrimaryContainer
+                }
             }
 
             StyledText {
@@ -125,6 +147,7 @@ ColumnLayout {
 
     RowLayout {
         Layout.fillWidth: true
+        visible: root.showSync
         spacing: 8
 
         RippleButtonWithIcon {

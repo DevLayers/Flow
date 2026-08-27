@@ -27,6 +27,8 @@ ContentPage {
         OutlookService.beginAuthorization(root.outlookClientIdDraft);
     }
 
+    readonly property var writableCalendars: CalendarService.calendars.filter(calendar => !calendar.readOnly)
+
     Component.onCompleted: root.outlookClientIdDraft = OutlookService.clientId
 
     Connections {
@@ -67,13 +69,24 @@ ContentPage {
         }
     }
 
+    // ══ Engine status (khal / calendars health) ══
+    TimetableStatusCard {
+        id: statusCard
+        Layout.fillWidth: true
+        onOpenSetupGuide: {
+            // Scroll to and highlight the setup guide section.
+            SearchRegistry.currentSearch = Translation.tr("khal & sync setup guide");
+        }
+    }
+
     ContentSection {
         icon: "tune"
-        title: Translation.tr("General Options")
+        title: Translation.tr("Timetable display")
 
         ConfigSwitch {
             buttonIcon: "calendar_today"
             text: Translation.tr("Start with today")
+            description: Translation.tr("Week and 3-day views open on today instead of the first day of the configured week.")
             checked: Config.options.cheatsheet.timetableTodayFirst
             onCheckedChanged: {
                 Config.options.cheatsheet.timetableTodayFirst = checked;
@@ -83,40 +96,27 @@ ContentPage {
         ConfigSwitch {
             buttonIcon: "gradient"
             text: Translation.tr("Proximity color gradient")
+            description: Translation.tr("Day, 3 days and Week replace synced event colors with a gradient based on distance from the next event.")
             checked: Config.options.calendar.timetable.proximityColorGradient
             onCheckedChanged: {
                 Config.options.calendar.timetable.proximityColorGradient = checked;
             }
         }
 
-        StyledText {
-            Layout.fillWidth: true
-            text: Translation.tr("When enabled, Day, 3 days and Week replace synced event colors with a gradient based on distance from the next event.")
-            font.pixelSize: Appearance.font.pixelSize.small
-            color: Appearance.colors.colOnSurfaceVariant
-            wrapMode: Text.Wrap
-        }
-
         ConfigSwitch {
             buttonIcon: "sports_score"
             text: Translation.tr("Show sports events")
+            description: Translation.tr("Shows read-only ESPN games in the Timetable alongside calendar events.")
             checked: Config.options.calendar.timetable.sportsEvents
             onCheckedChanged: {
                 Config.options.calendar.timetable.sportsEvents = checked;
             }
         }
 
-        StyledText {
-            Layout.fillWidth: true
-            text: Translation.tr("Shows read-only ESPN games in the Timetable.")
-            font.pixelSize: Appearance.font.pixelSize.small
-            color: Appearance.colors.colOnSurfaceVariant
-            wrapMode: Text.Wrap
-        }
-
         ConfigSwitch {
             buttonIcon: "nightlight"
             text: Translation.tr("Moon phases in month view")
+            description: Translation.tr("Adds an optional moon phase badge next to the weather icon in the month grid.")
             checked: Config.options.calendar.timetable.moonPhases.enable
             onCheckedChanged: {
                 Config.options.calendar.timetable.moonPhases.enable = checked;
@@ -186,27 +186,10 @@ ContentPage {
                 }
             }
         }
-    }
 
-    ContentSection {
-        icon: "cake"
-        title: Translation.tr("Contact birthdays")
-
-        ConfigSwitch {
-            buttonIcon: "cake"
-            text: Translation.tr("Show contact birthdays")
-            checked: Config.options.calendar.timetable.birthdays.enable
-            onCheckedChanged: Config.options.calendar.timetable.birthdays.enable = checked
-
-            StyledToolTip {
-                text: Translation.tr("Projects birthdays from KDE Connect contacts without adding calendar events.")
-            }
+        ContentSubsectionLabel {
+            text: Translation.tr("Daily summary")
         }
-    }
-
-    ContentSection {
-        icon: "summarize"
-        title: Translation.tr("Daily summary")
 
         ConfigSwitch {
             buttonIcon: "today"
@@ -230,6 +213,19 @@ ContentPage {
     }
 
     ContentSection {
+        icon: "cake"
+        title: Translation.tr("Contact birthdays")
+
+        ConfigSwitch {
+            buttonIcon: "cake"
+            text: Translation.tr("Show contact birthdays")
+            description: Translation.tr("Projects birthdays from KDE Connect contacts as read-only entries without adding calendar events.")
+            checked: Config.options.calendar.timetable.birthdays.enable
+            onCheckedChanged: Config.options.calendar.timetable.birthdays.enable = checked
+        }
+    }
+
+    ContentSection {
         icon: "palette"
         title: Translation.tr("Calendar colors")
 
@@ -241,8 +237,31 @@ ContentPage {
             wrapMode: Text.Wrap
         }
 
+        // Empty state: khal unavailable or no writable calendars
+        Item {
+            Layout.fillWidth: true
+            Layout.preferredHeight: 220
+            visible: root.writableCalendars.length === 0
+
+            PagePlaceholder {
+                anchors.fill: parent
+                shown: visible
+                icon: "calendar_month"
+                title: CalendarService.khalAvailable
+                    ? Translation.tr("No writable calendars")
+                    : Translation.tr("khal is not available")
+                description: CalendarService.khalAvailable
+                    ? Translation.tr("Writable calendars appear here once khal reports them. Set up synchronization in the guide below.")
+                    : Translation.tr("Calendar colors need a configured khal. Set up synchronization in the guide below.")
+                iconSize: 40
+                iconPadding: 8
+                titlePixelSize: Appearance.font.pixelSize.large
+                descriptionPixelSize: Appearance.font.pixelSize.small
+            }
+        }
+
         Repeater {
-            model: CalendarService.calendars.filter(calendar => !calendar.readOnly)
+            model: root.writableCalendars
 
             delegate: ContentSubsection {
                 required property var modelData
@@ -268,15 +287,7 @@ ContentPage {
     }
 
     ContentSection {
-        icon: "sync"
-        title: Translation.tr("Google Calendar synchronization")
-
-        GoogleCalendarSetupGuide {
-            Layout.fillWidth: true
-        }
-    }
-
-    ContentSection {
+        id: googleColorsSection
         icon: "colorize"
         title: Translation.tr("Google event colors")
 
@@ -286,38 +297,6 @@ ContentPage {
             font.pixelSize: Appearance.font.pixelSize.small
             color: Appearance.colors.colOnLayer1
             wrapMode: Text.Wrap
-        }
-
-        RowLayout {
-            Layout.fillWidth: true
-            spacing: 10
-
-            RippleButtonWithIcon {
-                materialIcon: GoogleCalendarService.available ? "link_off" : "link"
-                mainText: GoogleCalendarService.available ? Translation.tr("Disconnect") : Translation.tr("Connect Google Calendar")
-                centerContent: true
-                enabled: GoogleCalendarService.credentialsConfigured && !GoogleCalendarService.authenticating
-                onClicked: {
-                    if (GoogleCalendarService.available)
-                        GoogleCalendarService.disconnect();
-                    else
-                        GoogleCalendarService.startOAuth();
-                }
-            }
-
-            StyledText {
-                Layout.fillWidth: true
-                text: GoogleCalendarService.authenticating
-                    ? Translation.tr("Waiting for the browser…")
-                    : (GoogleCalendarService.available
-                        ? GoogleCalendarService.activeAccountEmail
-                        : (GoogleCalendarService.credentialsConfigured
-                            ? Translation.tr("Not connected")
-                            : Translation.tr("Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET first")))
-                font.pixelSize: Appearance.font.pixelSize.smallie
-                color: Appearance.colors.colOnSurfaceVariant
-                wrapMode: Text.Wrap
-            }
         }
 
         ConfigSwitch {
@@ -344,21 +323,104 @@ ContentPage {
 
         NoticeBox {
             Layout.fillWidth: true
-            visible: Config.options.calendar.timetable.googleColors.enable && !GoogleCalendarService.available
-            materialIcon: "warning"
-            text: Translation.tr("Connect a Google account to read event colors.")
+            visible: GoogleCalendarService.authenticating
+            materialIcon: "hourglass_empty"
+            text: Translation.tr("Waiting for the browser. Complete the Google authorization to finish connecting.")
+        }
+
+        WarningBox {
+            Layout.fillWidth: true
+            visible: GoogleCalendarService.reauthorizationRequired
+            text: GoogleCalendarService.lastErrorMessage.length > 0
+                ? GoogleCalendarService.lastErrorMessage
+                : Translation.tr("The Google Calendar authorization expired or was revoked. Reconnect the account below.")
+        }
+
+        // Not connected: primary action to connect
+        ColumnLayout {
+            Layout.fillWidth: true
+            visible: !GoogleCalendarService.available
+            spacing: 8
+
+            RippleButtonWithIcon {
+                Layout.fillWidth: true
+                implicitHeight: 44
+                centerContent: true
+                materialIcon: "link"
+                mainText: Translation.tr("Connect Google Calendar")
+                colText: Appearance.colors.colOnPrimaryContainer
+                colBackground: Appearance.colors.colPrimaryContainer
+                colBackgroundHover: Appearance.colors.colPrimaryContainerHover
+                colRipple: Appearance.colors.colPrimaryContainerActive
+                enabled: GoogleCalendarService.credentialsConfigured && !GoogleCalendarService.authenticating
+                onClicked: GoogleCalendarService.startOAuth()
+            }
+
+            StyledText {
+                Layout.fillWidth: true
+                text: !GoogleCalendarService.credentialsConfigured
+                    ? Translation.tr("Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in ii/.env first (see the setup guide below).")
+                    : Translation.tr("Not connected")
+                font.pixelSize: Appearance.font.pixelSize.small
+                color: Appearance.colors.colOnSurfaceVariant
+                wrapMode: Text.Wrap
+            }
+        }
+
+        // Connected: account + disconnect + colors sync
+        RowLayout {
+            Layout.fillWidth: true
+            visible: GoogleCalendarService.available
+            spacing: 10
+
+            MaterialSymbol {
+                text: "account_circle"
+                iconSize: Appearance.font.pixelSize.large
+                color: Appearance.colors.colPrimary
+            }
+
+            StyledText {
+                Layout.fillWidth: true
+                text: GoogleCalendarService.activeAccountEmail.length > 0
+                    ? GoogleCalendarService.activeAccountEmail
+                    : Translation.tr("Connected")
+                font.pixelSize: Appearance.font.pixelSize.small
+                color: Appearance.colors.colOnLayer1
+                elide: Text.ElideMiddle
+            }
+
+            RippleButton {
+                implicitWidth: 36
+                implicitHeight: 36
+                buttonRadius: Appearance.rounding.full
+                colBackground: "transparent"
+                colBackgroundHover: Appearance.colors.colErrorContainer
+                onClicked: GoogleCalendarService.disconnect()
+
+                contentItem: MaterialSymbol {
+                    anchors.centerIn: parent
+                    text: "link_off"
+                    iconSize: Appearance.font.pixelSize.normal
+                    color: parent.hovered ? Appearance.colors.colOnErrorContainer : Appearance.colors.colOnLayer2
+                }
+
+                StyledToolTip {
+                    extraVisibleCondition: parent.hovered
+                    text: Translation.tr("Disconnect Google Calendar API")
+                }
+            }
         }
 
         RowLayout {
             Layout.fillWidth: true
+            visible: GoogleCalendarService.available
             spacing: 10
 
             RippleButtonWithIcon {
                 materialIcon: GoogleCalendarService.colorsSyncing ? "sync" : "refresh"
                 mainText: GoogleCalendarService.colorsSyncing ? Translation.tr("Syncing…") : Translation.tr("Refresh colors")
                 centerContent: true
-                enabled: GoogleCalendarService.available
-                    && Config.options.calendar.timetable.googleColors.enable
+                enabled: Config.options.calendar.timetable.googleColors.enable
                     && !GoogleCalendarService.colorsSyncing
                 onClicked: GoogleCalendarService.refreshColors(true)
             }
@@ -376,8 +438,32 @@ ContentPage {
     }
 
     ContentSection {
+        id: setupSection
+        icon: "integration_instructions"
+        title: Translation.tr("khal & sync setup guide")
+
+        GoogleCalendarSetupGuide {
+            id: setupGuide
+            Layout.fillWidth: true
+            showSync: false
+        }
+    }
+
+    ContentSection {
         icon: "calendar_add_on"
-        title: Translation.tr("Subscribed calendars")
+        title: Translation.tr("Calendar sources")
+
+        ConfigSwitch {
+            buttonIcon: "calendar_add_on"
+            text: Translation.tr("Enable calendar sources")
+            description: Translation.tr("Master switch for local ICS imports, subscribed links and Outlook sources. Disabling keeps all saved configuration.")
+            checked: Config.options.calendar.timetable.imports.enable
+            onCheckedChanged: Config.options.calendar.timetable.imports.enable = checked
+        }
+
+        ContentSubsectionLabel {
+            text: Translation.tr("Subscribed links")
+        }
 
         StyledText {
             Layout.fillWidth: true
@@ -390,6 +476,7 @@ ContentPage {
         ConfigTextField {
             id: subscriptionInput
             Layout.fillWidth: true
+            enabled: Config.options.calendar.timetable.imports.enable
             icon: "link"
             text: Translation.tr("Calendar ICS URL")
             placeholderText: "https://…/calendar.ics"
@@ -398,46 +485,71 @@ ContentPage {
             textField.onAccepted: addSubscriptionButton.addDraft()
         }
 
+        RippleButtonWithIcon {
+            id: addSubscriptionButton
+            Layout.alignment: Qt.AlignRight
+            implicitHeight: 40
+            mainText: Translation.tr("Add URL")
+            materialIcon: "add"
+            colText: Appearance.colors.colOnPrimaryContainer
+            colBackground: Appearance.colors.colPrimaryContainer
+            colBackgroundHover: Appearance.colors.colPrimaryContainerHover
+            colRipple: Appearance.colors.colPrimaryContainerActive
+            enabled: Config.options.calendar.timetable.imports.enable && !CalendarSubscriptions.applying && root.subscriptionDraft.trim().length > 0
+
+            function addDraft() {
+                if (CalendarSubscriptions.addSubscription(root.subscriptionDraft)) {
+                    root.subscriptionDraft = "";
+                    subscriptionInput.textField.clear();
+                }
+            }
+
+            onClicked: addDraft()
+        }
+
         WarningBox {
             Layout.fillWidth: true
             visible: CalendarSubscriptions.lastError.length > 0
             text: CalendarSubscriptions.lastError
         }
 
-        RowLayout {
+        NoticeBox {
             Layout.fillWidth: true
+            visible: CalendarSubscriptions.lastError.length === 0
+                && (CalendarSubscriptions.applying || CalendarSubscriptions.syncInProgress)
+            materialIcon: "sync"
+            text: CalendarSubscriptions.applying
+                ? Translation.tr("Updating calendar configuration…")
+                : Translation.tr("Synchronizing subscribed calendars…")
+        }
 
-            StyledText {
-                Layout.fillWidth: true
-                text: CalendarSubscriptions.applying
-                    ? Translation.tr("Updating calendar configuration…")
-                    : (CalendarSubscriptions.syncInProgress
-                        ? Translation.tr("Synchronizing subscribed calendars…")
-                        : Translation.tr("Subscribed calendars are always read-only."))
-                font.pixelSize: Appearance.font.pixelSize.small
-                color: Appearance.colors.colOnLayer1
-                wrapMode: Text.Wrap
-            }
+        // Empty state when no subscriptions configured
+        Rectangle {
+            Layout.fillWidth: true
+            visible: Config.options.calendar.timetable.subscriptions.length === 0
+            implicitHeight: 56
+            radius: Appearance.rounding.normal
+            color: Appearance.colors.colLayer2
 
-            RippleButtonWithIcon {
-                id: addSubscriptionButton
-                implicitHeight: 40
-                mainText: Translation.tr("Add URL")
-                materialIcon: "add"
-                colText: Appearance.colors.colOnPrimaryContainer
-                colBackground: Appearance.colors.colPrimaryContainer
-                colBackgroundHover: Appearance.colors.colPrimaryContainerHover
-                colRipple: Appearance.colors.colPrimaryContainerActive
-                enabled: !CalendarSubscriptions.applying && root.subscriptionDraft.trim().length > 0
+            RowLayout {
+                anchors.fill: parent
+                anchors.leftMargin: 12
+                anchors.rightMargin: 12
+                spacing: 10
 
-                function addDraft() {
-                    if (CalendarSubscriptions.addSubscription(root.subscriptionDraft)) {
-                        root.subscriptionDraft = "";
-                        subscriptionInput.textField.clear();
-                    }
+                MaterialSymbol {
+                    text: "link_off"
+                    iconSize: Appearance.font.pixelSize.large
+                    color: Appearance.colors.colOnLayer2
                 }
 
-                onClicked: addDraft()
+                StyledText {
+                    Layout.fillWidth: true
+                    text: Translation.tr("No subscribed calendars yet. Add an ICS URL above to mirror a public calendar as read-only.")
+                    font.pixelSize: Appearance.font.pixelSize.small
+                    color: Appearance.colors.colSubtext
+                    wrapMode: Text.Wrap
+                }
             }
         }
 
@@ -496,177 +608,175 @@ ContentPage {
                 }
             }
         }
-    }
 
-    ContentSection {
-        icon: "event_available"
-        title: Translation.tr("Outlook calendar")
-
-        ConfigSwitch {
-            buttonIcon: "calendar_add_on"
-            text: Translation.tr("Enable calendar sources")
-            checked: Config.options.calendar.timetable.imports.enable
-            onCheckedChanged: Config.options.calendar.timetable.imports.enable = checked
-        }
-
-        StyledText {
-            Layout.fillWidth: true
-            text: Translation.tr("This master switch controls local ICS imports, subscribed calendars, and Outlook sources without removing saved configuration.")
-            font.pixelSize: Appearance.font.pixelSize.small
-            color: Appearance.colors.colOnLayer1
-            wrapMode: Text.Wrap
+        ContentSubsectionLabel {
+            text: Translation.tr("Outlook calendar")
         }
 
         ConfigSwitch {
             enabled: Config.options.calendar.timetable.imports.enable
             buttonIcon: "event_available"
             text: Translation.tr("Sync Outlook calendar")
+            description: Translation.tr("Mirrors connected Outlook events into a local read-only Timetable calendar.")
             checked: Config.options.calendar.timetable.imports.outlook.enable
             onCheckedChanged: Config.options.calendar.timetable.imports.outlook.enable = checked
         }
 
-        StyledText {
-            Layout.fillWidth: true
-            text: Translation.tr("Mirrors connected Outlook events into a local read-only Timetable calendar.")
-            font.pixelSize: Appearance.font.pixelSize.small
-            color: Appearance.colors.colOnLayer1
-            opacity: Config.options.calendar.timetable.imports.outlook.enable ? 1 : 0.7
-            wrapMode: Text.Wrap
-        }
-
-        NoticeBox {
-            Layout.fillWidth: true
-            visible: Config.options.calendar.timetable.imports.enable
-                && Config.options.calendar.timetable.imports.outlook.enable
-            materialIcon: "info"
-            text: Translation.tr("To get a client ID, open Microsoft Entra admin center, register an application, select the account types you need, then copy its Application (client) ID from Overview.")
-        }
-
-        RippleButtonWithIcon {
-            Layout.alignment: Qt.AlignRight
-            implicitHeight: 40
-            visible: Config.options.calendar.timetable.imports.enable
-                && Config.options.calendar.timetable.imports.outlook.enable
-            centerContent: true
-            materialIcon: "open_in_new"
-            mainText: Translation.tr("Open Microsoft Entra")
-            colText: Appearance.colors.colOnSecondaryContainer
-            colBackground: Appearance.colors.colSecondaryContainer
-            colBackgroundHover: Appearance.colors.colSecondaryContainerHover
-            colRipple: Appearance.colors.colSecondaryContainerActive
-            onClicked: Qt.openUrlExternally("https://entra.microsoft.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade")
-        }
-
-        NoticeBox {
-            Layout.fillWidth: true
-            visible: Config.options.calendar.timetable.imports.enable
-                && Config.options.calendar.timetable.imports.outlook.enable
-            materialIcon: "security"
-            text: Translation.tr("Enable public client flows under Authentication for this Device Code sign-in. Do not create or paste a client secret: II stores only the public client ID and encrypted refresh token in the system keyring.")
-        }
-
-        ConfigTextField {
-            id: outlookClientIdInput
-            Layout.fillWidth: true
-            visible: Config.options.calendar.timetable.imports.enable
-                && Config.options.calendar.timetable.imports.outlook.enable
-                && !OutlookService.deviceFlowActive
-            enabled: !OutlookService.authenticating
-            icon: "key"
-            text: Translation.tr("Microsoft application (client) ID")
-            placeholderText: Translation.tr("Paste the public client ID from Microsoft Entra")
-            inputText: root.outlookClientIdDraft
-            textField.onTextChanged: root.outlookClientIdDraft = textField.text
-        }
-
-        RowLayout {
-            Layout.fillWidth: true
-            visible: Config.options.calendar.timetable.imports.enable
-                && Config.options.calendar.timetable.imports.outlook.enable
-                && !OutlookService.deviceFlowActive
-            spacing: 8
-
-            RippleButtonWithIcon {
-                Layout.fillWidth: true
-                implicitHeight: 40
-                centerContent: true
-                materialIcon: OutlookService.authenticated ? "person_add" : "login"
-                mainText: OutlookService.authenticated ? Translation.tr("Reconnect Outlook") : Translation.tr("Connect Outlook")
-                enabled: !OutlookService.authenticating && root.outlookClientIdDraft.trim().length > 0
-                colText: Appearance.colors.colOnSecondaryContainer
-                colBackground: Appearance.colors.colSecondaryContainer
-                colBackgroundHover: Appearance.colors.colSecondaryContainerHover
-                colRipple: Appearance.colors.colSecondaryContainerActive
-                onClicked: root.connectOutlook()
-            }
-
-            RippleButtonWithIcon {
-                implicitHeight: 40
-                visible: OutlookService.authenticated
-                centerContent: true
-                materialIcon: "link_off"
-                mainText: Translation.tr("Disconnect")
-                enabled: !OutlookCalendarImport.syncing
-                colText: Appearance.colors.colOnErrorContainer
-                colBackground: Appearance.colors.colErrorContainer
-                colBackgroundHover: Appearance.colors.colErrorContainerHover
-                colRipple: Appearance.colors.colErrorContainerActive
-                onClicked: OutlookService.disconnect()
-            }
-        }
-
+        // ── Outlook connection flow ──
         ColumnLayout {
             Layout.fillWidth: true
             visible: Config.options.calendar.timetable.imports.enable
                 && Config.options.calendar.timetable.imports.outlook.enable
-                && OutlookService.deviceFlowActive
-            spacing: 6
+            spacing: 10
 
             NoticeBox {
                 Layout.fillWidth: true
-                materialIcon: "phonelink_lock"
-                text: OutlookService.deviceMessage || Translation.tr("Open Microsoft sign-in and enter this code:")
-            }
-
-            StyledText {
-                Layout.fillWidth: true
-                text: OutlookService.userCode
-                font.pixelSize: Appearance.font.pixelSize.large
-                font.weight: Font.Bold
-                color: Appearance.colors.colPrimary
-                horizontalAlignment: Text.AlignHCenter
+                materialIcon: "info"
+                text: Translation.tr("To get a client ID, open Microsoft Entra admin center, register an application, select the account types you need, then copy its Application (client) ID from Overview. Enable public client flows under Authentication for this Device Code sign-in. Do not create or paste a client secret: II stores only the public client ID and an encrypted refresh token in the system keyring.")
             }
 
             RippleButtonWithIcon {
-                Layout.fillWidth: true
+                Layout.alignment: Qt.AlignRight
                 implicitHeight: 40
                 centerContent: true
                 materialIcon: "open_in_new"
-                mainText: Translation.tr("Open Microsoft sign-in")
-                colText: Appearance.colors.colOnPrimaryContainer
-                colBackground: Appearance.colors.colPrimaryContainer
-                colBackgroundHover: Appearance.colors.colPrimaryContainerHover
-                colRipple: Appearance.colors.colPrimaryContainerActive
-                onClicked: Qt.openUrlExternally(OutlookService.verificationUri)
+                mainText: Translation.tr("Open Microsoft Entra")
+                colText: Appearance.colors.colOnSecondaryContainer
+                colBackground: Appearance.colors.colSecondaryContainer
+                colBackgroundHover: Appearance.colors.colSecondaryContainerHover
+                colRipple: Appearance.colors.colSecondaryContainerActive
+                onClicked: Qt.openUrlExternally("https://entra.microsoft.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade")
             }
-        }
 
-        RippleButtonWithIcon {
-            Layout.alignment: Qt.AlignRight
-            implicitHeight: 40
-            visible: Config.options.calendar.timetable.imports.enable
-                && Config.options.calendar.timetable.imports.outlook.enable
-                && OutlookService.authenticated
-                && !OutlookService.deviceFlowActive
-            centerContent: true
-            materialIcon: OutlookCalendarImport.syncing ? "sync" : "refresh"
-            mainText: OutlookCalendarImport.syncing ? Translation.tr("Synchronizing Outlook…") : Translation.tr("Sync Outlook now")
-            enabled: !OutlookCalendarImport.syncing
-            colText: Appearance.colors.colOnSecondaryContainer
-            colBackground: Appearance.colors.colSecondaryContainer
-            colBackgroundHover: Appearance.colors.colSecondaryContainerHover
-            colRipple: Appearance.colors.colSecondaryContainerActive
-            onClicked: OutlookCalendarImport.syncNow()
+            // Device code flow in progress
+            ColumnLayout {
+                Layout.fillWidth: true
+                visible: OutlookService.deviceFlowActive
+                spacing: 6
+
+                NoticeBox {
+                    Layout.fillWidth: true
+                    materialIcon: "phonelink_lock"
+                    text: OutlookService.deviceMessage || Translation.tr("Open Microsoft sign-in and enter this code:")
+                }
+
+                StyledText {
+                    Layout.fillWidth: true
+                    text: OutlookService.userCode
+                    font.pixelSize: Appearance.font.pixelSize.large
+                    font.weight: Font.Bold
+                    color: Appearance.colors.colPrimary
+                    horizontalAlignment: Text.AlignHCenter
+                }
+
+                RippleButtonWithIcon {
+                    Layout.fillWidth: true
+                    implicitHeight: 40
+                    centerContent: true
+                    materialIcon: "open_in_new"
+                    mainText: Translation.tr("Open Microsoft sign-in")
+                    colText: Appearance.colors.colOnPrimaryContainer
+                    colBackground: Appearance.colors.colPrimaryContainer
+                    colBackgroundHover: Appearance.colors.colPrimaryContainerHover
+                    colRipple: Appearance.colors.colPrimaryContainerActive
+                    onClicked: Qt.openUrlExternally(OutlookService.verificationUri)
+                }
+            }
+
+            // Not authenticated: client ID + connect
+            ColumnLayout {
+                Layout.fillWidth: true
+                visible: !OutlookService.deviceFlowActive
+                spacing: 8
+
+                ConfigTextField {
+                    id: outlookClientIdInput
+                    Layout.fillWidth: true
+                    enabled: !OutlookService.authenticating
+                    icon: "key"
+                    text: Translation.tr("Microsoft application (client) ID")
+                    placeholderText: Translation.tr("Paste the public client ID from Microsoft Entra")
+                    inputText: root.outlookClientIdDraft
+                    textField.onTextChanged: root.outlookClientIdDraft = textField.text
+                }
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 8
+
+                    RippleButtonWithIcon {
+                        Layout.fillWidth: true
+                        implicitHeight: 40
+                        centerContent: true
+                        materialIcon: OutlookService.authenticated ? "person_add" : "login"
+                        mainText: OutlookService.authenticated ? Translation.tr("Reconnect Outlook") : Translation.tr("Connect Outlook")
+                        enabled: !OutlookService.authenticating && root.outlookClientIdDraft.trim().length > 0
+                        colText: Appearance.colors.colOnSecondaryContainer
+                        colBackground: Appearance.colors.colSecondaryContainer
+                        colBackgroundHover: Appearance.colors.colSecondaryContainerHover
+                        colRipple: Appearance.colors.colSecondaryContainerActive
+                        onClicked: root.connectOutlook()
+                    }
+
+                    RippleButtonWithIcon {
+                        implicitHeight: 40
+                        visible: OutlookService.authenticated
+                        centerContent: true
+                        materialIcon: "link_off"
+                        mainText: Translation.tr("Disconnect")
+                        enabled: !OutlookCalendarImport.syncing
+                        colText: Appearance.colors.colOnErrorContainer
+                        colBackground: Appearance.colors.colErrorContainer
+                        colBackgroundHover: Appearance.colors.colErrorContainerHover
+                        colRipple: Appearance.colors.colErrorContainerActive
+                        onClicked: OutlookService.disconnect()
+                    }
+                }
+            }
+
+            // Connected: account status + sync actions
+            ColumnLayout {
+                Layout.fillWidth: true
+                visible: OutlookService.authenticated && !OutlookService.deviceFlowActive
+                spacing: 8
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 10
+
+                    MaterialSymbol {
+                        text: "account_circle"
+                        iconSize: Appearance.font.pixelSize.large
+                        color: Appearance.colors.colPrimary
+                    }
+
+                    StyledText {
+                        Layout.fillWidth: true
+                        text: OutlookService.activeAccountEmail.length > 0
+                            ? OutlookService.activeAccountEmail
+                            : (OutlookCalendarImport.lastStatus.length > 0
+                                ? OutlookCalendarImport.lastStatus
+                                : Translation.tr("Outlook is connected."))
+                        font.pixelSize: Appearance.font.pixelSize.small
+                        color: Appearance.colors.colOnLayer1
+                        elide: Text.ElideMiddle
+                    }
+                }
+
+                RippleButtonWithIcon {
+                    Layout.alignment: Qt.AlignRight
+                    implicitHeight: 40
+                    centerContent: true
+                    materialIcon: OutlookCalendarImport.syncing ? "sync" : "refresh"
+                    mainText: OutlookCalendarImport.syncing ? Translation.tr("Synchronizing Outlook…") : Translation.tr("Sync Outlook now")
+                    enabled: !OutlookCalendarImport.syncing
+                    colText: Appearance.colors.colOnSecondaryContainer
+                    colBackground: Appearance.colors.colSecondaryContainer
+                    colBackgroundHover: Appearance.colors.colSecondaryContainerHover
+                    colRipple: Appearance.colors.colSecondaryContainerActive
+                    onClicked: OutlookCalendarImport.syncNow()
+                }
+            }
         }
 
         WarningBox {
@@ -675,17 +785,8 @@ ContentPage {
             text: OutlookService.lastError.length > 0 ? OutlookService.lastError : OutlookCalendarImport.lastError
         }
 
-        StyledText {
-            Layout.fillWidth: true
-            visible: OutlookService.authenticated || OutlookCalendarImport.lastStatus.length > 0
-            text: OutlookCalendarImport.lastStatus.length > 0
-                ? OutlookCalendarImport.lastStatus
-                : (OutlookService.activeAccountEmail.length > 0
-                    ? OutlookService.activeAccountEmail
-                    : Translation.tr("Outlook is connected."))
-            font.pixelSize: Appearance.font.pixelSize.small
-            color: Appearance.colors.colOnLayer1
-            wrapMode: Text.Wrap
+        ContentSubsectionLabel {
+            text: Translation.tr("Outlook attachments")
         }
 
         ConfigSwitch {
@@ -693,17 +794,9 @@ ContentPage {
                 && Config.options.calendar.timetable.imports.outlook.enable
             buttonIcon: "attach_email"
             text: Translation.tr("Import ICS attachments from Outlook")
+            description: Translation.tr("Checks calendar attachments in the connected Outlook mailbox and imports each successful attachment only once.")
             checked: Config.options.calendar.timetable.imports.outlook.icsAttachments.enable
             onCheckedChanged: Config.options.calendar.timetable.imports.outlook.icsAttachments.enable = checked
-        }
-
-        StyledText {
-            Layout.fillWidth: true
-            text: Translation.tr("Checks calendar attachments in the connected Outlook mailbox and imports each successful attachment only once.")
-            font.pixelSize: Appearance.font.pixelSize.small
-            color: Appearance.colors.colOnLayer1
-            opacity: Config.options.calendar.timetable.imports.outlook.icsAttachments.enable ? 1 : 0.7
-            wrapMode: Text.Wrap
         }
 
         RippleButtonWithIcon {
@@ -730,13 +823,12 @@ ContentPage {
             text: OutlookIcsImport.lastError
         }
 
-        StyledText {
+        NoticeBox {
             Layout.fillWidth: true
-            visible: OutlookIcsImport.lastStatus.length > 0
+            visible: OutlookIcsImport.lastError.length === 0
+                && OutlookIcsImport.lastStatus.length > 0
+            materialIcon: "check_circle"
             text: OutlookIcsImport.lastStatus
-            font.pixelSize: Appearance.font.pixelSize.small
-            color: Appearance.colors.colOnLayer1
-            wrapMode: Text.Wrap
         }
     }
 }
