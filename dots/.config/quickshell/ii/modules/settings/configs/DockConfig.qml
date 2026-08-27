@@ -109,15 +109,14 @@ Item {
                 ConfigSwitch {
                     enabled: Config.options.dock.enable
                     visible: Config.options.dock.enable
-                    buttonIcon: "folder_special"
-                    text: Translation.tr("App groups & smart grouping")
-                    checked: Config.options.dock.enableAppGroups ?? true
-                    configPage: Qt.resolvedUrl("widgets/DockAppGroupsConfig.qml")
+                    buttonIcon: "group_work"
+                    text: Translation.tr("Smart auto-grouping")
+                    checked: Config.options.dock.smartGrouping
                     onCheckedChanged: {
-                        Config.options.dock.enableAppGroups = checked;
+                        Config.options.dock.smartGrouping = checked;
                     }
                     StyledToolTip {
-                        text: Translation.tr("Combine up to six apps into dock groups. Click button text to configure smart auto-grouping.")
+                        text: Translation.tr("Automatically groups matching or related application instances in the dock.")
                     }
                 }
             }
