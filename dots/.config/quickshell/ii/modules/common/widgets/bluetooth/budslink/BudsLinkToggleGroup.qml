@@ -48,7 +48,7 @@ ColumnLayout {
                     ? Appearance.colors.colPrimary
                     : Appearance.colors.colSurfaceContainerHighest
 
-                colText: btn.isSelected
+                property color colText: btn.isSelected
                     ? Appearance.colors.colOnPrimary
                     : Appearance.colors.colOnSurfaceVariant
 

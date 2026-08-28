@@ -18,6 +18,11 @@ Rectangle {
     property bool isFirst: false
     property bool isLast: false
     property bool expanded: false
+    // Sticky: the actions panel below is built once, on first expand, rather
+    // than staying alive from the start so a half-typed password isn't lost
+    // if the row is collapsed again.
+    property bool wasExpanded: false
+    onExpandedChanged: if (root.expanded) root.wasExpanded = true
 
     readonly property string ssid: root.accessPoint?.ssid ?? ""
     readonly property int strength: root.accessPoint?.strength ?? 0
@@ -29,9 +34,12 @@ Rectangle {
         && Network.wifiErrorTarget === root.accessPoint
     readonly property bool askingPassword: root.accessPoint?.askingPassword ?? false
 
-    readonly property string profileName: Network.savedProfileFor(root.ssid)
+    // One lookup instead of two: profileName used to run its own
+    // Network.savedConnections scan via savedProfileFor(), then savedProfile
+    // scanned the same array again to find the same entry by that name.
     readonly property var savedProfile: Network.savedConnections
-        .find(entry => entry.name === root.profileName) ?? null
+        .find(entry => entry.type === "802-11-wireless" && entry.name === root.ssid) ?? null
+    readonly property string profileName: root.savedProfile?.name ?? ""
     readonly property bool isSaved: (root.accessPoint?.known ?? false) || root.profileName.length > 0
     // A secured network with nothing stored can only be joined with a secret,
     // so the row opens on its fields rather than failing first and then asking.
@@ -39,6 +47,7 @@ Rectangle {
 
     readonly property real outerRadius: Appearance.rounding.normal
     readonly property real innerRadius: Appearance.rounding.verysmall
+    readonly property bool performanceMode: Config.options?.appearance?.settingsPerformanceMode ?? false
 
     function submit(): void {
         if (!root.needsSecret && !root.askingPassword) {
@@ -46,15 +55,20 @@ Rectangle {
             return;
         }
         root.expanded = true;
-        if (root.enterprise && identityField.text.length === 0) {
-            identityField.forceActiveFocus();
+        // Reachable only through controls that live inside the actions panel
+        // itself, so by the time this runs the panel has already been built.
+        const panel = actionsLoader.item;
+        if (!panel)
+            return;
+        if (root.enterprise && panel.identityText.length === 0) {
+            panel.focusIdentity();
             return;
         }
-        if (passwordField.text.length === 0) {
-            passwordField.forceActiveFocus();
+        if (panel.passwordText.length === 0) {
+            panel.focusPassword();
             return;
         }
-        Network.connectWithPassword(root.ssid, passwordField.text, root.enterprise ? identityField.text : "");
+        Network.connectWithPassword(root.ssid, panel.passwordText, root.enterprise ? panel.identityText : "");
     }
 
     onAskingPasswordChanged: if (root.askingPassword) root.expanded = true
@@ -69,7 +83,13 @@ Rectangle {
     clip: true
 
     Behavior on color {
-        animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
+        // The dynamic component instantiation below (createObject) runs once
+        // per row at construction regardless of `enabled`, so performance
+        // mode skips it outright instead of just muting playback — with a
+        // few dozen rows on screen at once that's a few dozen fewer objects
+        // built the moment the list mounts.
+        animation: root.performanceMode ? null
+            : Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
     }
 
     ColumnLayout {
@@ -195,6 +215,7 @@ Rectangle {
                     rotation: root.expanded ? 0 : -90
 
                     Behavior on rotation {
+                        enabled: !root.performanceMode
                         NumberAnimation {
                             duration: Appearance.animation.elementMoveFast.duration
                             easing.type: Appearance.animation.elementMoveFast.type
@@ -207,10 +228,11 @@ Rectangle {
 
         Item {
             Layout.fillWidth: true
-            implicitHeight: root.expanded ? actions.implicitHeight + 16 : 0
+            implicitHeight: root.expanded && actionsLoader.item ? actionsLoader.item.implicitHeight + 16 : 0
             clip: true
 
             Behavior on implicitHeight {
+                enabled: !root.performanceMode
                 NumberAnimation {
                     duration: Appearance.animation.elementMove.duration
                     easing.type: Appearance.animation.elementMove.type
@@ -218,121 +240,138 @@ Rectangle {
                 }
             }
 
-            ColumnLayout {
-                id: actions
+            // Deferred: most rows are never opened, and this panel alone
+            // carries two MaterialTextFields plus several buttons. Building
+            // all of that immediately for every network the moment the list
+            // mounts is what made the Wi-Fi tab heavy to open with more than
+            // a handful in range. Built once on first expand (see wasExpanded)
+            // and kept alive after that so a half-typed password isn't lost.
+            Loader {
+                id: actionsLoader
                 anchors.left: parent.left
                 anchors.right: parent.right
                 anchors.top: parent.top
                 anchors.leftMargin: 16
                 anchors.rightMargin: 16
+                active: root.wasExpanded
                 opacity: root.expanded ? 1 : 0
-                spacing: 8
 
                 Behavior on opacity {
+                    enabled: !root.performanceMode
                     NumberAnimation {
                         duration: Appearance.animation.elementMoveFast.duration
                     }
                 }
 
-                MaterialTextField {
-                    id: identityField
-                    Layout.fillWidth: true
-                    visible: root.enterprise && (root.needsSecret || root.askingPassword)
-                    placeholderText: Translation.tr("Identity (username)")
-                    onAccepted: root.submit()
-                }
-
-                MaterialTextField {
-                    id: passwordField
-                    Layout.fillWidth: true
-                    visible: root.needsSecret || root.askingPassword
-                    echoMode: revealSecret.checked ? TextInput.Normal : TextInput.Password
-                    placeholderText: Translation.tr("Password")
-                    error: root.hasError
-                    onAccepted: root.submit()
-                }
-
-                RowLayout {
-                    Layout.fillWidth: true
-                    visible: passwordField.visible
+                sourceComponent: ColumnLayout {
                     spacing: 8
+
+                    property alias identityText: identityField.text
+                    property alias passwordText: passwordField.text
+
+                    function focusIdentity(): void { identityField.forceActiveFocus(); }
+                    function focusPassword(): void { passwordField.forceActiveFocus(); }
+
+                    MaterialTextField {
+                        id: identityField
+                        Layout.fillWidth: true
+                        visible: root.enterprise && (root.needsSecret || root.askingPassword)
+                        placeholderText: Translation.tr("Identity (username)")
+                        onAccepted: root.submit()
+                    }
+
+                    MaterialTextField {
+                        id: passwordField
+                        Layout.fillWidth: true
+                        visible: root.needsSecret || root.askingPassword
+                        echoMode: revealSecret.checked ? TextInput.Normal : TextInput.Password
+                        placeholderText: Translation.tr("Password")
+                        error: root.hasError
+                        onAccepted: root.submit()
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        visible: passwordField.visible
+                        spacing: 8
+
+                        StyledText {
+                            Layout.fillWidth: true
+                            text: Translation.tr("Show password")
+                            font.pixelSize: Appearance.font.pixelSize.smaller
+                            color: Appearance.colors.colSubtext
+                        }
+
+                        StyledSwitch {
+                            id: revealSecret
+                        }
+                    }
 
                     StyledText {
                         Layout.fillWidth: true
-                        text: Translation.tr("Show password")
+                        visible: root.hasError && Network.lastWifiError.length > 0
+                        wrapMode: Text.Wrap
+                        text: Network.lastWifiError
+                        font.pixelSize: Appearance.font.pixelSize.smaller
+                        color: Appearance.m3colors.m3error
+                    }
+
+                    StyledText {
+                        Layout.fillWidth: true
+                        visible: !root.isActive && (root.accessPoint?.bssid ?? "").length > 0
+                        elide: Text.ElideRight
+                        text: Translation.tr("Access point %1").arg(root.accessPoint?.bssid ?? "")
                         font.pixelSize: Appearance.font.pixelSize.smaller
                         color: Appearance.colors.colSubtext
                     }
 
-                    StyledSwitch {
-                        id: revealSecret
-                    }
-                }
-
-                StyledText {
-                    Layout.fillWidth: true
-                    visible: root.hasError && Network.lastWifiError.length > 0
-                    wrapMode: Text.Wrap
-                    text: Network.lastWifiError
-                    font.pixelSize: Appearance.font.pixelSize.smaller
-                    color: Appearance.m3colors.m3error
-                }
-
-                StyledText {
-                    Layout.fillWidth: true
-                    visible: !root.isActive && (root.accessPoint?.bssid ?? "").length > 0
-                    elide: Text.ElideRight
-                    text: Translation.tr("Access point %1").arg(root.accessPoint?.bssid ?? "")
-                    font.pixelSize: Appearance.font.pixelSize.smaller
-                    color: Appearance.colors.colSubtext
-                }
-
-                RowLayout {
-                    Layout.fillWidth: true
-                    spacing: 8
-
-                    RippleButtonWithIcon {
-                        visible: !root.isActive
-                        materialIcon: "link"
-                        mainText: root.needsSecret || root.askingPassword
-                            ? Translation.tr("Join") : Translation.tr("Connect")
-                        colBackground: Appearance.colors.colPrimary
-                        colText: Appearance.colors.colOnPrimary
-                        onClicked: root.submit()
-                    }
-
-                    RippleButtonWithIcon {
-                        visible: root.isActive
-                        materialIcon: "link_off"
-                        mainText: Translation.tr("Disconnect")
-                        onClicked: Network.disconnectWifiNetwork()
-                    }
-
-                    RippleButtonWithIcon {
-                        visible: root.isSaved
-                        materialIcon: "delete"
-                        mainText: Translation.tr("Forget")
-                        onClicked: Network.forgetWifiNetwork(root.ssid)
-                    }
-
-                    Item {
+                    RowLayout {
                         Layout.fillWidth: true
-                    }
+                        spacing: 8
 
-                    StyledText {
-                        visible: root.savedProfile !== null
-                        text: Translation.tr("Connect automatically")
-                        font.pixelSize: Appearance.font.pixelSize.smaller
-                        color: Appearance.colors.colSubtext
-                    }
+                        RippleButtonWithIcon {
+                            visible: !root.isActive
+                            materialIcon: "link"
+                            mainText: root.needsSecret || root.askingPassword
+                                ? Translation.tr("Join") : Translation.tr("Connect")
+                            colBackground: Appearance.colors.colPrimary
+                            colText: Appearance.colors.colOnPrimary
+                            onClicked: root.submit()
+                        }
 
-                    StyledSwitch {
-                        visible: root.savedProfile !== null
-                        checked: root.savedProfile?.autoconnect ?? false
-                        onToggled: {
-                            NetworkCommands.setAutoconnect(root.profileName, checked,
-                                () => Network.refreshSaved());
-                            checked = Qt.binding(() => root.savedProfile?.autoconnect ?? false);
+                        RippleButtonWithIcon {
+                            visible: root.isActive
+                            materialIcon: "link_off"
+                            mainText: Translation.tr("Disconnect")
+                            onClicked: Network.disconnectWifiNetwork()
+                        }
+
+                        RippleButtonWithIcon {
+                            visible: root.isSaved
+                            materialIcon: "delete"
+                            mainText: Translation.tr("Forget")
+                            onClicked: Network.forgetWifiNetwork(root.ssid)
+                        }
+
+                        Item {
+                            Layout.fillWidth: true
+                        }
+
+                        StyledText {
+                            visible: root.savedProfile !== null
+                            text: Translation.tr("Connect automatically")
+                            font.pixelSize: Appearance.font.pixelSize.smaller
+                            color: Appearance.colors.colSubtext
+                        }
+
+                        StyledSwitch {
+                            visible: root.savedProfile !== null
+                            checked: root.savedProfile?.autoconnect ?? false
+                            onToggled: {
+                                NetworkCommands.setAutoconnect(root.profileName, checked,
+                                    () => Network.refreshSaved());
+                                checked = Qt.binding(() => root.savedProfile?.autoconnect ?? false);
+                            }
                         }
                     }
                 }

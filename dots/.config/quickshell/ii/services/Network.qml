@@ -50,13 +50,24 @@ Singleton {
 
     readonly property list<WifiAccessPoint> wifiNetworks: []
     readonly property WifiAccessPoint active: wifiNetworks.find(n => n && n.active) ?? null
-    readonly property list<var> friendlyWifiNetworks: [...wifiNetworks].sort((a, b) => {
-        if (a.active && !b.active)
-            return -1;
-        if (!a.active && b.active)
-            return 1;
-        return b.strength - a.strength;
-    })
+
+    // Sorted by connection state then signal strength. Recomputed explicitly
+    // rather than as a live binding: reading `.active`/`.strength` off every
+    // access point inside a binding subscribes it to every AP's RSSI, so this
+    // used to re-sort — and hand every listener a brand-new array — on every
+    // signal fluctuation from any network in range, freezing the Wi-Fi tab and
+    // the sidebar/quick-toggle Wi-Fi lists whenever several APs were visible.
+    property list<var> friendlyWifiNetworks: []
+
+    function resortFriendlyNetworks(): void {
+        root.friendlyWifiNetworks = [...root.wifiNetworks].sort((a, b) => {
+            if (a.active && !b.active)
+                return -1;
+            if (!a.active && b.active)
+                return 1;
+            return b.strength - a.strength;
+        });
+    }
 
     readonly property string wifiStatus: {
         if (!root.ready)
@@ -241,6 +252,7 @@ Singleton {
             }));
         }
         root.applyDetails();
+        root.resortFriendlyNetworks();
     }
 
     function applyDetails(): void {
@@ -398,6 +410,15 @@ Singleton {
         id: apComponent
 
         WifiAccessPoint {}
+    }
+
+    // Catches RSSI drift between network add/remove events. Explicit and
+    // throttled on purpose — see the note on friendlyWifiNetworks above.
+    Timer {
+        interval: 4000
+        repeat: true
+        running: root.wifiNetworks.length > 0
+        onTriggered: root.resortFriendlyNetworks()
     }
 
     Component.onCompleted: {

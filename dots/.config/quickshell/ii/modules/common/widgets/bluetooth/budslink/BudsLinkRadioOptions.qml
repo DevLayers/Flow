@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import QtQuick.Layouts
+import qs.services
 import qs.modules.common
 import qs.modules.common.functions
 import qs.modules.common.widgets
@@ -52,7 +53,7 @@ ColumnLayout {
                     ? Appearance.colors.colPrimary
                     : Appearance.colors.colSurfaceContainerHighest
 
-                colText: radioBtn.isSelected
+                property color colText: radioBtn.isSelected
                     ? Appearance.colors.colOnPrimary
                     : Appearance.colors.colOnSurfaceVariant
 

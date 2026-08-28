@@ -47,6 +47,7 @@ Singleton {
     Component.onCompleted: {
         rfkillState.running = true;
         root.readAdapterAddress();
+        root.resortDeviceLists();
     }
 
     function readAdapterAddress(): void {
@@ -141,6 +142,8 @@ Singleton {
     }
 
     function _checkConnectionChanges() {
+        root.resortDeviceLists();
+
         const currentConnected = Bluetooth.devices.values.filter(d => d.connected);
         const currentAddresses = currentConnected.map(d => d.address);
 
@@ -180,12 +183,28 @@ Singleton {
         // Alphabetical by name
         return a.name.localeCompare(b.name);
     }
-    property list<var> connectedDevices: Bluetooth.devices.values.filter(d => d.connected).sort(sortFunction)
-    property list<var> pairedButNotConnectedDevices: Bluetooth.devices.values.filter(d => d.paired && !d.connected).sort(sortFunction)
-    property list<var> unpairedDevices: Bluetooth.devices.values.filter(d => !d.paired && !d.connected).sort(sortFunction)
-    property list<var> friendlyDeviceList: [
-        ...connectedDevices,
-        ...pairedButNotConnectedDevices,
-        ...unpairedDevices
-    ]
+    // These used to be live bindings reading `.connected`/`.paired`/`.name` off
+    // every known device, which subscribes each list to every device's state.
+    // During active discovery BlueZ can report several new or changed devices
+    // a second, so each one forced three full filter+sort passes and handed
+    // every listener (the Bluetooth tab's three Repeaters, the sidebar dialog,
+    // quick toggles...) a brand-new array — freezing the tab the moment it
+    // started scanning. Recomputed explicitly instead, on the same 500ms
+    // cadence as the connection tracking above.
+    property list<var> connectedDevices: []
+    property list<var> pairedButNotConnectedDevices: []
+    property list<var> unpairedDevices: []
+    property list<var> friendlyDeviceList: []
+
+    function resortDeviceLists(): void {
+        const values = Bluetooth.devices.values;
+        root.connectedDevices = values.filter(d => d.connected).sort(root.sortFunction);
+        root.pairedButNotConnectedDevices = values.filter(d => d.paired && !d.connected).sort(root.sortFunction);
+        root.unpairedDevices = values.filter(d => !d.paired && !d.connected).sort(root.sortFunction);
+        root.friendlyDeviceList = [
+            ...root.connectedDevices,
+            ...root.pairedButNotConnectedDevices,
+            ...root.unpairedDevices
+        ];
+    }
 }

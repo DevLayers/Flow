@@ -18,6 +18,9 @@ Rectangle {
     property bool isFirst: false
     property bool isLast: false
     property bool expanded: false
+    // Sticky: the actions panel below is built once, on first expand.
+    property bool wasExpanded: false
+    onExpandedChanged: if (root.expanded) root.wasExpanded = true
 
     readonly property string deviceName: {
         const name = root.device?.name ?? "";
@@ -37,6 +40,7 @@ Rectangle {
 
     readonly property real outerRadius: Appearance.rounding.normal
     readonly property real innerRadius: Appearance.rounding.verysmall
+    readonly property bool performanceMode: Config.options?.appearance?.settingsPerformanceMode ?? false
 
     // An unpaired device has to be paired before it can carry anything, so the
     // obvious action on it is pairing rather than a connection that would fail.
@@ -67,7 +71,12 @@ Rectangle {
     clip: true
 
     Behavior on color {
-        animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
+        // createObject runs once per row at construction regardless of
+        // `enabled`, so performance mode skips it outright — with several
+        // devices around that's several fewer objects built the moment the
+        // list mounts.
+        animation: root.performanceMode ? null
+            : Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
     }
 
     ColumnLayout {
@@ -180,6 +189,7 @@ Rectangle {
                     rotation: root.expanded ? 0 : -90
 
                     Behavior on rotation {
+                        enabled: !root.performanceMode
                         NumberAnimation {
                             duration: Appearance.animation.elementMoveFast.duration
                             easing.type: Appearance.animation.elementMoveFast.type
@@ -192,10 +202,11 @@ Rectangle {
 
         Item {
             Layout.fillWidth: true
-            implicitHeight: root.expanded ? actions.implicitHeight + 16 : 0
+            implicitHeight: root.expanded && actionsLoader.item ? actionsLoader.item.implicitHeight + 16 : 0
             clip: true
 
             Behavior on implicitHeight {
+                enabled: !root.performanceMode
                 NumberAnimation {
                     duration: Appearance.animation.elementMove.duration
                     easing.type: Appearance.animation.elementMove.type
@@ -203,20 +214,30 @@ Rectangle {
                 }
             }
 
-            BluetoothDeviceActions {
-                id: actions
+            // Deferred: most discovered/paired devices are never opened, and
+            // this panel builds a MaterialTextField plus several buttons and
+            // switches. Building all of that immediately for every device the
+            // moment the list mounts is what made the Bluetooth tab heavy to
+            // open with several devices around. Built once on first expand.
+            Loader {
+                id: actionsLoader
                 anchors.left: parent.left
                 anchors.right: parent.right
                 anchors.top: parent.top
                 anchors.leftMargin: 16
                 anchors.rightMargin: 16
+                active: root.wasExpanded
                 opacity: root.expanded ? 1 : 0
-                device: root.device
 
                 Behavior on opacity {
+                    enabled: !root.performanceMode
                     NumberAnimation {
                         duration: Appearance.animation.elementMoveFast.duration
                     }
+                }
+
+                sourceComponent: BluetoothDeviceActions {
+                    device: root.device
                 }
             }
         }
