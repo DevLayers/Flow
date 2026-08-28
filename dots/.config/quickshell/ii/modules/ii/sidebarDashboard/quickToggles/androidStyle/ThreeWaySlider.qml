@@ -46,10 +46,11 @@ Item {
     // Current state index based on the underlying service
     readonly property int currentStateIndex: {
         if (toggleType === "soundcoreAnc") {
-            let mode = SoundcoreService.isConnected ? SoundcoreService.currentMode : (BudsService.isConnected ? BudsService.currentMode : "Normal");
-            if (mode === "NoiseCanceling") return 0;
-            if (mode === "Normal") return 1;
-            if (mode === "Transparency") return 2;
+            let activeDev = EarbudsControlService.activeDevice;
+            let mode = activeDev ? EarbudsControlService.currentNoiseMode(activeDev) : "off";
+            if (mode === "anc") return 0;
+            if (mode === "off") return 1;
+            if (mode === "transparency" || mode === "adaptive") return 2;
             return 1;
         } else if (toggleType === "powerProfile") {
             let prof = PowerProfiles.profile;
@@ -109,13 +110,13 @@ Item {
 
     function applyStateIndex(idx) {
         if (toggleType === "soundcoreAnc") {
-            let targetMode = "Normal";
-            if (idx === 0) targetMode = "NoiseCanceling";
-            else if (idx === 1) targetMode = "Normal";
-            else if (idx === 2) targetMode = "Transparency";
-            
-            let activeService = SoundcoreService.isConnected ? SoundcoreService : (BudsService.isConnected ? BudsService : null);
-            if (activeService) activeService.setMode(targetMode);
+            let activeDev = EarbudsControlService.activeDevice;
+            if (!activeDev) return;
+            let targetMode = "off";
+            if (idx === 0) targetMode = "anc";
+            else if (idx === 1) targetMode = "off";
+            else if (idx === 2) targetMode = "transparency";
+            EarbudsControlService.setNoiseMode(activeDev, targetMode);
         } else if (toggleType === "powerProfile") {
             if (idx === 0) PowerProfiles.profile = PowerProfile.PowerSaver;
             else if (idx === 1) PowerProfiles.profile = PowerProfile.Balanced;

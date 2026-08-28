@@ -45,7 +45,8 @@ Item {
             "icon": "bluetooth",
             "name": Translation.tr("Bluetooth"),
             "sections": [Translation.tr("Bluetooth"), Translation.tr("Connected"),
-                Translation.tr("Nearby devices"), Translation.tr("Paired devices")]
+                Translation.tr("Nearby devices"), Translation.tr("Paired devices"),
+                Translation.tr("BudsLink"), Translation.tr("Earbuds"), Translation.tr("Noise control")]
         },
         {
             "source": "network/HotspotTab.qml",

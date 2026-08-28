@@ -12,9 +12,13 @@ Singleton {
     // Dictionary to store active modes by device MAC address
     property var deviceModes: ({})
 
+    function isSuppressed(deviceOrMac) {
+        return BudsLinkService.hasDevice(deviceOrMac) || BudsLinkService.hasMac(deviceOrMac);
+    }
+
     readonly property var activeDevice: {
         for (let d of BluetoothStatus.connectedDevices) {
-            if (isHeadsetSupported(d)) {
+            if (isHeadsetSupported(d) && !isSuppressed(d)) {
                 return d;
             }
         }
@@ -67,7 +71,7 @@ Singleton {
             mac = activeDevice ? activeDevice.address : "";
         }
 
-        if (!mac)
+        if (!mac || isSuppressed(mac))
             return;
 
         Quickshell.execDetached(["gjs", "-m", budsScriptPath, "set", mac, mode.toLowerCase()]);
@@ -82,6 +86,9 @@ Singleton {
             return;
         }
 
+        if (isSuppressed(mac))
+            return;
+
         // Spawn a lightweight, isolated process to poll the specific headset
         processComponent.createObject(root, {
             "mac": mac
@@ -90,7 +97,7 @@ Singleton {
 
     function refreshAllConnected() {
         for (let d of BluetoothStatus.connectedDevices) {
-            if (isHeadsetSupported(d)) {
+            if (isHeadsetSupported(d) && !isSuppressed(d)) {
                 refreshMode(d.address);
             }
         }
