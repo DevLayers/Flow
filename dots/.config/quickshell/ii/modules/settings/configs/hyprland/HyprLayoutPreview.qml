@@ -174,7 +174,12 @@ ColumnLayout {
         if (root.engine === "dwindle") return root.dwindleWindows();
         if (root.engine === "master") return root.masterWindows();
         if (root.engine === "scrolling") return root.scrollingWindows();
-        return [{ "x": 0, "y": 0, "w": 1, "h": 1, "label": "", "isNew": true }];
+        // Monocle stacks every window full-screen with only the focused one showing, so the
+        // single rect needs a label - an unlabelled full-bleed block with a border barely
+        // distinguishable from its own fill (colPrimary on colPrimaryContainer) just reads as a
+        // blank rectangle. The count says what is actually stacked behind the visible one.
+        const label = root.windowCount > 1 ? Translation.tr("1 of %1").arg(root.windowCount) : "1";
+        return [{ "x": 0, "y": 0, "w": 1, "h": 1, "label": label, "isNew": true }];
     }
 
     readonly property var captionLines: {

@@ -57,97 +57,15 @@ ContentPage {
             text: Translation.tr("Num Lock on at startup")
         }
 
-        HyprSwitch {
-            optionKey: "input:resolve_binds_by_sym"
-            buttonIcon: "abc"
-            text: Translation.tr("Match shortcuts by symbol, not position")
-
-            StyledToolTip {
-                text: Translation.tr("On an AZERTY layout, SUPER+A then means the key that types A rather than the key where A sits on QWERTY.")
-            }
-        }
-
-        ContentSubsection {
-            title: Translation.tr("Key behaviour")
-            icon: "keyboard_option_key"
-            Layout.fillWidth: true
-
-            HyprXkbOptionSwitch {
-                option: "caps:escape"
-                buttonIcon: "keyboard_capslock"
-                text: Translation.tr("Caps Lock acts as Escape")
-            }
-
-            HyprXkbOptionSwitch {
-                option: "caps:swapescape"
-                buttonIcon: "swap_horiz"
-                text: Translation.tr("Swap Caps Lock and Escape")
-            }
-
-            HyprXkbOptionSwitch {
-                option: "compose:ralt"
-                buttonIcon: "add_circle"
-                text: Translation.tr("Right Alt is the Compose key")
-
-                StyledToolTip {
-                    text: Translation.tr("Compose then ' then e types é. Works in every app, without a layout that has the letter on it.")
-                }
-            }
-
-            HyprXkbOptionSwitch {
-                option: "terminate:ctrl_alt_bksp"
-                buttonIcon: "logout"
-                text: Translation.tr("Ctrl+Alt+Backspace kills the session")
-            }
-
-            HyprXkbOptionSwitch {
-                option: "grp:alt_shift_toggle"
-                buttonIcon: "language"
-                text: Translation.tr("Alt+Shift switches between layouts")
-            }
-        }
-
-        ContentSubsection {
-            title: Translation.tr("Several layouts at once")
-            icon: "list"
-            Layout.fillWidth: true
-
-            HyprTextField {
-                optionKey: "input:kb_layout"
-                defaultValue: "us"
-                icon: "language"
-                text: Translation.tr("Layout codes")
-                placeholderText: "fr,us"
-                tooltip: Translation.tr("Comma separated. The first one is active at startup.")
-            }
-
-            HyprTextField {
-                optionKey: "input:kb_variant"
-                icon: "tune"
-                text: Translation.tr("Variants")
-                placeholderText: ",intl"
-                tooltip: Translation.tr("One per layout, in the same order. Leave a slot empty for no variant.")
-            }
-
-            HyprTextField {
-                optionKey: "input:kb_options"
-                icon: "settings"
-                text: Translation.tr("XKB options")
-                placeholderText: "caps:escape,compose:ralt"
-                tooltip: Translation.tr("The raw list. The switches above edit the same string.")
-            }
-
-            HyprTextField {
-                optionKey: "input:kb_model"
-                icon: "keyboard_alt"
-                text: Translation.tr("Keyboard model")
-                placeholderText: "pc105"
-            }
+        HyprNavRow {
+            buttonIcon: "tune"
+            text: Translation.tr("Advanced keyboard")
+            value: Translation.tr("XKB quirks, multiple layouts")
+            configPage: Qt.resolvedUrl("HyprKeyboardAdvancedPage.qml")
         }
 
         HyprOptionNote {
-            keys: ["input:kb_layout", "input:kb_variant", "input:kb_options", "input:kb_model",
-                "input:numlock_by_default", "input:resolve_binds_by_sym"]
+            keys: ["input:kb_layout", "input:kb_variant", "input:numlock_by_default"]
         }
     }
 
@@ -179,17 +97,6 @@ ContentPage {
             stepSize: 1
         }
 
-        ContentSubsection {
-            title: Translation.tr("Try it")
-            icon: "edit"
-            Layout.fillWidth: true
-
-            MaterialTextField {
-                Layout.fillWidth: true
-                placeholderText: Translation.tr("Hold a key down here")
-            }
-        }
-
         HyprOptionNote {
             keys: ["input:repeat_delay", "input:repeat_rate"]
         }
@@ -215,46 +122,6 @@ ContentPage {
             text: Translation.tr("Natural scrolling")
         }
 
-        HyprSwitch {
-            optionKey: "input:left_handed"
-            buttonIcon: "back_hand"
-            text: Translation.tr("Swap the mouse buttons")
-        }
-
-        HyprSwitch {
-            optionKey: "input:force_no_accel"
-            buttonIcon: "linear_scale"
-            text: Translation.tr("Send raw movement, unaccelerated")
-
-            StyledToolTip {
-                text: Translation.tr("Bypasses libinput's pointer acceleration entirely. Useful for games and drawing; heavy-handed for everything else.")
-            }
-        }
-
-        HyprSlider {
-            optionKey: "input:scroll_factor"
-            defaultValue: 1
-            buttonIcon: "unfold_more"
-            text: Translation.tr("Scroll distance")
-            tooltipContent: `${value.toFixed(2)}×`
-            from: 0.05
-            to: 3
-            stepSize: 0.05
-        }
-
-        HyprSwitch {
-            optionKey: "input:scroll_button_lock"
-            buttonIcon: "lock"
-            text: Translation.tr("Scroll button stays held")
-        }
-
-        HyprSwitch {
-            optionKey: "input:mouse_refocus"
-            defaultValue: true
-            buttonIcon: "center_focus_weak"
-            text: Translation.tr("Moving the mouse can change focus")
-        }
-
         HyprSelect {
             optionKey: "input:accel_profile"
             title: Translation.tr("Pointer acceleration")
@@ -266,57 +133,15 @@ ContentPage {
             ]
         }
 
-        HyprSelect {
-            optionKey: "input:scroll_method"
-            title: Translation.tr("Scroll method")
-            icon: "swipe_vertical"
-            options: [
-                { "displayName": Translation.tr("libinput default"), "value": "" },
-                { "displayName": Translation.tr("Two fingers"), "value": "2fg" },
-                { "displayName": Translation.tr("Edge"), "value": "edge" },
-                { "displayName": Translation.tr("Hold a button"), "value": "on_button_down" },
-                { "displayName": Translation.tr("Off"), "value": "no_scroll" }
-            ]
-        }
-
-        HyprSelect {
-            optionKey: "input:follow_mouse"
-            defaultValue: 1
-            title: Translation.tr("Focus follows the pointer")
-            icon: "ads_click"
-            options: [
-                { "displayName": Translation.tr("Never"), "value": 0 },
-                { "displayName": Translation.tr("Always"), "value": 1 },
-                { "displayName": Translation.tr("Detached"), "value": 2 },
-                { "displayName": Translation.tr("Click to focus"), "value": 3 }
-            ]
-        }
-
-        HyprSlider {
-            optionKey: "input:follow_mouse_threshold"
-            buttonIcon: "straighten"
-            text: Translation.tr("Movement needed before focus follows")
-            tooltipContent: `${Math.round(value)} px`
-            from: 0
-            to: 200
-            stepSize: 5
-        }
-
-        HyprSelect {
-            optionKey: "input:focus_on_close"
-            title: Translation.tr("When a window closes, focus goes to")
-            icon: "close"
-            options: [
-                { "displayName": Translation.tr("The next window"), "value": 0 },
-                { "displayName": Translation.tr("Whatever is under the pointer"), "value": 1 }
-            ]
+        HyprNavRow {
+            buttonIcon: "tune"
+            text: Translation.tr("Advanced mouse")
+            value: Translation.tr("Focus, scrolling, buttons")
+            configPage: Qt.resolvedUrl("HyprMouseAdvancedPage.qml")
         }
 
         HyprOptionNote {
-            keys: ["input:sensitivity", "input:natural_scroll", "input:left_handed",
-                "input:force_no_accel", "input:scroll_factor", "input:scroll_button_lock",
-                "input:mouse_refocus", "input:accel_profile", "input:scroll_method",
-                "input:follow_mouse", "input:follow_mouse_threshold", "input:focus_on_close"]
+            keys: ["input:sensitivity", "input:natural_scroll", "input:accel_profile"]
         }
     }
 
@@ -332,13 +157,6 @@ ContentPage {
         }
 
         HyprSwitch {
-            optionKey: "input:touchpad:tap-and-drag"
-            defaultValue: true
-            buttonIcon: "drag_pan"
-            text: Translation.tr("Tap then drag to move things")
-        }
-
-        HyprSwitch {
             optionKey: "input:touchpad:natural_scroll"
             buttonIcon: "swap_vert"
             text: Translation.tr("Natural scrolling")
@@ -351,87 +169,16 @@ ContentPage {
             text: Translation.tr("Ignore the touchpad while typing")
         }
 
-        HyprSwitch {
-            optionKey: "input:touchpad:clickfinger_behavior"
-            buttonIcon: "pinch"
-            text: Translation.tr("Right click with two fingers anywhere")
-
-            StyledToolTip {
-                text: Translation.tr("Off, the button areas at the bottom of the pad decide which click you get. On, the number of fingers does.")
-            }
-        }
-
-        HyprSwitch {
-            optionKey: "input:touchpad:middle_button_emulation"
-            buttonIcon: "adjust"
-            text: Translation.tr("Both buttons at once is a middle click")
-        }
-
-        HyprSwitch {
-            optionKey: "input:touchpad:flip_x"
-            buttonIcon: "flip"
-            text: Translation.tr("Flip horizontally")
-        }
-
-        HyprSwitch {
-            optionKey: "input:touchpad:flip_y"
-            buttonIcon: "flip_camera_android"
-            text: Translation.tr("Flip vertically")
-        }
-
-        HyprSlider {
-            optionKey: "input:touchpad:scroll_factor"
-            defaultValue: 1
-            buttonIcon: "unfold_more"
-            text: Translation.tr("Scroll distance")
-            tooltipContent: `${value.toFixed(2)}×`
-            from: 0.05
-            to: 3
-            stepSize: 0.05
-        }
-
-        HyprSelect {
-            optionKey: "input:touchpad:drag_lock"
-            defaultValue: 0
-            title: Translation.tr("Drag lock")
-            icon: "lock_open"
-            options: [
-                { "displayName": Translation.tr("Off"), "value": 0 },
-                { "displayName": Translation.tr("Until a timeout"), "value": 1 },
-                { "displayName": Translation.tr("Until the next tap"), "value": 2 }
-            ]
-        }
-
-        HyprSelect {
-            optionKey: "input:touchpad:drag_3fg"
-            defaultValue: 0
-            title: Translation.tr("Three-finger drag")
-            icon: "3d_rotation"
-            options: [
-                { "displayName": Translation.tr("Off"), "value": 0 },
-                { "displayName": Translation.tr("Three fingers"), "value": 1 },
-                { "displayName": Translation.tr("Four fingers"), "value": 2 }
-            ]
-        }
-
-        HyprSelect {
-            optionKey: "input:touchpad:tap_button_map"
-            title: Translation.tr("Two and three finger taps")
-            icon: "touch_app"
-            options: [
-                { "displayName": Translation.tr("libinput default"), "value": "" },
-                { "displayName": Translation.tr("Right, then middle"), "value": "lrm" },
-                { "displayName": Translation.tr("Middle, then right"), "value": "lmr" }
-            ]
+        HyprNavRow {
+            buttonIcon: "tune"
+            text: Translation.tr("Advanced touchpad")
+            value: Translation.tr("Gestures, clicks, orientation")
+            configPage: Qt.resolvedUrl("HyprTouchpadAdvancedPage.qml")
         }
 
         HyprOptionNote {
-            keys: ["input:touchpad:tap-to-click", "input:touchpad:tap-and-drag",
-                "input:touchpad:natural_scroll", "input:touchpad:disable_while_typing",
-                "input:touchpad:clickfinger_behavior", "input:touchpad:middle_button_emulation",
-                "input:touchpad:flip_x", "input:touchpad:flip_y", "input:touchpad:scroll_factor",
-                "input:touchpad:drag_lock", "input:touchpad:drag_3fg",
-                "input:touchpad:tap_button_map"]
+            keys: ["input:touchpad:tap-to-click", "input:touchpad:natural_scroll",
+                "input:touchpad:disable_while_typing"]
         }
     }
 
@@ -451,88 +198,21 @@ ContentPage {
         }
 
         HyprSwitch {
-            optionKey: "cursor:hide_on_key_press"
-            buttonIcon: "keyboard"
-            text: Translation.tr("Hide while typing")
-        }
-
-        HyprSwitch {
-            optionKey: "cursor:hide_on_touch"
-            defaultValue: true
-            buttonIcon: "touch_app"
-            text: Translation.tr("Hide when the screen is touched")
-        }
-
-        HyprSwitch {
-            optionKey: "cursor:no_warps"
-            buttonIcon: "my_location"
-            text: Translation.tr("Never move the cursor by itself")
-
-            StyledToolTip {
-                text: Translation.tr("Hyprland normally jumps the cursor to a window it focuses. This stops that everywhere.")
-            }
-        }
-
-        HyprSwitch {
-            optionKey: "cursor:persistent_warps"
-            buttonIcon: "history"
-            text: Translation.tr("Remember where the cursor was in each window")
-        }
-
-        HyprSwitch {
             optionKey: "cursor:enable_hyprcursor"
             defaultValue: true
             buttonIcon: "brush"
             text: Translation.tr("Use hyprcursor themes")
         }
 
-        HyprSwitch {
-            optionKey: "cursor:zoom_rigid"
-            buttonIcon: "center_focus_strong"
-            text: Translation.tr("Zoom stays centred on the screen")
-        }
-
-        HyprSlider {
-            optionKey: "cursor:zoom_factor"
-            defaultValue: 1
-            buttonIcon: "zoom_in"
-            text: Translation.tr("Screen zoom")
-            tooltipContent: `${value.toFixed(1)}×`
-            from: 1
-            to: 5
-            stepSize: 0.1
-            decimals: 1
-        }
-
-        HyprSelect {
-            optionKey: "cursor:no_hardware_cursors"
-            defaultValue: 2
-            title: Translation.tr("Hardware cursor")
-            icon: "memory"
-            options: [
-                { "displayName": Translation.tr("Use it"), "value": 0 },
-                { "displayName": Translation.tr("Never"), "value": 1 },
-                { "displayName": Translation.tr("Decide automatically"), "value": 2 }
-            ]
-        }
-
-        HyprSelect {
-            optionKey: "cursor:warp_on_change_workspace"
-            defaultValue: 0
-            title: Translation.tr("Jump to the focused window when changing workspace")
-            icon: "swap_horiz"
-            options: [
-                { "displayName": Translation.tr("No"), "value": 0 },
-                { "displayName": Translation.tr("Yes"), "value": 1 },
-                { "displayName": Translation.tr("Force"), "value": 2 }
-            ]
+        HyprNavRow {
+            buttonIcon: "tune"
+            text: Translation.tr("Advanced cursor")
+            value: Translation.tr("Zoom, warping, hardware")
+            configPage: Qt.resolvedUrl("HyprCursorAdvancedPage.qml")
         }
 
         HyprOptionNote {
-            keys: ["cursor:inactive_timeout", "cursor:hide_on_key_press", "cursor:hide_on_touch",
-                "cursor:no_warps", "cursor:persistent_warps", "cursor:enable_hyprcursor",
-                "cursor:zoom_rigid", "cursor:zoom_factor", "cursor:no_hardware_cursors",
-                "cursor:warp_on_change_workspace"]
+            keys: ["cursor:inactive_timeout", "cursor:enable_hyprcursor"]
         }
 
         StyledText {
@@ -546,71 +226,25 @@ ContentPage {
     }
 
     ContentSection {
+        id: perDeviceSection
         title: Translation.tr("Per device")
         icon: "devices"
 
-        StyledText {
-            Layout.fillWidth: true
-            text: HyprlandDevices.ready
-                ? Translation.tr("Settings above apply to everything. These override them for one device only.")
+        // Deferred to its own page: a machine with several peripherals - or one with several
+        // HID interfaces per peripheral, which gaming keyboards and mice commonly register -
+        // can report a dozen or more real devices, and building a full settings card for every
+        // one of them the instant this tab mounted was most of what made it heavy to open.
+        readonly property int deviceCount: HyprlandDevices.realKeyboards.length
+            + HyprlandDevices.realMice.length + HyprlandDevices.realTablets.length
+            + HyprlandDevices.realTouch.length
+
+        HyprNavRow {
+            buttonIcon: "tune"
+            text: Translation.tr("Per-device overrides")
+            value: HyprlandDevices.ready
+                ? Translation.tr("%1 devices").arg(perDeviceSection.deviceCount)
                 : Translation.tr("Asking Hyprland what is plugged in…")
-            font.pixelSize: Appearance.font.pixelSize.smaller
-            color: Appearance.colors.colSubtext
-            wrapMode: Text.WordWrap
-        }
-
-        Repeater {
-            model: HyprlandDevices.realKeyboards
-
-            delegate: HyprDeviceCard {
-                required property var modelData
-
-                device: modelData
-                kind: "keyboard"
-            }
-        }
-
-        Repeater {
-            model: HyprlandDevices.realMice
-
-            delegate: HyprDeviceCard {
-                required property var modelData
-
-                device: modelData
-                kind: "pointer"
-            }
-        }
-
-        Repeater {
-            model: HyprlandDevices.realTablets
-
-            delegate: HyprDeviceCard {
-                required property var modelData
-
-                device: modelData
-                kind: "tablet"
-            }
-        }
-
-        Repeater {
-            model: HyprlandDevices.realTouch
-
-            delegate: HyprDeviceCard {
-                required property var modelData
-
-                device: modelData
-                kind: "touch"
-            }
-        }
-
-        StyledText {
-            Layout.fillWidth: true
-            visible: HyprlandDevices.hiddenCount > 0
-            text: Translation.tr("%1 device(s) Hyprland reports are not hardware — keyd, ydotool, logiops and the lid switch each register one — so they are left out.")
-                .arg(HyprlandDevices.hiddenCount)
-            font.pixelSize: Appearance.font.pixelSize.smaller
-            color: Appearance.colors.colSubtext
-            wrapMode: Text.WordWrap
+            configPage: Qt.resolvedUrl("HyprPerDevicePage.qml")
         }
     }
 }

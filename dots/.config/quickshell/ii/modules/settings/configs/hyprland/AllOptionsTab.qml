@@ -136,6 +136,18 @@ ContentPage {
         title: Translation.tr("By section")
         icon: "list"
 
+        // Sections are filled in once HyprlandCatalog finishes reading Hyprland's type
+        // declarations - the same async read "Browse and search" above already waits on. Without
+        // this the Repeater below is just empty, and the section reads as broken rather than
+        // as still loading.
+        StyledText {
+            Layout.fillWidth: true
+            visible: !HyprlandCatalog.ready
+            text: Translation.tr("Reading…")
+            font.pixelSize: Appearance.font.pixelSize.smaller
+            color: Appearance.colors.colSubtext
+        }
+
         Repeater {
             model: tab.listedSections
 
@@ -152,6 +164,14 @@ ContentPage {
                 configPage: tab.browserPage
                 onOpenSubPage: HyprlandCatalog.browse(modelData.id, "")
             }
+        }
+
+        StyledText {
+            Layout.fillWidth: true
+            visible: HyprlandCatalog.ready && tab.listedSections.length === 0
+            text: Translation.tr("No sections were reported.")
+            font.pixelSize: Appearance.font.pixelSize.smaller
+            color: Appearance.colors.colSubtext
         }
     }
 

@@ -619,83 +619,16 @@ ContentPage {
             text: Translation.tr("Invert the touchpad direction")
         }
 
-        HyprSwitch {
-            optionKey: "gestures:workspace_swipe_create_new"
-            defaultValue: true
-            buttonIcon: "add"
-            text: Translation.tr("Swiping past the last workspace makes a new one")
-        }
-
-        HyprSwitch {
-            optionKey: "gestures:workspace_swipe_forever"
-            buttonIcon: "all_inclusive"
-            text: Translation.tr("Keep going past the next workspace in one swipe")
-        }
-
-        HyprSwitch {
-            optionKey: "gestures:workspace_swipe_use_r"
-            buttonIcon: "tag"
-            text: Translation.tr("Swipe within the monitor's own workspaces")
-
-            StyledToolTip {
-                text: Translation.tr("Uses the r workspace prefix instead of m, so a swipe stays inside the workspaces that belong to this monitor.")
-            }
-        }
-
-        ContentSubsection {
-            title: Translation.tr("Direction lock")
-            icon: "lock"
-            Layout.fillWidth: true
-
-            HyprSwitch {
-                optionKey: "gestures:workspace_swipe_direction_lock"
-                defaultValue: true
-                buttonIcon: "swipe_right"
-                text: Translation.tr("Lock to the direction the swipe started in")
-            }
-
-            HyprSlider {
-                optionKey: "gestures:workspace_swipe_direction_lock_threshold"
-                defaultValue: 10
-                integer: true
-                buttonIcon: "straighten"
-                text: Translation.tr("Travel before the lock takes hold")
-                tooltipContent: `${Math.round(value)} px`
-                from: 0
-                to: 200
-                stepSize: 1
-            }
-        }
-
-        ContentSubsection {
-            title: Translation.tr("Touchscreen")
-            icon: "touch_app"
-            Layout.fillWidth: true
-
-            HyprSwitch {
-                optionKey: "gestures:workspace_swipe_touch"
-                buttonIcon: "swipe"
-                text: Translation.tr("Swipe workspaces from the edge of a touchscreen")
-            }
-
-            HyprSwitch {
-                optionKey: "gestures:workspace_swipe_touch_invert"
-                buttonIcon: "swap_horiz"
-                text: Translation.tr("Invert the touchscreen direction")
-            }
+        HyprNavRow {
+            buttonIcon: "tune"
+            text: Translation.tr("Advanced workspace swipe")
+            value: Translation.tr("Direction lock, touchscreen, wrap")
+            configPage: Qt.resolvedUrl("HyprWorkspaceSwipeAdvancedPage.qml")
         }
 
         HyprOptionNote {
             keys: ["gestures:workspace_swipe_distance", "gestures:workspace_swipe_cancel_ratio",
-                "gestures:workspace_swipe_min_speed_to_force", "gestures:workspace_swipe_invert",
-                "gestures:workspace_swipe_create_new", "gestures:workspace_swipe_forever",
-                "gestures:workspace_swipe_use_r", "gestures:workspace_swipe_direction_lock",
-                "gestures:workspace_swipe_direction_lock_threshold",
-                "gestures:workspace_swipe_touch", "gestures:workspace_swipe_touch_invert"]
-            notes: [{
-                "icon": "info",
-                "text": Translation.tr("Turning the swipe on and choosing how many fingers it takes is no longer a setting: since Hyprland 0.55 that is a gesture line, and the ones this config ships live in hyprland/general.lua. Everything here tunes a swipe that is already set up.")
-            }]
+                "gestures:workspace_swipe_invert"]
         }
     }
 

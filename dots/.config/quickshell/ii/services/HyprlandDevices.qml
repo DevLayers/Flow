@@ -26,11 +26,16 @@ Singleton {
     property var touch: []
     property bool ready: false
 
-    /// Names that belong to software, not hardware.
+    /// Names that belong to software, or to a driver's own control channel, not hardware a
+    /// person would want a per-device settings card for.
     readonly property var virtualPatterns: [
-        /virtual/i, /^video-bus$/, /^power-button$/, /^sleep-button$/, /^lid-switch$/,
+        /virtual/i, /^video-bus(-\d+)?$/, /^power-button$/, /^sleep-button$/, /^lid-switch$/,
         /hid-events$/, /button-array$/, /consumer-control/, /system-control/, /^ydotool/, /^keyd/,
-        /^logiops/, /^wlr/, /^wayland/
+        /^logiops/, /^wlr/, /^wayland/, /passthrough/, /privacy-driver$/, /wmi-hotkeys$/,
+        // A Bluetooth headset's AVRCP media-control endpoint registers as a "keyboard" for its
+        // play/pause/volume buttons - real hardware, but not one anybody wants a keyboard-layout
+        // and repeat-rate card for.
+        /\(avrcp\)$/i
     ]
 
     function isVirtual(name: string): bool {

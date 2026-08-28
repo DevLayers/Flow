@@ -92,163 +92,178 @@ ContentSubsection {
         }
     }
 
-    HyprToggle {
-        visible: card.overridden
-        buttonIcon: "power_settings_new"
-        text: Translation.tr("Device enabled")
-        switchOn: card.setting("enabled", true) === true
-        onRequested: wanted => card.put("enabled", wanted)
-    }
+    // Deferred: every one of these is hidden until the toggle above is on, but a page can list
+    // dozens of devices and each one used to build all eleven fields anyway - a slider, a select,
+    // four toggles, two text fields, two spin boxes, a rotation picker - regardless of whether
+    // any of them would ever be seen. That is most of what made the Input tab heavy to open.
+    // `overridden` is a real setting rather than local UI state, so there is nothing to lose by
+    // tearing this down when it goes off.
+    Loader {
+        Layout.fillWidth: true
+        active: card.overridden
+        visible: active
 
-    ConfigSlider {
-        id: sensitivity
+        sourceComponent: ColumnLayout {
+            spacing: Appearance.sizes.elevationMargin / 2
 
-        readonly property real specValue: Number(card.setting("sensitivity", 0))
+            HyprToggle {
+                buttonIcon: "power_settings_new"
+                text: Translation.tr("Device enabled")
+                switchOn: card.setting("enabled", true) === true
+                onRequested: wanted => card.put("enabled", wanted)
+            }
 
-        visible: card.overridden && card.isPointer
-        buttonIcon: "speed"
-        text: Translation.tr("Sensitivity")
-        usePercentTooltip: false
-        from: -1
-        to: 1
-        stepSize: 0.05
-        value: sensitivity.specValue
-        onSpecValueChanged: {
-            if (sensitivity.pressed) return;
-            sensitivity.value = sensitivity.specValue;
-        }
-        onPressedChanged: {
-            if (sensitivity.pressed) return;
-            card.put("sensitivity", Number(sensitivity.value.toFixed(2)));
-        }
-    }
+            ConfigSlider {
+                id: sensitivity
 
-    HyprSelect {
-        visible: card.overridden && card.isPointer
-        title: Translation.tr("Pointer acceleration")
-        icon: "trending_up"
-        currentOverride: String(card.setting("accel_profile", ""))
-        options: [
-            { "displayName": Translation.tr("Global setting"), "value": "" },
-            { "displayName": Translation.tr("Adaptive"), "value": "adaptive" },
-            { "displayName": Translation.tr("Flat"), "value": "flat" }
-        ]
-        onSelected: newValue => card.put("accel_profile", newValue)
-    }
+                readonly property real specValue: Number(card.setting("sensitivity", 0))
 
-    HyprToggle {
-        visible: card.overridden && card.isPointer
-        buttonIcon: "swap_vert"
-        text: Translation.tr("Natural scrolling")
-        switchOn: card.setting("natural_scroll", false) === true
-        onRequested: wanted => card.put("natural_scroll", wanted)
-    }
+                visible: card.isPointer
+                buttonIcon: "speed"
+                text: Translation.tr("Sensitivity")
+                usePercentTooltip: false
+                from: -1
+                to: 1
+                stepSize: 0.05
+                value: sensitivity.specValue
+                onSpecValueChanged: {
+                    if (sensitivity.pressed) return;
+                    sensitivity.value = sensitivity.specValue;
+                }
+                onPressedChanged: {
+                    if (sensitivity.pressed) return;
+                    card.put("sensitivity", Number(sensitivity.value.toFixed(2)));
+                }
+            }
 
-    HyprToggle {
-        visible: card.overridden && card.isPointer
-        buttonIcon: "back_hand"
-        text: Translation.tr("Left handed")
-        switchOn: card.setting("left_handed", false) === true
-        onRequested: wanted => card.put("left_handed", wanted)
-    }
+            HyprSelect {
+                visible: card.isPointer
+                title: Translation.tr("Pointer acceleration")
+                icon: "trending_up"
+                currentOverride: String(card.setting("accel_profile", ""))
+                options: [
+                    { "displayName": Translation.tr("Global setting"), "value": "" },
+                    { "displayName": Translation.tr("Adaptive"), "value": "adaptive" },
+                    { "displayName": Translation.tr("Flat"), "value": "flat" }
+                ]
+                onSelected: newValue => card.put("accel_profile", newValue)
+            }
 
-    ConfigTextField {
-        id: deviceLayout
+            HyprToggle {
+                visible: card.isPointer
+                buttonIcon: "swap_vert"
+                text: Translation.tr("Natural scrolling")
+                switchOn: card.setting("natural_scroll", false) === true
+                onRequested: wanted => card.put("natural_scroll", wanted)
+            }
 
-        visible: card.overridden && card.isKeyboard
-        icon: "keyboard"
-        text: Translation.tr("Layout codes")
-        placeholderText: "us,fr"
-        inputText: String(card.setting("kb_layout", ""))
+            HyprToggle {
+                visible: card.isPointer
+                buttonIcon: "back_hand"
+                text: Translation.tr("Left handed")
+                switchOn: card.setting("left_handed", false) === true
+                onRequested: wanted => card.put("left_handed", wanted)
+            }
 
-        Connections {
-            target: deviceLayout.textField
+            ConfigTextField {
+                id: deviceLayout
 
-            function onEditingFinished() {
-                card.put("kb_layout", deviceLayout.inputText);
+                visible: card.isKeyboard
+                icon: "keyboard"
+                text: Translation.tr("Layout codes")
+                placeholderText: "us,fr"
+                inputText: String(card.setting("kb_layout", ""))
+
+                Connections {
+                    target: deviceLayout.textField
+
+                    function onEditingFinished() {
+                        card.put("kb_layout", deviceLayout.inputText);
+                    }
+                }
+            }
+
+            ConfigTextField {
+                id: deviceVariant
+
+                visible: card.isKeyboard
+                icon: "language"
+                text: Translation.tr("Variants")
+                placeholderText: ",intl"
+                inputText: String(card.setting("kb_variant", ""))
+
+                Connections {
+                    target: deviceVariant.textField
+
+                    function onEditingFinished() {
+                        card.put("kb_variant", deviceVariant.inputText);
+                    }
+                }
+            }
+
+            ConfigSpinBox {
+                id: deviceRate
+
+                visible: card.isKeyboard
+                icon: "repeat"
+                text: Translation.tr("Repeat rate")
+                from: 1
+                to: 100
+                stepSize: 1
+                value: Number(card.setting("repeat_rate", 25))
+                onValueChanged: {
+                    if (deviceRate.value === Number(card.setting("repeat_rate", 25))) return;
+                    card.put("repeat_rate", deviceRate.value);
+                }
+            }
+
+            ConfigSpinBox {
+                id: deviceDelay
+
+                visible: card.isKeyboard
+                icon: "timer"
+                text: Translation.tr("Repeat delay (ms)")
+                from: 100
+                to: 2000
+                stepSize: 50
+                value: Number(card.setting("repeat_delay", 600))
+                onValueChanged: {
+                    if (deviceDelay.value === Number(card.setting("repeat_delay", 600))) return;
+                    card.put("repeat_delay", deviceDelay.value);
+                }
+            }
+
+            ConfigTextField {
+                id: deviceOutput
+
+                visible: card.isSurface
+                icon: "monitor"
+                text: Translation.tr("Bind to one screen")
+                placeholderText: "eDP-1"
+                inputText: String(card.setting("output", ""))
+
+                Connections {
+                    target: deviceOutput.textField
+
+                    function onEditingFinished() {
+                        card.put("output", deviceOutput.inputText);
+                    }
+                }
+            }
+
+            HyprSelect {
+                visible: card.isSurface
+                title: Translation.tr("Rotation")
+                icon: "screen_rotation"
+                currentOverride: Number(card.setting("transform", 0))
+                options: [
+                    { "displayName": Translation.tr("None"), "value": 0 },
+                    { "displayName": "90°", "value": 1 },
+                    { "displayName": "180°", "value": 2 },
+                    { "displayName": "270°", "value": 3 }
+                ]
+                onSelected: newValue => card.put("transform", newValue)
             }
         }
-    }
-
-    ConfigTextField {
-        id: deviceVariant
-
-        visible: card.overridden && card.isKeyboard
-        icon: "language"
-        text: Translation.tr("Variants")
-        placeholderText: ",intl"
-        inputText: String(card.setting("kb_variant", ""))
-
-        Connections {
-            target: deviceVariant.textField
-
-            function onEditingFinished() {
-                card.put("kb_variant", deviceVariant.inputText);
-            }
-        }
-    }
-
-    ConfigSpinBox {
-        id: deviceRate
-
-        visible: card.overridden && card.isKeyboard
-        icon: "repeat"
-        text: Translation.tr("Repeat rate")
-        from: 1
-        to: 100
-        stepSize: 1
-        value: Number(card.setting("repeat_rate", 25))
-        onValueChanged: {
-            if (deviceRate.value === Number(card.setting("repeat_rate", 25))) return;
-            card.put("repeat_rate", deviceRate.value);
-        }
-    }
-
-    ConfigSpinBox {
-        id: deviceDelay
-
-        visible: card.overridden && card.isKeyboard
-        icon: "timer"
-        text: Translation.tr("Repeat delay (ms)")
-        from: 100
-        to: 2000
-        stepSize: 50
-        value: Number(card.setting("repeat_delay", 600))
-        onValueChanged: {
-            if (deviceDelay.value === Number(card.setting("repeat_delay", 600))) return;
-            card.put("repeat_delay", deviceDelay.value);
-        }
-    }
-
-    ConfigTextField {
-        id: deviceOutput
-
-        visible: card.overridden && card.isSurface
-        icon: "monitor"
-        text: Translation.tr("Bind to one screen")
-        placeholderText: "eDP-1"
-        inputText: String(card.setting("output", ""))
-
-        Connections {
-            target: deviceOutput.textField
-
-            function onEditingFinished() {
-                card.put("output", deviceOutput.inputText);
-            }
-        }
-    }
-
-    HyprSelect {
-        visible: card.overridden && card.isSurface
-        title: Translation.tr("Rotation")
-        icon: "screen_rotation"
-        currentOverride: Number(card.setting("transform", 0))
-        options: [
-            { "displayName": Translation.tr("None"), "value": 0 },
-            { "displayName": "90°", "value": 1 },
-            { "displayName": "180°", "value": 2 },
-            { "displayName": "270°", "value": 3 }
-        ]
-        onSelected: newValue => card.put("transform", newValue)
     }
 }
