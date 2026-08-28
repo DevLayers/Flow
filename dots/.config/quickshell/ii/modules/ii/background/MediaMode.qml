@@ -890,11 +890,10 @@ Item { // Fullscreen MediaMode instance
                                         FadeLoader {
                                             shown: lyricsItem.hasSyncedLines
                                             anchors.fill: parent
-                                            sourceComponent: LyricsSyllable {
+                                            sourceComponent: MediaModeLyrics {
                                                 anchors.fill: parent
                                                 largeFontSize: Appearance.font.pixelSize.hugeass * 1.8 * root.lyricsScaleMultiplier
                                                 activeColor: root.dynamicAccentColor
-                                                highlightColor: root.dynamicOnAccentContainer
                                             }
                                         }
                                     }
