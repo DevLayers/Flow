@@ -177,7 +177,6 @@ Item {
     // declared panel width remains the usable width, not the clipped width.
     readonly property real hostedPanelSideMargin: Appearance.sizes.elevationMargin
     readonly property bool activePanelUsesHost: root.activePanel?.hosted === true
-    readonly property bool showPanelAccent: root.activePanelUsesHost
     readonly property bool isClipboardMode: root.activePanelId === "clipboard"
     readonly property bool isBluetoothMode: root.activePanelId === "bluetooth"
     readonly property bool isTranslatorMode: root.activePanelId === "translator"
@@ -1340,8 +1339,7 @@ Item {
         // older registry entries opted out individually, making the control
         // look broken for common prefixes such as Clipboard and Translator.
         color: GlobalStates.searchConnectActive ? "transparent"
-             : (root.showPanelAccent ? Appearance.colors.colBackgroundSurfaceContainerAccent
-                                     : Appearance.colors.colBackgroundSurfaceContainer)
+             : Appearance.colors.colBackgroundSurfaceContainer
 
         Behavior on color {
             ColorAnimation {

@@ -1086,23 +1086,18 @@ class SearchRaycastContractTests(unittest.TestCase):
         self.assertIn("Config.options.search.nowPlaying?.enable", app_search_config)
 
     def test_search_appearance_settings_drive_the_rendered_surface(self):
-        launcher_config = source("modules/settings/configs/LauncherConfig.qml")
         appearance_config = source("modules/settings/configs/widgets/LauncherAppearanceConfig.qml")
         widget = source("modules/ii/overview/SearchWidget.qml")
 
         # Centered Search has a persisted vertical placement control, and it is
         # unavailable while the center positioning mode itself is inactive.
-        self.assertIn('text: Translation.tr("Centered search vertical position")', launcher_config)
-        self.assertIn("Config.options.search.centerVerticalRatio = value / 100", launcher_config)
-        self.assertIn('enabled: Config.options.search.positionStyle === "center"', launcher_config)
+        self.assertIn('text: Translation.tr("Centered search vertical position")', appearance_config)
+        self.assertIn("Config.options.search.centerVerticalRatio = value / 100", appearance_config)
+        self.assertIn('checked: Config.options.search.positionStyle === "center"', appearance_config)
 
-        # The accent settings must affect every hosted keyword panel, including
-        # Clipboard and Translator, rather than only the registry subset marked
-        # with accent: true.
-        self.assertIn("readonly property bool showPanelAccent: root.activePanelUsesHost", widget)
-        self.assertIn("root.showPanelAccent ? Appearance.colors.colBackgroundSurfaceContainerAccent", widget)
-        self.assertIn("Config.options.search.appearance.accentPanels", appearance_config)
-        self.assertIn("Config.options.search.appearance.accentStrength", appearance_config)
+        # Search surface background uses the consistent surface container color
+        # for both search results and all hosted panels.
+        self.assertIn("Appearance.colors.colBackgroundSurfaceContainer", widget)
 
         # The max-height control limits the normal result list as a complete
         # Search surface (bar plus results) and applies live after a slider edit.
