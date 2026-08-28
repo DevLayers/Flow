@@ -95,6 +95,29 @@ ContentPage {
             text: Translation.tr("Another program is already handling pairing requests. Codes may be asked for there instead of by the shell.")
         }
 
+        // Contextual BudsLink notices (Plan Section 35)
+        NoticeBox {
+            Layout.fillWidth: true
+            visible: BudsLinkService.hasAudioCandidate && !BudsLinkService.serviceAvailable &&
+                (!Config.ready || !Config.options?.bluetooth?.budsLink || Config.options.bluetooth.budsLink.showIntegrationNotices !== false)
+            materialIcon: "headphones"
+            text: Translation.tr("Enhanced earbud controls are available with BudsLink. Install BudsLink to see individual earbud battery and supported audio controls.")
+        }
+
+        NoticeBox {
+            Layout.fillWidth: true
+            visible: BudsLinkService.serviceAvailable && !BudsLinkService.serviceCompatible
+            materialIcon: "warning"
+            text: Translation.tr("BudsLink was detected, but its desktop-integration interface is not compatible with this version of ii. Generic Bluetooth controls will continue to work.")
+        }
+
+        NoticeBox {
+            Layout.fillWidth: true
+            visible: BudsLinkService.lastErrorCode === "serviceDisconnected" || BudsLinkService.lastErrorCode === "bridgeFailed"
+            materialIcon: "sync_problem"
+            text: Translation.tr("BudsLink stopped responding. ii is temporarily using standard Bluetooth information for this device.")
+        }
+
         ConfigSwitch {
             id: radioSwitch
             buttonIcon: "bluetooth"
@@ -157,7 +180,7 @@ ContentPage {
                     values: BluetoothStatus.connectedDevices
                 }
 
-                delegate: BluetoothDeviceRow {
+                delegate: BluetoothConnectedDeviceDelegate {
                     required property BluetoothDevice modelData
                     required property int index
 

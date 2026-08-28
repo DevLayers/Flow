@@ -1936,6 +1936,18 @@ Singleton {
 
             property list<var> bluetoothDeviceImages: []
 
+            property JsonObject bluetooth: JsonObject {
+                property JsonObject budsLink: JsonObject {
+                    property bool enabled: true
+                    property bool preferBudsLink: true
+                    property bool showIntegrationNotices: true
+                    property bool showBatteryBreakdown: true
+                    property bool showControlsInBarPopup: true
+                    property bool showControlsInConnectionPopup: true
+                    property bool showEnhancedSettingsCard: true
+                }
+            }
+
             property JsonObject background: JsonObject {
                 property bool enable: true // if someone wants to use an external wallpaper manager, note that its not fully tested but it should just disable background.qml from being loaded
                 property bool blurGradientExperiment: false
