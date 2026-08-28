@@ -248,8 +248,12 @@ PanelWindow {
             showBarBackground: horizontalBarLoader.item ? horizontalBarLoader.item.showBarBackground : (verticalBarLoader.item ? verticalBarLoader.item.showBarBackground : false)
             screen: topPanel.screen
 
-            property real hBarHiddenAmount: topPanel.hBarHiddenAmount
-            property real vBarHiddenAmount: topPanel.vBarHiddenAmount
+            // Plain bindings, not new properties: WrappedFrameVisuals already
+            // declares both, and redeclaring them here shadowed the originals so
+            // the frame (and now the shell shadow silhouette) never saw the bar
+            // retract under autohide.
+            hBarHiddenAmount: topPanel.hBarHiddenAmount
+            vBarHiddenAmount: topPanel.vBarHiddenAmount
 
             leftSidebarMaskOffset: topPanel.leftSidebarMaskWidth
             rightSidebarMaskOffset: topPanel.rightSidebarMaskWidth

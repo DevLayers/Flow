@@ -64,6 +64,13 @@ Item { // Bar content region
     readonly property bool isIslandMode: Config.options.bar.barBackgroundStyle === 3
     readonly property bool isDynamicIsland: Config.options.bar.cornerStyle === 3
     readonly property bool isHugIslandMode: root.isIslandMode && Config.options.bar.cornerStyle === 0
+
+    // Hug/Rect vertical bars are welded to the wrapped frame ring, so the shell
+    // shadow is generated once in WrappedFrameVisuals, underneath every panel.
+    // Float and Dynamic Island bars keep their own shadow: they really do float
+    // above the frame surface.
+    readonly property bool weldedToFrame: Config.options.appearance.fakeScreenRounding === 3
+        && (Config.options.bar.cornerStyle === 0 || Config.options.bar.cornerStyle === 2)
     readonly property string barEdge: Config.options.bar.bottom ? "right" : "left"
     readonly property real frameThickness: Config.options.appearance.fakeScreenRounding === 3 ? Config.options.appearance.wrappedFrameThickness : 0
 
@@ -133,7 +140,7 @@ Item { // Bar content region
             }
         }
 
-        layer.enabled: !root.isIslandMode && Config.options.bar.dropShadow && !ShellModePolicy.barDropShadowBlocked
+        layer.enabled: !root.isIslandMode && !root.weldedToFrame && Config.options.bar.dropShadow && !ShellModePolicy.barDropShadowBlocked
         layer.effect: MultiEffect {
             shadowEnabled: true
             shadowColor: Qt.rgba(0, 0, 0, 0.28)

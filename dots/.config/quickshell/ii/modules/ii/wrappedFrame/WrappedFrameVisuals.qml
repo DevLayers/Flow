@@ -1,5 +1,6 @@
 import qs
 import QtQuick
+import QtQuick.Effects
 import Quickshell
 import qs.modules.common
 import qs.modules.common.widgets
@@ -15,7 +16,24 @@ Item {
     // frame. layer.enabled lets the compositor cache the texture and skip per-frame
     // CPU layout invalidation of all children. Only active during animation to
     // avoid unnecessary FBO re-renders while the sidebar is statically open.
-    layer.enabled: GlobalStates.leftSidebarAnimating || GlobalStates.rightSidebarAnimating
+    //
+    // The layer is also what carries the shell shadow (see shellShadowEnabled): the
+    // frame, the welded bar and the Connect sidebars are one continuous surface, so
+    // the shadow they cast into the window area has to be generated from a single
+    // silhouette rendered *below* all of them. Drawing it per module put the bar's
+    // shadow on top of the frame strips, of the concave corners and of an open
+    // sidebar, because those are later siblings inside the very same PanelWindow.
+    layer.enabled: visualsRoot.shellShadowEnabled || GlobalStates.leftSidebarAnimating || GlobalStates.rightSidebarAnimating
+    layer.effect: MultiEffect {
+        shadowEnabled: visualsRoot.shellShadowEnabled
+        shadowColor: Qt.rgba(0, 0, 0, 0.28)
+        shadowBlur: 1.0
+        shadowHorizontalOffset: 0
+        shadowVerticalOffset: Config.options.bar.bottom ? -4 : 4
+        // The silhouette already reaches every screen edge; padding would only grow
+        // the effect item past the window for a shadow nobody can see.
+        autoPaddingEnabled: false
+    }
 
     property var screen: null
     property int frameThickness: Config.options.appearance.wrappedFrameThickness
@@ -64,6 +82,71 @@ Item {
     property bool hasBottomFrame: isFloatingOrIsland || !(!barVertical && barBottom)
     property bool hasLeftFrame: isFloatingOrIsland || !(barVertical && !barBottom)
     property bool hasRightFrame: isFloatingOrIsland || !(barVertical && barBottom)
+
+    // A Hug/Rect bar is welded to the frame: it *is* the missing side of the ring.
+    // Float and Dynamic Island bars float above the frame instead, so they keep
+    // their own drop shadow and are deliberately not part of this silhouette.
+    // Island backgrounds (barBackgroundStyle 3) are separate pills with gaps
+    // between them, so a solid plate would fill those gaps with the bar color.
+    readonly property bool barWeldedToFrame: !isFloatingOrIsland && Config.options.bar.barBackgroundStyle !== 3
+
+    readonly property bool shellShadowEnabled: Config.ready
+        && Config.options.bar.dropShadow
+        && !ShellModePolicy.barDropShadowBlocked
+        && !Config.options.appearance.transparency.enable
+
+    // BAR PLATES (silhouette only)
+    // The frame rectangles stop at the bar's inner edge, so without these the
+    // shadow would break exactly where the bar meets the frame. They are painted
+    // in baseColor underneath the real bar, which uses the same expression, so
+    // they are invisible on their own and only exist to close the silhouette.
+    Rectangle {
+        id: topBarPlate
+        visible: visualsRoot.barWeldedToFrame && !visualsRoot.hasTopFrame
+        anchors {
+            top: parent.top
+            left: parent.left
+            right: parent.right
+        }
+        height: visualsRoot.totalTopPush
+        color: visualsRoot.baseColor
+    }
+
+    Rectangle {
+        id: bottomBarPlate
+        visible: visualsRoot.barWeldedToFrame && !visualsRoot.hasBottomFrame
+        anchors {
+            bottom: parent.bottom
+            left: parent.left
+            right: parent.right
+        }
+        height: visualsRoot.totalBottomPush
+        color: visualsRoot.baseColor
+    }
+
+    Rectangle {
+        id: leftBarPlate
+        visible: visualsRoot.barWeldedToFrame && !visualsRoot.hasLeftFrame
+        anchors {
+            left: parent.left
+            top: parent.top
+            bottom: parent.bottom
+        }
+        width: visualsRoot.totalLeftPush
+        color: visualsRoot.baseColor
+    }
+
+    Rectangle {
+        id: rightBarPlate
+        visible: visualsRoot.barWeldedToFrame && !visualsRoot.hasRightFrame
+        anchors {
+            right: parent.right
+            top: parent.top
+            bottom: parent.bottom
+        }
+        width: visualsRoot.totalRightPush
+        color: visualsRoot.baseColor
+    }
 
     // HORIZONTAL FRAMES
     Rectangle {
