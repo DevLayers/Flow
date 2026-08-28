@@ -17,12 +17,16 @@ Item {
     Process {
         id: pickImageProc
 
-        command: ["bash", "-c", "if command -v kdialog &> /dev/null; then FILE=$(kdialog --getopenfilename \"$HOME\" \"*.png *.jpg *.jpeg\" 2>/dev/null); elif command -v zenity &> /dev/null; then FILE=$(zenity --file-selection --file-filter=\"Images | *.png *.jpg *.jpeg\" 2>/dev/null); fi; if [ -n \"$FILE\" ] && [ -f \"$FILE\" ]; then mkdir -p ~/.config/illogical-impulse && cp \"$FILE\" ~/.config/illogical-impulse/profile.png; echo 'success'; fi"]
+        command: ["bash", "-c", "if command -v kdialog &> /dev/null; then FILE=$(kdialog --getopenfilename \"$HOME\" \"*.png *.jpg *.jpeg *.gif *.webp *.svg *.PNG *.JPG *.JPEG *.GIF *.WEBP\" 2>/dev/null); elif command -v zenity &> /dev/null; then FILE=$(zenity --file-selection --file-filter=\"Images | *.png *.jpg *.jpeg *.gif *.webp *.svg *.PNG *.JPG *.JPEG *.GIF *.WEBP\" 2>/dev/null); fi; if [ -n \"$FILE\" ] && [ -f \"$FILE\" ]; then EXT=\"${FILE##*.}\"; mkdir -p ~/.config/illogical-impulse && cp \"$FILE\" \"$HOME/.config/illogical-impulse/profile.${EXT}\" && cp \"$FILE\" ~/.config/illogical-impulse/profile.png; echo \"$EXT\"; fi"]
 
         stdout: SplitParser {
             onRead: (data) => {
-                if (data.trim() === "success")
-                    Config.options.userProfile.imagePath = Directories.userProfileImagePath + "?rand=" + Math.random();
+                const ext = data.trim();
+                if (ext.length > 0) {
+                    const targetPath = Directories.shellConfig + "/profile." + ext;
+                    Config.options.userProfile.imagePath = "";
+                    Config.options.userProfile.imagePath = targetPath;
+                }
             }
         }
     }
@@ -56,106 +60,18 @@ Item {
                     implicitWidth: 120
                     implicitHeight: 120
 
-                    MaterialShape {
-                        id: heroShape
-
-                        readonly property color onColor: {
-                            switch (Config.options.userProfile.avatarColor) {
-                            case "secondary":
-                                return Appearance.colors.colOnSecondary;
-                            case "tertiary":
-                                return Appearance.colors.colOnTertiary;
-                            case "error":
-                                return Appearance.colors.colOnError;
-                            default:
-                                return Appearance.colors.colOnPrimary;
-                            }
-                        }
-
-                        function resolveShape(s) {
-                            switch (s) {
-                            case "Cookie9Sided":
-                                return MaterialShape.Shape.Cookie9Sided;
-                            case "Cookie12Sided":
-                                return MaterialShape.Shape.Cookie12Sided;
-                            case "Circle":
-                                return MaterialShape.Shape.Circle;
-                            case "Clover4Leaf":
-                                return MaterialShape.Shape.Clover4Leaf;
-                            case "Burst":
-                                return MaterialShape.Shape.Burst;
-                            case "Heart":
-                                return MaterialShape.Shape.Heart;
-                            case "Bun":
-                                return MaterialShape.Shape.Bun;
-                            default:
-                                return MaterialShape.Shape.Cookie9Sided;
-                            }
-                        }
-
+                    UserProfileAvatar {
                         anchors.centerIn: parent
                         width: 110
                         height: 110
-                        shape: resolveShape(Config.options.userProfile.avatarShape)
-                        color: {
-                            switch (Config.options.userProfile.avatarColor) {
-                            case "secondary":
-                                return Appearance.colors.colSecondary;
-                            case "tertiary":
-                                return Appearance.colors.colTertiary;
-                            case "error":
-                                return Appearance.colors.colError;
-                            default:
-                                return Appearance.colors.colPrimary;
-                            }
-                        }
-
-                        Image {
-                            id: avatarImg
-
-                            anchors.fill: parent
-                            source: {
-                                if (Config.options.userProfile.imageStyle === "custom")
-                                    return "file://" + Config.options.userProfile.imagePath;
-
-                                if (Config.options.userProfile.imageStyle === "initial")
-                                    return Directories.userAvatarPathAccountsService;
-
-                                return "";
-                            }
-                            fillMode: Image.PreserveAspectCrop
-                            visible: false
-                        }
-
-                        OpacityMask {
-                            anchors.fill: parent
-                            source: avatarImg
-                            maskSource: heroShape
-                            visible: avatarImg.status === Image.Ready && Config.options.userProfile.imageStyle !== "expressive"
-                        }
-
-                        StyledText {
-                            anchors.centerIn: parent
-                            text: {
-                                let n = Config.options.userProfile.customName || SystemInfo.username;
-                                return n.charAt(0).toUpperCase();
-                            }
-                            color: parent.onColor
-                            font.pixelSize: 56
-                            font.weight: Font.Black
-                            font.family: Appearance.font.family.expressive
-                            visible: avatarImg.status !== Image.Ready || Config.options.userProfile.imageStyle === "expressive"
-                        }
-
-                        MouseArea {
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Config.options.userProfile.imageStyle === "custom" ? Qt.PointingHandCursor : Qt.ArrowCursor
-                            onClicked: {
-                                if (Config.options.userProfile.imageStyle === "custom") {
-                                    pickImageProc.running = false;
-                                    pickImageProc.running = true;
-                                }
+                        fontPixelSize: 56
+                        fontWeight: Font.Black
+                        interactive: Config.options.userProfile.imageStyle === "custom"
+                        active: GlobalStates.settingsOpen
+                        onClicked: {
+                            if (Config.options.userProfile.imageStyle === "custom") {
+                                pickImageProc.running = false;
+                                pickImageProc.running = true;
                             }
                         }
                     }
@@ -265,7 +181,14 @@ Item {
                     onSelected: (v) => {
                         return Config.options.userProfile.avatarShape = v;
                     }
-                    options: (["Cookie9Sided", "Cookie12Sided", "Circle", "Clover4Leaf", "Burst", "Heart", "Bun"]).map((s) => {
+                    options: ([
+                        "Cookie9Sided", "Cookie12Sided", "Circle", "Clover4Leaf", "Burst",
+                        "Heart", "Bun", "Flower", "Puffy", "PuffyDiamond", "Sunny",
+                        "VerySunny", "Cookie4Sided", "Cookie6Sided", "Cookie7Sided", "Ghostish",
+                        "Clover8Leaf", "SoftBurst", "Boom", "SoftBoom", "Gem", "Diamond",
+                        "Pentagon", "Square", "Arch", "Fan", "Arrow", "SemiCircle",
+                        "Oval", "Pill", "Triangle", "Slanted", "ClamShell", "PixelCircle", "PixelTriangle"
+                    ]).map((s) => {
                         return ({
                             "displayName": "",
                             "shape": s,

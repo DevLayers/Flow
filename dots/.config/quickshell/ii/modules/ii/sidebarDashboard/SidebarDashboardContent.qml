@@ -611,18 +611,14 @@ Item {
                 height: 70
                 visible: Config.options.sidebar.dashboardHeader.profileImageType !== "none"
 
-                property real outerRadius: 15
-                property real borderWidth: 4
-                readonly property string _style: Config.options.userProfile.imageStyle
-
                 // DISTRO ICON
                 Loader {
                     anchors.fill: parent
                     active: Config.options.sidebar.dashboardHeader.profileImageType === "distro"
                     sourceComponent: CustomIcon {
                         anchors.centerIn: parent
-                        width: parent.width - profilePicContainer.borderWidth * 2
-                        height: parent.height - profilePicContainer.borderWidth * 2
+                        width: parent.width - 8
+                        height: parent.height - 8
                         source: SystemInfo.distroIcon
                         colorize: true
                         color: Appearance.colors.colOnLayer1
@@ -630,160 +626,12 @@ Item {
                 }
 
                 // USER PROFILE
-                Item {
+                UserProfileAvatar {
                     anchors.fill: parent
+                    active: GlobalStates.dashboardPanelOpen
                     visible: Config.options.sidebar.dashboardHeader.profileImageType === "user_profile"
-
-                    // Custom
-                    Image {
-                        id: hardcodedProfilePicture
-                        anchors {
-                            fill: parent
-                            margins: profilePicContainer.borderWidth
-                        }
-                        visible: profilePicContainer._style === "custom"
-
-                        source: parent.visible ? Config.options.userProfile.imagePath : ""
-                        fillMode: Image.PreserveAspectCrop
-                        sourceSize.width: width
-                        sourceSize.height: height
-
-                        layer.enabled: true
-                        layer.effect: OpacityMask {
-                            maskSource: Rectangle {
-                                width: hardcodedProfilePicture.width
-                                height: hardcodedProfilePicture.height
-                                radius: profilePicContainer.outerRadius - profilePicContainer.borderWidth
-                            }
-                        }
-                    }
-
-                    // Initial
-                    Rectangle {
-                        id: initialAvatarBg
-                        anchors {
-                            fill: parent
-                            margins: profilePicContainer.borderWidth
-                        }
-                        radius: profilePicContainer.outerRadius - profilePicContainer.borderWidth
-                        color: Appearance.colors.colPrimary
-                        visible: profilePicContainer._style === "initial" || profilePicContainer._style === "default"
-
-                        Image {
-                            id: initialAvatarSource
-                            anchors.fill: parent
-                            source: parent.visible ? Directories.userAvatarPathAccountsService : ""
-                            sourceSize.width: width
-                            sourceSize.height: height
-                            fillMode: Image.PreserveAspectCrop
-                            visible: status === Image.Ready
-
-                            layer.enabled: true
-                            layer.effect: OpacityMask {
-                                maskSource: Rectangle {
-                                    width: initialAvatarSource.width
-                                    height: initialAvatarSource.height
-                                    radius: initialAvatarBg.radius
-                                }
-                            }
-                        }
-
-                        StyledText {
-                            anchors.centerIn: parent
-                            visible: initialAvatarSource.status !== Image.Ready
-                            text: SystemInfo.username.charAt(0).toUpperCase()
-                            color: Appearance.colors.colOnPrimary
-                            font.pixelSize: Appearance.font.pixelSize.larger
-                            font.weight: Font.DemiBold
-                        }
-                    }
-
-                    // Expressive
-                    MaterialShape {
-                        id: expressiveShape
-                        anchors {
-                            fill: parent
-                            margins: profilePicContainer.borderWidth
-                        }
-                        visible: profilePicContainer._style === "expressive"
-
-                        function resolveShapeInner(s) {
-                            switch (s) {
-                            case "Cookie9Sided":
-                                return MaterialShape.Shape.Cookie9Sided;
-                            case "Cookie12Sided":
-                                return MaterialShape.Shape.Cookie12Sided;
-                            case "Circle":
-                                return MaterialShape.Shape.Circle;
-                            case "Clover4Leaf":
-                                return MaterialShape.Shape.Clover4Leaf;
-                            case "Burst":
-                                return MaterialShape.Shape.Burst;
-                            case "Heart":
-                                return MaterialShape.Shape.Heart;
-                            case "Bun":
-                                return MaterialShape.Shape.Bun;
-                            default:
-                                return MaterialShape.Shape.Cookie9Sided;
-                            }
-                        }
-                        shape: resolveShapeInner(Config.options.userProfile.avatarShape)
-
-                        property color resolvedColor: {
-                            switch (Config.options.userProfile.avatarColor) {
-                            case "primary":
-                                return Appearance.colors.colPrimary;
-                            case "secondary":
-                                return Appearance.colors.colSecondary;
-                            case "tertiary":
-                                return Appearance.colors.colTertiary;
-                            case "error":
-                                return Appearance.colors.colError;
-                            default:
-                                return Appearance.colors.colPrimary;
-                            }
-                        }
-                        property color resolvedOnColor: {
-                            switch (Config.options.userProfile.avatarColor) {
-                            case "primary":
-                                return Appearance.colors.colOnPrimary;
-                            case "secondary":
-                                return Appearance.colors.colOnSecondary;
-                            case "tertiary":
-                                return Appearance.colors.colOnTertiary;
-                            case "error":
-                                return Appearance.colors.colOnError;
-                            default:
-                                return Appearance.colors.colOnPrimary;
-                            }
-                        }
-
-                        color: resolvedColor
-
-                        StyledText {
-                            anchors.centerIn: parent
-                            text: {
-                                let n = Config.options.userProfile.customName || SystemInfo.username;
-                                return n.charAt(0).toUpperCase();
-                            }
-                            color: expressiveShape.resolvedOnColor
-                            font.pixelSize: Appearance.font.pixelSize.larger
-                            font.family: Appearance.font.family.expressive
-                            font.weight: Font.DemiBold
-                        }
-                    }
-                }
-
-                // PFP border
-                Rectangle {
-                    anchors.fill: parent
-                    color: "transparent"
-                    radius: profilePicContainer.outerRadius
-                    border.width: profilePicContainer.borderWidth
-                    border.color: Appearance.colors.colLayer1
-                    visible: Config.options.sidebar.dashboardHeader.profileImageType !== "distro"
-                             && !(Config.options.sidebar.dashboardHeader.profileImageType === "user_profile"
-                                  && profilePicContainer._style === "expressive")
+                    fontPixelSize: 32
+                    fontWeight: Font.Black
                 }
             }
 
@@ -1065,152 +913,10 @@ Item {
                         }
                     }
 
-                    Item {
+                    UserProfileAvatar {
                         anchors.fill: parent
+                        active: GlobalStates.dashboardPanelOpen
                         visible: Config.options.sidebar.dashboardHeader.profileImageType === "user_profile"
-
-                        readonly property string _style: Config.options.userProfile.imageStyle
-
-                        // Custom
-                        Item {
-                            anchors.fill: parent
-                            visible: parent._style === "custom"
-                            Image {
-                                id: profilePicSource
-                                anchors.fill: parent
-                                source: parent.visible ? Config.options.userProfile.imagePath : ""
-                                sourceSize.width: parent.width
-                                sourceSize.height: parent.height
-                                fillMode: Image.PreserveAspectCrop
-                                visible: false
-                            }
-                            Rectangle {
-                                id: profilePicMask
-                                anchors.fill: parent
-                                radius: width / 2
-                                visible: false
-                            }
-                            OpacityMask {
-                                anchors.fill: parent
-                                source: profilePicSource
-                                maskSource: profilePicMask
-                            }
-                        }
-
-                        // Initial
-                        Rectangle {
-                            anchors.fill: parent
-                            radius: width / 2
-                            visible: parent._style === "initial" || parent._style === "default"
-
-                            Image {
-                                id: initialAvatarSource
-                                anchors.fill: parent
-                                source: parent.visible ? Directories.userAvatarPathAccountsService : ""
-                                sourceSize.width: parent.width
-                                sourceSize.height: parent.height
-                                fillMode: Image.PreserveAspectCrop
-                                visible: false
-                            }
-                            Rectangle {
-                                id: initialAvatarMask
-                                anchors.fill: parent
-                                radius: width / 2
-                                visible: false
-                            }
-                            OpacityMask {
-                                id: initialAvatarImage
-                                anchors.fill: parent
-                                source: initialAvatarSource
-                                maskSource: initialAvatarMask
-                                visible: initialAvatarSource.status === Image.Ready
-                            }
-                            Rectangle {
-                                anchors.fill: parent
-                                radius: width / 2
-                                color: Appearance.colors.colPrimary
-                                visible: initialAvatarSource.status !== Image.Ready
-
-                                StyledText {
-                                    anchors.centerIn: parent
-                                    text: SystemInfo.username.charAt(0).toUpperCase()
-                                    color: Appearance.colors.colOnPrimary
-                                    font.pixelSize: Appearance.font.pixelSize.larger
-                                    font.weight: Font.DemiBold
-                                }
-                            }
-                        }
-
-                        // Expressive
-                        MaterialShape {
-                            anchors.fill: parent
-
-                            function resolveShapeInner(s) {
-                                switch (s) {
-                                case "Cookie9Sided":
-                                    return MaterialShape.Shape.Cookie9Sided;
-                                case "Cookie12Sided":
-                                    return MaterialShape.Shape.Cookie12Sided;
-                                case "Circle":
-                                    return MaterialShape.Shape.Circle;
-                                case "Clover4Leaf":
-                                    return MaterialShape.Shape.Clover4Leaf;
-                                case "Burst":
-                                    return MaterialShape.Shape.Burst;
-                                case "Heart":
-                                    return MaterialShape.Shape.Heart;
-                                case "Bun":
-                                    return MaterialShape.Shape.Bun;
-                                default:
-                                    return MaterialShape.Shape.Cookie9Sided;
-                                }
-                            }
-                            shape: resolveShapeInner(Config.options.userProfile.avatarShape)
-
-                            property color resolvedColor: {
-                                switch (Config.options.userProfile.avatarColor) {
-                                case "primary":
-                                    return Appearance.colors.colPrimary;
-                                case "secondary":
-                                    return Appearance.colors.colSecondary;
-                                case "tertiary":
-                                    return Appearance.colors.colTertiary;
-                                case "error":
-                                    return Appearance.colors.colError;
-                                default:
-                                    return Appearance.colors.colPrimary;
-                                }
-                            }
-                            property color resolvedOnColor: {
-                                switch (Config.options.userProfile.avatarColor) {
-                                case "primary":
-                                    return Appearance.colors.colOnPrimary;
-                                case "secondary":
-                                    return Appearance.colors.colOnSecondary;
-                                case "tertiary":
-                                    return Appearance.colors.colOnTertiary;
-                                case "error":
-                                    return Appearance.colors.colOnError;
-                                default:
-                                    return Appearance.colors.colOnPrimary;
-                                }
-                            }
-
-                            color: resolvedColor
-                            visible: parent._style === "expressive"
-
-                            StyledText {
-                                anchors.centerIn: parent
-                                text: {
-                                    let n = Config.options.userProfile.customName || SystemInfo.username;
-                                    return n.charAt(0).toUpperCase();
-                                }
-                                color: parent.resolvedOnColor
-                                font.pixelSize: Appearance.font.pixelSize.larger
-                                font.family: Appearance.font.family.expressive
-                                font.weight: Font.DemiBold
-                            }
-                        }
                     }
                 }
 

@@ -38,16 +38,31 @@ AbstractBackgroundWidget {
                                         : MaterialShape.Shape.Cookie9Sided
 
     readonly property string imageSource: {
-        const customPath = options?.imagePath;
+        let customPath = options?.imagePath;
         if (customPath && customPath !== "") {
+            const qIdx = customPath.indexOf("?");
+            if (qIdx !== -1) customPath = customPath.substring(0, qIdx);
             return customPath.startsWith("file://") ? customPath : ("file://" + customPath);
         }
         // Fallback to desktop wallpaper if no custom photo set
-        const wallPath = Config.options?.background?.wallpaperPath;
+        let wallPath = Config.options?.background?.wallpaperPath;
         if (wallPath && wallPath !== "") {
+            const qIdx = wallPath.indexOf("?");
+            if (qIdx !== -1) wallPath = wallPath.substring(0, qIdx);
             return wallPath.startsWith("file://") ? wallPath : ("file://" + wallPath);
         }
         return "";
+    }
+
+    readonly property bool isAnimated: {
+        const lower = root.imageSource.toLowerCase();
+        return lower.includes(".gif") || lower.includes(".webp");
+    }
+
+    readonly property bool shouldPlay: {
+        return root.visible && root.opacity > 0 && root.isAnimated
+            && !GlobalStates.screenLocked
+            && !GlobalStates.activeWorkspaceHasWindows;
     }
 
     StyledDropShadow {
@@ -66,35 +81,51 @@ AbstractBackgroundWidget {
             color: WidgetColorScheme.cardBgColor
         }
 
-        // 2. Shape mask for photo image
-        MaterialShape {
-            id: shapeMask
+        // Static Image loader (hardware-accelerated, zero QMovie overhead)
+        Image {
+            id: staticImg
             anchors.fill: parent
-            shape: root.chosenShape
-            visible: false
+            source: !root.isAnimated ? root.imageSource : ""
+            fillMode: Image.PreserveAspectCrop
+            asynchronous: true
+            visible: !root.isAnimated && status === Image.Ready
+
+            layer.enabled: true
+            layer.effect: OpacityMask {
+                maskSource: MaterialShape {
+                    width: staticImg.width
+                    height: staticImg.height
+                    shape: root.chosenShape
+                }
+            }
         }
 
-        // 3. Photo Image clipped with OpacityMask
-        Image {
+        // Animated GIF loader (only active when isAnimated is true)
+        AnimatedImage {
             id: photoImg
             anchors.fill: parent
-            source: root.imageSource
+            source: root.isAnimated ? root.imageSource : ""
             fillMode: Image.PreserveAspectCrop
-            mipmap: true
-            visible: false
-        }
+            playing: root.shouldPlay
+            paused: !root.shouldPlay
+            asynchronous: true
+            cache: false
+            visible: root.isAnimated && status === Image.Ready
 
-        OpacityMask {
-            anchors.fill: parent
-            source: photoImg
-            maskSource: shapeMask
-            visible: photoImg.status === Image.Ready
+            layer.enabled: true
+            layer.effect: OpacityMask {
+                maskSource: MaterialShape {
+                    width: photoImg.width
+                    height: photoImg.height
+                    shape: root.chosenShape
+                }
+            }
         }
 
         // Placeholder icon if no photo is available
         MaterialSymbol {
             anchors.centerIn: parent
-            visible: photoImg.status !== Image.Ready
+            visible: (!root.isAnimated && !staticImg.visible) || (root.isAnimated && !photoImg.visible)
             text: "image"
             iconSize: Math.round(48 * root.contentScale)
             color: Appearance.colors.colOnLayer0

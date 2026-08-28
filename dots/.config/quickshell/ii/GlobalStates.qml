@@ -23,6 +23,12 @@ Singleton {
     property int mediaModeCloseAllTrigger: 0
     property int widgetReStackTrigger: 0
 
+    readonly property bool activeWorkspaceHasWindows: {
+        const activeWsId = Hyprland.focusedMonitor?.activeWorkspace?.id ?? HyprlandData.activeWorkspace?.id;
+        if (activeWsId === undefined || activeWsId === null) return false;
+        return (HyprlandData.windowList ?? []).some(w => w.workspace?.id === activeWsId);
+    }
+
     function setMediaModeActiveForScreen(screenName, active) {
         if (!screenName)
             return;
