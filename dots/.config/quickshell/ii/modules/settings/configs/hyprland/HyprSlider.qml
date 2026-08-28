@@ -47,6 +47,7 @@ ConfigSlider {
 
     usePercentTooltip: false
     enabled: !root.locked
+    badgeText: HyprOrigin.label(root.optionKey)
     // A real binding, so the slider follows the option until the first drag replaces it; from
     // then on onOptionValueChanged keeps the two in step by hand.
     value: root.optionValue

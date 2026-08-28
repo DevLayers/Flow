@@ -1,9 +1,13 @@
 module qs.modules.settings.configs.hyprland
 
+singleton HyprOrigin 1.0 HyprOrigin.qml
+
 HyprlandHealthStrip 1.0 HyprlandHealthStrip.qml
 HyprlandTabPlaceholder 1.0 HyprlandTabPlaceholder.qml
 HyprOptionNote 1.0 HyprOptionNote.qml
 HyprNavRow 1.0 HyprNavRow.qml
+HyprBadge 1.0 HyprBadge.qml
+HyprSubPage 1.0 HyprSubPage.qml
 HyprToggle 1.0 HyprToggle.qml
 HyprSwitch 1.0 HyprSwitch.qml
 HyprSlider 1.0 HyprSlider.qml
@@ -11,6 +15,7 @@ HyprSpinBox 1.0 HyprSpinBox.qml
 HyprSelect 1.0 HyprSelect.qml
 HyprTextField 1.0 HyprTextField.qml
 HyprXkbOptionSwitch 1.0 HyprXkbOptionSwitch.qml
+HyprXkbChoice 1.0 HyprXkbChoice.qml
 HyprDeviceCard 1.0 HyprDeviceCard.qml
 HyprLayoutPreview 1.0 HyprLayoutPreview.qml
 HyprMatchPreview 1.0 HyprMatchPreview.qml

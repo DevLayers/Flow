@@ -16,6 +16,10 @@ import qs.modules.common.widgets
  * no options and showing all four at once would be four times the page for no gain. The diagram
  * at the top is the point of the tab: it runs the same arithmetic the layout does and draws where
  * the next window lands, so the options stop being folklore.
+ *
+ * Each section keeps the two or three settings people come back to - for an engine, the ones the
+ * diagram draws - and ends with a door to the rest. The door says what is behind it and how many
+ * of those settings have been changed, so nothing is hidden, only put away.
  */
 ContentPage {
     id: tab
@@ -26,6 +30,12 @@ ContentPage {
         String(HyprlandGui.displayValue("general:layout", "dwindle") ?? "dwindle")
     readonly property bool knownEngine:
         ["dwindle", "master", "scrolling", "monocle"].includes(tab.engine)
+
+    /// A bool option as the hub shows it: what this page set, else what Hyprland reports.
+    function isOn(key: string, fallback: bool): bool {
+        const value = HyprlandGui.displayValue(key, fallback);
+        return value === true || value === 1;
+    }
 
     ContentSection {
         title: Translation.tr("Tiling engine")
@@ -73,15 +83,30 @@ ContentPage {
             icon: "splitscreen"
 
             HyprSelect {
-                optionKey: "dwindle:force_split"
-                defaultValue: 0
-                title: Translation.tr("Which half a new window takes")
+                id: dwindlePlacement
+
+                // Two keys, one decision. smart_split takes the quarter the pointer is in and
+                // overrides force_split while it is on, so it is a fourth answer to the same
+                // question - as a switch of its own it needed a footnote to say so.
+                readonly property bool smart: tab.isOn("dwindle:smart_split", false)
+                readonly property int side: Number(HyprlandGui.displayValue("dwindle:force_split", 0)) || 0
+
+                keys: ["dwindle:force_split", "dwindle:smart_split"]
+                title: Translation.tr("Where a new window goes")
                 icon: "flip"
+                currentOverride: dwindlePlacement.smart ? "quarter"
+                    : (["pointer", "left", "right"][dwindlePlacement.side] ?? "pointer")
                 options: [
-                    { "displayName": Translation.tr("Where the pointer is"), "value": 0 },
-                    { "displayName": Translation.tr("Left or top"), "value": 1 },
-                    { "displayName": Translation.tr("Right or bottom"), "value": 2 }
+                    { "displayName": Translation.tr("The side the pointer is on"), "value": "pointer" },
+                    { "displayName": Translation.tr("Left or top"), "value": "left" },
+                    { "displayName": Translation.tr("Right or bottom"), "value": "right" },
+                    { "displayName": Translation.tr("The quarter nearest the pointer"), "value": "quarter" }
                 ]
+                onSelected: newValue => HyprlandGui.batch(() => {
+                    HyprlandGui.setKey("dwindle:smart_split", newValue === "quarter");
+                    if (newValue !== "quarter")
+                        HyprlandGui.setKey("dwindle:force_split", ({ "pointer": 0, "left": 1, "right": 2 })[newValue] ?? 0);
+                })
             }
 
             HyprSlider {
@@ -112,84 +137,20 @@ ContentPage {
                 ]
             }
 
-            HyprSlider {
-                optionKey: "dwindle:split_width_multiplier"
-                defaultValue: 1
-                buttonIcon: "aspect_ratio"
-                text: Translation.tr("How wide before a window splits sideways")
-                tooltipContent: `${value.toFixed(2)}×`
-                from: 0.1
-                to: 3
-                stepSize: 0.05
-
-                StyledToolTip {
-                    text: Translation.tr("A window splits side by side while it is wider than its height times this. Above 1 it takes an unusually wide window to split sideways; below 1, almost any window does.")
-                }
-            }
-
-            HyprSwitch {
-                optionKey: "dwindle:preserve_split"
-                buttonIcon: "lock"
-                text: Translation.tr("Keep the split direction when a window closes")
-            }
-
-            HyprSwitch {
-                optionKey: "dwindle:smart_split"
-                buttonIcon: "grid_4x4"
-                text: Translation.tr("Split into quarters, following the pointer")
-
-                StyledToolTip {
-                    text: Translation.tr("The quarter of the window the pointer sits in decides which of the four sides the new window takes. Overrides the choice above.")
-                }
-            }
-
-            HyprSwitch {
-                optionKey: "dwindle:use_active_for_splits"
-                defaultValue: true
-                buttonIcon: "center_focus_strong"
-                text: Translation.tr("Split the focused window, not the one under the pointer")
-            }
-
-            HyprSwitch {
-                optionKey: "dwindle:smart_resizing"
-                defaultValue: true
-                buttonIcon: "open_with"
-                text: Translation.tr("Resize towards the edge the pointer is nearest")
-            }
-
-            HyprSwitch {
-                optionKey: "dwindle:permanent_direction_override"
-                buttonIcon: "push_pin"
-                text: Translation.tr("A preselected direction stays selected")
-
-                StyledToolTip {
-                    text: Translation.tr("Normally a layoutmsg preselect applies to the next window only. This makes it hold until it is changed.")
-                }
-            }
-
-            HyprSwitch {
-                optionKey: "dwindle:precise_mouse_move"
-                buttonIcon: "drag_pan"
-                text: Translation.tr("Drop a dragged window exactly where the pointer is")
-            }
-
-            HyprSlider {
-                optionKey: "dwindle:special_scale_factor"
-                defaultValue: 1
-                buttonIcon: "photo_size_select_small"
-                text: Translation.tr("Size of scratchpad windows")
-                tooltipContent: `${Math.round(value * 100)}%`
-                from: 0.3
-                to: 1
-                stepSize: 0.01
+            HyprNavRow {
+                buttonIcon: "tune"
+                text: Translation.tr("More dwindle settings")
+                description: Translation.tr("Sideways splits, what a closing window leaves behind, dragging, scratchpad size")
+                keys: ["dwindle:split_width_multiplier", "dwindle:preserve_split",
+                    "dwindle:use_active_for_splits", "dwindle:permanent_direction_override",
+                    "dwindle:smart_resizing", "dwindle:precise_mouse_move",
+                    "dwindle:special_scale_factor"]
+                configPage: Qt.resolvedUrl("HyprDwindleAdvancedPage.qml")
             }
 
             HyprOptionNote {
-                keys: ["dwindle:force_split", "dwindle:default_split_ratio", "dwindle:split_bias",
-                    "dwindle:split_width_multiplier", "dwindle:preserve_split", "dwindle:smart_split",
-                    "dwindle:use_active_for_splits", "dwindle:smart_resizing",
-                    "dwindle:permanent_direction_override", "dwindle:precise_mouse_move",
-                    "dwindle:special_scale_factor"]
+                keys: ["dwindle:force_split", "dwindle:smart_split", "dwindle:default_split_ratio",
+                    "dwindle:split_bias"]
             }
         }
     }
@@ -240,104 +201,20 @@ ContentPage {
                 ]
             }
 
-            HyprSwitch {
-                optionKey: "master:new_on_top"
-                buttonIcon: "vertical_align_top"
-                text: Translation.tr("New windows join the top of the stack")
-            }
-
-            HyprSelect {
-                optionKey: "master:new_on_active"
-                defaultValue: "none"
-                title: Translation.tr("Place new windows relative to the focused one")
-                icon: "swap_vert"
-                options: [
-                    { "displayName": Translation.tr("Before it"), "value": "before" },
-                    { "displayName": Translation.tr("After it"), "value": "after" },
-                    { "displayName": Translation.tr("Not at all"), "value": "none" }
-                ]
-            }
-
-            HyprSpinBox {
-                optionKey: "master:slave_count_for_center_master"
-                defaultValue: 2
-                icon: "filter_2"
-                text: Translation.tr("Windows in the stack before the master centres")
-                from: 0
-                to: 10
-                stepSize: 1
-            }
-
-            HyprSelect {
-                optionKey: "master:center_master_fallback"
-                defaultValue: "left"
-                title: Translation.tr("Until then, a centred master sits")
-                icon: "west"
-                options: [
-                    { "displayName": Translation.tr("Left"), "value": "left" },
-                    { "displayName": Translation.tr("Right"), "value": "right" },
-                    { "displayName": Translation.tr("Top"), "value": "top" },
-                    { "displayName": Translation.tr("Bottom"), "value": "bottom" }
-                ]
-            }
-
-            HyprSwitch {
-                optionKey: "master:center_ignores_reserved"
-                buttonIcon: "crop_free"
-                text: Translation.tr("A centred master ignores the bar and centres on the screen")
-            }
-
-            HyprSwitch {
-                optionKey: "master:allow_small_split"
-                buttonIcon: "splitscreen_vertical_add"
-                text: Translation.tr("Allow more than one master window")
-            }
-
-            HyprSwitch {
-                optionKey: "master:always_keep_position"
-                buttonIcon: "push_pin"
-                text: Translation.tr("Keep the master in place when it is the only window")
-            }
-
-            HyprSwitch {
-                optionKey: "master:focus_master_on_close"
-                defaultValue: false
-                buttonIcon: "center_focus_strong"
-                text: Translation.tr("Closing a window focuses the master")
-            }
-
-            HyprSwitch {
-                optionKey: "master:smart_resizing"
-                defaultValue: true
-                buttonIcon: "open_with"
-                text: Translation.tr("Resize towards the edge the pointer is nearest")
-            }
-
-            HyprSwitch {
-                optionKey: "master:drop_at_cursor"
-                defaultValue: true
-                buttonIcon: "drag_pan"
-                text: Translation.tr("Drop a dragged window where the pointer is")
-            }
-
-            HyprSlider {
-                optionKey: "master:special_scale_factor"
-                defaultValue: 1
-                buttonIcon: "photo_size_select_small"
-                text: Translation.tr("Size of scratchpad windows")
-                tooltipContent: `${Math.round(value * 100)}%`
-                from: 0.3
-                to: 1
-                stepSize: 0.01
+            HyprNavRow {
+                buttonIcon: "tune"
+                text: Translation.tr("More master settings")
+                description: Translation.tr("Stack order, several masters, a centred master, dragging, scratchpad size")
+                keys: ["master:new_on_top", "master:new_on_active", "master:allow_small_split",
+                    "master:always_keep_position", "master:focus_master_on_close",
+                    "master:slave_count_for_center_master", "master:center_master_fallback",
+                    "master:center_ignores_reserved", "master:smart_resizing", "master:drop_at_cursor",
+                    "master:special_scale_factor"]
+                configPage: Qt.resolvedUrl("HyprMasterAdvancedPage.qml")
             }
 
             HyprOptionNote {
-                keys: ["master:mfact", "master:orientation", "master:new_status", "master:new_on_top",
-                    "master:new_on_active", "master:slave_count_for_center_master",
-                    "master:center_master_fallback", "master:center_ignores_reserved",
-                    "master:allow_small_split", "master:always_keep_position",
-                    "master:focus_master_on_close", "master:smart_resizing", "master:drop_at_cursor",
-                    "master:special_scale_factor"]
+                keys: ["master:mfact", "master:orientation", "master:new_status"]
             }
         }
     }
@@ -373,71 +250,44 @@ ContentPage {
                 ]
             }
 
-            HyprSwitch {
-                optionKey: "scrolling:fullscreen_on_one_column"
-                defaultValue: true
-                buttonIcon: "fullscreen"
-                text: Translation.tr("A single column fills the screen")
-            }
-
-            HyprSwitch {
-                optionKey: "scrolling:follow_focus"
-                defaultValue: true
-                buttonIcon: "center_focus_weak"
-                text: Translation.tr("Scroll to the focused window automatically")
-            }
-
-            HyprSlider {
-                optionKey: "scrolling:follow_min_visible"
-                defaultValue: 0.4
-                buttonIcon: "visibility"
-                text: Translation.tr("How much of a window must show before it counts as visible")
-                tooltipContent: `${Math.round(value * 100)}%`
-                from: 0
-                to: 1
-                stepSize: 0.05
-            }
-
             HyprSelect {
-                optionKey: "scrolling:focus_fit_method"
-                defaultValue: 1
-                title: Translation.tr("Bring a focused column into view by")
-                icon: "fit_screen"
+                id: scrollingWrap
+
+                // Two switches that read as one question: what happens at the end of the row.
+                readonly property bool focusWraps: tab.isOn("scrolling:wrap_focus", true)
+                readonly property bool movingWraps: tab.isOn("scrolling:wrap_swapcol", true)
+
+                keys: ["scrolling:wrap_focus", "scrolling:wrap_swapcol"]
+                title: Translation.tr("Wrap around at the ends of the row")
+                icon: "loop"
+                currentOverride: scrollingWrap.focusWraps
+                    ? (scrollingWrap.movingWraps ? "both" : "focus")
+                    : (scrollingWrap.movingWraps ? "moving" : "never")
                 options: [
-                    { "displayName": Translation.tr("Centring it"), "value": 0 },
-                    { "displayName": Translation.tr("Scrolling the least it can"), "value": 1 }
+                    { "displayName": Translation.tr("Never"), "value": "never" },
+                    { "displayName": Translation.tr("Focus only"), "value": "focus" },
+                    { "displayName": Translation.tr("Focus and moving"), "value": "both" },
+                    { "displayName": Translation.tr("Moving only"), "value": "moving" }
                 ]
+                onSelected: newValue => HyprlandGui.batch(() => {
+                    HyprlandGui.setKey("scrolling:wrap_focus", newValue === "focus" || newValue === "both");
+                    HyprlandGui.setKey("scrolling:wrap_swapcol", newValue === "both" || newValue === "moving");
+                })
             }
 
-            HyprSwitch {
-                optionKey: "scrolling:wrap_focus"
-                defaultValue: true
-                buttonIcon: "loop"
-                text: Translation.tr("Focus wraps around the ends of the row")
-            }
-
-            HyprSwitch {
-                optionKey: "scrolling:wrap_swapcol"
-                defaultValue: true
-                buttonIcon: "swap_horizontal_circle"
-                text: Translation.tr("Moving a column wraps around too")
-            }
-
-            HyprTextField {
-                optionKey: "scrolling:explicit_column_widths"
-                defaultValue: "0.333, 0.5, 0.667, 1.0"
-                icon: "format_list_numbered"
-                text: Translation.tr("Preset column widths")
-                placeholderText: "0.333, 0.5, 0.667, 1.0"
-                tooltip: Translation.tr("The widths the layoutmsg colresize +conf and -conf messages cycle through, as fractions of the screen.")
+            HyprNavRow {
+                buttonIcon: "tune"
+                text: Translation.tr("More scrolling settings")
+                description: Translation.tr("A lone column, following focus, preset widths")
+                keys: ["scrolling:fullscreen_on_one_column", "scrolling:follow_focus",
+                    "scrolling:follow_min_visible", "scrolling:focus_fit_method",
+                    "scrolling:explicit_column_widths"]
+                configPage: Qt.resolvedUrl("HyprScrollingAdvancedPage.qml")
             }
 
             HyprOptionNote {
-                keys: ["scrolling:column_width", "scrolling:direction",
-                    "scrolling:fullscreen_on_one_column", "scrolling:follow_focus",
-                    "scrolling:follow_min_visible", "scrolling:focus_fit_method",
-                    "scrolling:wrap_focus", "scrolling:wrap_swapcol",
-                    "scrolling:explicit_column_widths"]
+                keys: ["scrolling:column_width", "scrolling:direction", "scrolling:wrap_focus",
+                    "scrolling:wrap_swapcol"]
             }
         }
     }
@@ -446,15 +296,12 @@ ContentPage {
         title: Translation.tr("Focus")
         icon: "center_focus_strong"
 
-        HyprSelect {
-            optionKey: "binds:focus_preferred_method"
-            defaultValue: 0
-            title: Translation.tr("Moving focus in a direction picks")
-            icon: "open_in_full"
-            options: [
-                { "displayName": Translation.tr("The nearest window"), "value": 0 },
-                { "displayName": Translation.tr("The one sharing the longest edge"), "value": 1 }
-            ]
+        HyprSwitch {
+            optionKey: "misc:focus_on_activate"
+            buttonIcon: "notifications_active"
+            text: Translation.tr("An app asking for attention gets focus")
+            textOn: Translation.tr("A window that asks to be raised takes focus from whatever you were doing.")
+            textOff: Translation.tr("A window that asks to be raised is only marked urgent.")
         }
 
         HyprSwitch {
@@ -462,40 +309,21 @@ ContentPage {
             defaultValue: true
             buttonIcon: "monitor"
             text: Translation.tr("Moving past the edge of a screen crosses to the next")
+            textOn: Translation.tr("Moving focus off the last window in a direction carries on to the next screen.")
+            textOff: Translation.tr("Moving focus stops at the edge of the screen.")
         }
 
-        HyprSwitch {
-            optionKey: "binds:movefocus_cycles_fullscreen"
-            buttonIcon: "fullscreen"
-            text: Translation.tr("Move focus while fullscreen instead of leaving it")
-        }
-
-        HyprSwitch {
-            optionKey: "binds:movefocus_cycles_groupfirst"
-            buttonIcon: "tab_group"
-            text: Translation.tr("Move through a group before leaving it")
-        }
-
-        HyprSwitch {
-            optionKey: "binds:ignore_group_lock"
-            buttonIcon: "lock_open"
-            text: Translation.tr("Group shortcuts ignore a locked group")
-        }
-
-        HyprSwitch {
-            optionKey: "misc:focus_on_activate"
-            buttonIcon: "notifications_active"
-            text: Translation.tr("An app asking for attention gets focus")
-
-            StyledToolTip {
-                text: Translation.tr("Off, a window that asks to be raised only gets marked urgent. On, it takes focus from whatever you were doing.")
-            }
+        HyprNavRow {
+            buttonIcon: "tune"
+            text: Translation.tr("More focus settings")
+            description: Translation.tr("Which neighbour is picked, fullscreen, groups")
+            keys: ["binds:focus_preferred_method", "binds:movefocus_cycles_fullscreen",
+                "binds:movefocus_cycles_groupfirst", "binds:ignore_group_lock"]
+            configPage: Qt.resolvedUrl("HyprFocusAdvancedPage.qml")
         }
 
         HyprOptionNote {
-            keys: ["binds:focus_preferred_method", "binds:window_direction_monitor_fallback",
-                "binds:movefocus_cycles_fullscreen", "binds:movefocus_cycles_groupfirst",
-                "binds:ignore_group_lock", "misc:focus_on_activate"]
+            keys: ["misc:focus_on_activate", "binds:window_direction_monitor_fallback"]
         }
     }
 
@@ -503,16 +331,28 @@ ContentPage {
         title: Translation.tr("Workspaces")
         icon: "dashboard"
 
-        HyprSwitch {
-            optionKey: "binds:workspace_back_and_forth"
-            buttonIcon: "swap_horiz"
-            text: Translation.tr("Switching to the current workspace goes back to the previous one")
-        }
+        HyprSelect {
+            id: backAndForth
 
-        HyprSwitch {
-            optionKey: "binds:allow_workspace_cycles"
-            buttonIcon: "history"
-            text: Translation.tr("Workspaces remember where you came from")
+            // Two switches, one behaviour: what the shortcut of the workspace you are already on
+            // does. The second one only means anything once the first is on.
+            readonly property bool goesBack: tab.isOn("binds:workspace_back_and_forth", false)
+            readonly property bool cycles: tab.isOn("binds:allow_workspace_cycles", false)
+
+            keys: ["binds:workspace_back_and_forth", "binds:allow_workspace_cycles"]
+            title: Translation.tr("The shortcut of the workspace you are already on")
+            icon: "swap_horiz"
+            currentOverride: !backAndForth.goesBack ? "nothing" : (backAndForth.cycles ? "cycle" : "back")
+            options: [
+                { "displayName": Translation.tr("Does nothing"), "value": "nothing" },
+                { "displayName": Translation.tr("Goes back to the previous one"), "value": "back" },
+                { "displayName": Translation.tr("Keeps flipping between the two"), "value": "cycle" }
+            ]
+            onSelected: newValue => HyprlandGui.batch(() => {
+                HyprlandGui.setKey("binds:workspace_back_and_forth", newValue !== "nothing");
+                if (newValue !== "nothing")
+                    HyprlandGui.setKey("binds:allow_workspace_cycles", newValue === "cycle");
+            })
         }
 
         HyprSelect {
@@ -526,50 +366,18 @@ ContentPage {
             ]
         }
 
-        HyprSwitch {
-            optionKey: "binds:hide_special_on_workspace_change"
-            buttonIcon: "visibility_off"
-            text: Translation.tr("Leaving a workspace hides the scratchpad")
-        }
-
-        HyprSwitch {
-            optionKey: "binds:allow_pin_fullscreen"
-            buttonIcon: "push_pin"
-            text: Translation.tr("A pinned window can go fullscreen and stay pinned")
-        }
-
-        HyprSlider {
-            optionKey: "binds:scroll_event_delay"
-            defaultValue: 300
-            integer: true
-            buttonIcon: "mouse"
-            text: Translation.tr("Wait between scroll shortcuts")
-            tooltipContent: `${Math.round(value)} ms`
-            from: 0
-            to: 800
-            stepSize: 10
-
-            StyledToolTip {
-                text: Translation.tr("How long a scroll-wheel shortcut ignores further scrolling. Lower it for a faster wheel, raise it if one flick skips several workspaces.")
-            }
-        }
-
-        HyprSlider {
-            optionKey: "binds:drag_threshold"
-            defaultValue: 0
-            integer: true
-            buttonIcon: "drag_indicator"
-            text: Translation.tr("Movement before a click becomes a drag")
-            tooltipContent: value < 1 ? Translation.tr("Off") : `${Math.round(value)} px`
-            from: 0
-            to: 64
-            stepSize: 1
+        HyprNavRow {
+            buttonIcon: "tune"
+            text: Translation.tr("More workspace settings")
+            description: Translation.tr("Scratchpad, pinned windows, scroll-wheel and drag thresholds")
+            keys: ["binds:hide_special_on_workspace_change", "binds:allow_pin_fullscreen",
+                "binds:scroll_event_delay", "binds:drag_threshold"]
+            configPage: Qt.resolvedUrl("HyprWorkspacesAdvancedPage.qml")
         }
 
         HyprOptionNote {
             keys: ["binds:workspace_back_and_forth", "binds:allow_workspace_cycles",
-                "binds:workspace_center_on", "binds:hide_special_on_workspace_change",
-                "binds:allow_pin_fullscreen", "binds:scroll_event_delay", "binds:drag_threshold"]
+                "binds:workspace_center_on"]
         }
     }
 
@@ -589,46 +397,29 @@ ContentPage {
             stepSize: 10
         }
 
-        HyprSlider {
-            optionKey: "gestures:workspace_swipe_cancel_ratio"
-            defaultValue: 0.5
-            buttonIcon: "undo"
-            text: Translation.tr("How far to swipe before it commits")
-            tooltipContent: `${Math.round(value * 100)}%`
-            from: 0
-            to: 1
-            stepSize: 0.05
-        }
-
-        HyprSlider {
-            optionKey: "gestures:workspace_swipe_min_speed_to_force"
-            defaultValue: 30
-            integer: true
-            buttonIcon: "bolt"
-            text: Translation.tr("Speed that commits a swipe regardless")
-            tooltipContent: value < 1 ? Translation.tr("Off") : `${Math.round(value)} px`
-            from: 0
-            to: 200
-            stepSize: 1
-        }
-
         HyprSwitch {
             optionKey: "gestures:workspace_swipe_invert"
             defaultValue: true
             buttonIcon: "swap_horiz"
             text: Translation.tr("Invert the touchpad direction")
+            textOn: Translation.tr("The workspaces move with your fingers, the way pages do on a phone.")
+            textOff: Translation.tr("The workspaces move against your fingers.")
         }
 
         HyprNavRow {
             buttonIcon: "tune"
             text: Translation.tr("Advanced workspace swipe")
-            value: Translation.tr("Direction lock, touchscreen, wrap")
+            description: Translation.tr("When a swipe commits, direction lock, touchscreen, wrap-around")
+            keys: ["gestures:workspace_swipe_cancel_ratio", "gestures:workspace_swipe_min_speed_to_force",
+                "gestures:workspace_swipe_create_new", "gestures:workspace_swipe_forever",
+                "gestures:workspace_swipe_use_r", "gestures:workspace_swipe_direction_lock",
+                "gestures:workspace_swipe_direction_lock_threshold", "gestures:workspace_swipe_touch",
+                "gestures:workspace_swipe_touch_invert"]
             configPage: Qt.resolvedUrl("HyprWorkspaceSwipeAdvancedPage.qml")
         }
 
         HyprOptionNote {
-            keys: ["gestures:workspace_swipe_distance", "gestures:workspace_swipe_cancel_ratio",
-                "gestures:workspace_swipe_invert"]
+            keys: ["gestures:workspace_swipe_distance", "gestures:workspace_swipe_invert"]
         }
     }
 

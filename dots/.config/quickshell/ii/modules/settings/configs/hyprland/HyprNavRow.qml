@@ -1,15 +1,18 @@
 import QtQuick
 import QtQuick.Layouts
+import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
 
 /**
- * A settings row that opens a sub-page, showing the value it would take you to change.
+ * A settings row that opens a sub-page, showing what it would take you to.
  *
  * The codebase's existing trick for this is a ConfigSwitch pinned to `checked: true` with
  * `subPageOnly`, which leaves a switch on screen that does nothing. A row whose whole job is
- * "tap to go deeper" should look like one, so this is that row: a value on the right and a
- * chevron instead of a switch. Rounding and grouping come from RippleButton's own
+ * "tap to go deeper" should look like one, so this is that row: a chevron instead of a switch,
+ * a value on the right when the page is about one thing, a line under the title when it holds
+ * several, and a count of how many of those have been changed - so a closed door still says
+ * whether there is anything behind it. Rounding and grouping come from RippleButton's own
  * `useDynamicRadius`, so it sits in a stack of settings rows like any other.
  */
 RippleButton {
@@ -20,9 +23,18 @@ RippleButton {
     // fail to load. The inherited one is used instead; the row draws it itself.
     /// Shown on the right, before the chevron. The current setting, in words.
     property string value: ""
+    /// Under the title. What the sub-page holds, in a few words.
+    property string description: ""
+    /// The option keys behind the door. The badge counts how many of them this page or a
+    /// hand-written line has set.
+    property var keys: []
     property url configPage: ""
 
     signal openSubPage
+
+    readonly property int changedCount: HyprOrigin.changedCount(root.keys)
+    readonly property string badgeText: root.changedCount > 0
+        ? Translation.tr("%1 changed").arg(root.changedCount) : ""
 
     Layout.fillWidth: true
     implicitHeight: contentLayout.implicitHeight + 20
@@ -85,13 +97,27 @@ RippleButton {
                 }
             }
 
-            StyledText {
+            ColumnLayout {
                 Layout.fillWidth: true
-                text: root.text
-                font.pixelSize: Appearance.font.pixelSize.small
-                color: Appearance.colors.colOnLayer2
+                spacing: Appearance.sizes.elevationMargin / 4
                 opacity: root.enabled ? 1 : 0.4
-                wrapMode: Text.WordWrap
+
+                StyledText {
+                    Layout.fillWidth: true
+                    text: root.text
+                    font.pixelSize: Appearance.font.pixelSize.small
+                    color: Appearance.colors.colOnLayer2
+                    wrapMode: Text.WordWrap
+                }
+
+                StyledText {
+                    Layout.fillWidth: true
+                    visible: root.description.length > 0
+                    text: root.description
+                    font.pixelSize: Appearance.font.pixelSize.smaller
+                    color: Appearance.colors.colSubtext
+                    wrapMode: Text.WordWrap
+                }
             }
 
             StyledText {
@@ -104,6 +130,11 @@ RippleButton {
                 font.pixelSize: Appearance.font.pixelSize.small
                 color: Appearance.colors.colSubtext
                 opacity: root.enabled ? 1 : 0.4
+            }
+
+            HyprBadge {
+                Layout.alignment: Qt.AlignVCenter
+                text: root.badgeText
             }
 
             MaterialSymbol {

@@ -28,6 +28,7 @@ HyprToggle {
         const value = HyprlandGui.displayValue(root.optionKey, root.defaultValue);
         return value === true || value === 1;
     }
+    badgeText: HyprOrigin.label(root.optionKey)
     enabled: !root.locked
     onRequested: wanted => HyprlandGui.setKey(root.optionKey, wanted)
 

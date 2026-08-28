@@ -32,6 +32,7 @@ ConfigSpinBox {
 
     enabled: !root.locked
     value: root.optionValue
+    badgeText: HyprOrigin.label(root.optionKey)
 
     function clamped(value: real): real {
         return Math.min(root.to, Math.max(root.from, value));

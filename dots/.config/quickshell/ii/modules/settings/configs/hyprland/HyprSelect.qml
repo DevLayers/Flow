@@ -8,8 +8,9 @@ import qs.modules.common.widgets
  * A labelled row of choices, bound to a Hyprland option key or driven by hand.
  *
  * With `optionKey` set it reads and writes that key. With `currentOverride` set instead it just
- * reports what was chosen, which is what the per-device cards need - a device override is one
- * Lua table, not a set of independent keys.
+ * reports what was chosen. That is what the per-device cards need, a device override being one
+ * Lua table rather than a set of independent keys - and what a chooser standing in for several
+ * keys needs, with `keys` naming them so the row still knows who set them and watches them.
  */
 ContentSubsection {
     id: root
@@ -18,6 +19,11 @@ ContentSubsection {
     property var defaultValue: ""
     /// Used in place of an option key. Ignored when `optionKey` is set.
     property var currentOverride: undefined
+    /// The keys a hand-driven chooser reads and writes. Ignored when `optionKey` is set.
+    property var keys: []
+    /// Off for a chooser whose key is shared with rows it has nothing to do with - every XKB
+    /// option group lives in the same string.
+    property bool showOrigin: true
     property alias options: choices.options
 
     signal selected(var newValue)
@@ -30,12 +36,22 @@ ContentSubsection {
      * control on the page, on every edit. Ownership never changes at all, and "has Hyprland
      * answered yet" changes once; only the value really moves.
      */
-    readonly property bool locked: root.optionKey !== ""
-        && HyprlandGui.shellOwned(root.optionKey) !== ""
+    readonly property var ownKeys: root.optionKey !== "" ? [root.optionKey] : Array.from(root.keys ?? [])
+    readonly property bool locked: root.ownKeys.some(key => HyprlandGui.shellOwned(key) !== "")
     readonly property var optionValue: root.optionKey === ""
         ? root.currentOverride : HyprlandGui.displayValue(root.optionKey, root.defaultValue)
+    readonly property string origin: root.showOrigin ? HyprOrigin.label(root.ownKeys) : ""
 
     Layout.fillWidth: true
+    headerExtra: root.origin !== "" ? originPill : null
+
+    Component {
+        id: originPill
+
+        HyprBadge {
+            text: root.origin
+        }
+    }
 
     ConfigSelectionArray {
         id: choices
@@ -48,6 +64,6 @@ ContentSubsection {
     }
 
     Component.onCompleted: {
-        if (root.optionKey !== "") HyprlandGui.watch([root.optionKey]);
+        if (root.ownKeys.length > 0) HyprlandGui.watch(root.ownKeys);
     }
 }

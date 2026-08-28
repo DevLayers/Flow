@@ -15,9 +15,12 @@ HyprToggle {
     required property string option
 
     readonly property var current: String(HyprlandGui.displayValue("input:kb_options", "") ?? "")
-        .split(",").filter(entry => entry.trim().length > 0)
+        .split(",").map(entry => entry.trim()).filter(entry => entry.length > 0)
 
     switchOn: root.current.indexOf(root.option) >= 0
+    // The whole list has one owner, but a row is about its own word: an off row says nothing
+    // about who set the other words.
+    badgeText: root.switchOn ? HyprOrigin.label("input:kb_options") : ""
     onRequested: wanted => {
         const next = wanted ? root.current.concat([root.option])
             : root.current.filter(entry => entry !== root.option);

@@ -55,12 +55,15 @@ ContentPage {
             defaultValue: true
             buttonIcon: "pin"
             text: Translation.tr("Num Lock on at startup")
+            textOn: Translation.tr("Num Lock is on when the session starts.")
+            textOff: Translation.tr("Num Lock is off when the session starts.")
         }
 
         HyprNavRow {
             buttonIcon: "tune"
             text: Translation.tr("Advanced keyboard")
-            value: Translation.tr("XKB quirks, multiple layouts")
+            description: Translation.tr("Caps Lock, Compose, XKB quirks, several layouts at once")
+            keys: ["input:kb_options", "input:kb_model", "input:resolve_binds_by_sym"]
             configPage: Qt.resolvedUrl("HyprKeyboardAdvancedPage.qml")
         }
 
@@ -120,6 +123,8 @@ ContentPage {
             optionKey: "input:natural_scroll"
             buttonIcon: "swap_vert"
             text: Translation.tr("Natural scrolling")
+            textOn: Translation.tr("The content moves with the wheel, the way it does under a finger.")
+            textOff: Translation.tr("The view moves with the wheel, the way a mouse usually works.")
         }
 
         HyprSelect {
@@ -136,7 +141,10 @@ ContentPage {
         HyprNavRow {
             buttonIcon: "tune"
             text: Translation.tr("Advanced mouse")
-            value: Translation.tr("Focus, scrolling, buttons")
+            description: Translation.tr("Focus, scrolling, buttons")
+            keys: ["input:left_handed", "input:force_no_accel", "input:scroll_factor",
+                "input:scroll_button_lock", "input:scroll_method", "input:mouse_refocus",
+                "input:follow_mouse", "input:follow_mouse_threshold", "input:focus_on_close"]
             configPage: Qt.resolvedUrl("HyprMouseAdvancedPage.qml")
         }
 
@@ -154,12 +162,16 @@ ContentPage {
             defaultValue: true
             buttonIcon: "touch_app"
             text: Translation.tr("Tap to click")
+            textOn: Translation.tr("A tap on the pad is a click.")
+            textOff: Translation.tr("Only pressing the pad clicks.")
         }
 
         HyprSwitch {
             optionKey: "input:touchpad:natural_scroll"
             buttonIcon: "swap_vert"
             text: Translation.tr("Natural scrolling")
+            textOn: Translation.tr("The page moves with your fingers, the way a phone does.")
+            textOff: Translation.tr("The page moves against your fingers, the way a mouse wheel does.")
         }
 
         HyprSwitch {
@@ -167,12 +179,18 @@ ContentPage {
             defaultValue: true
             buttonIcon: "keyboard_hide"
             text: Translation.tr("Ignore the touchpad while typing")
+            textOn: Translation.tr("The pad ignores touches for a moment after each keystroke.")
+            textOff: Translation.tr("The pad stays live while you type.")
         }
 
         HyprNavRow {
             buttonIcon: "tune"
             text: Translation.tr("Advanced touchpad")
-            value: Translation.tr("Gestures, clicks, orientation")
+            description: Translation.tr("Gestures, clicks, orientation")
+            keys: ["input:touchpad:tap-and-drag", "input:touchpad:drag_lock", "input:touchpad:drag_3fg",
+                "input:touchpad:scroll_factor", "input:touchpad:clickfinger_behavior",
+                "input:touchpad:middle_button_emulation", "input:touchpad:tap_button_map",
+                "input:touchpad:flip_x", "input:touchpad:flip_y"]
             configPage: Qt.resolvedUrl("HyprTouchpadAdvancedPage.qml")
         }
 
@@ -202,12 +220,17 @@ ContentPage {
             defaultValue: true
             buttonIcon: "brush"
             text: Translation.tr("Use hyprcursor themes")
+            textOn: Translation.tr("A hyprcursor theme is used when one is installed, the XCursor one otherwise.")
+            textOff: Translation.tr("Only classic XCursor themes are used.")
         }
 
         HyprNavRow {
             buttonIcon: "tune"
             text: Translation.tr("Advanced cursor")
-            value: Translation.tr("Zoom, warping, hardware")
+            description: Translation.tr("Zoom, warping, hardware")
+            keys: ["cursor:hide_on_key_press", "cursor:hide_on_touch", "cursor:no_warps",
+                "cursor:persistent_warps", "cursor:warp_on_change_workspace", "cursor:zoom_rigid",
+                "cursor:zoom_factor", "cursor:no_hardware_cursors"]
             configPage: Qt.resolvedUrl("HyprCursorAdvancedPage.qml")
         }
 

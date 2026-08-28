@@ -23,6 +23,7 @@ ConfigTextField {
     readonly property string optionValue: String(HyprlandGui.displayValue(root.optionKey, root.defaultValue) ?? "")
 
     enabled: !root.locked
+    badgeText: HyprOrigin.label(root.optionKey)
 
     function push() {
         if (root.inputText === root.optionValue) return;

@@ -13,149 +13,101 @@ import qs.modules.common.widgets
  * them up, which is why they live behind a tap rather than sitting open on the Input tab for
  * every visit.
  */
-Item {
-    id: subPageRoot
-    anchors.fill: parent
+HyprSubPage {
+    title: Translation.tr("Advanced keyboard")
+    subtitle: Translation.tr("XKB quirks and multiple layouts at once")
 
-    signal goBack
-    property bool showBackButton: false
+    ContentSection {
+        title: Translation.tr("Key behaviour")
+        icon: "keyboard_option_key"
 
-    ContentPage {
-        anchors.fill: parent
-        forceWidth: false
-
-        RowLayout {
-            visible: subPageRoot.showBackButton
-            Layout.fillWidth: true
-            spacing: 12
-
-            RippleButton {
-                implicitWidth: implicitHeight
-                implicitHeight: 40
-                buttonRadius: Appearance.rounding.full
-                colBackground: Appearance.colors.colSecondaryContainer
-                colBackgroundHover: Appearance.colors.colSecondaryContainerHover
-                colRipple: Appearance.colors.colSecondaryContainerActive
-                onClicked: subPageRoot.goBack()
-
-                MaterialSymbol {
-                    anchors.centerIn: parent
-                    text: "arrow_back"
-                    iconSize: Appearance.font.pixelSize.large
-                    color: Appearance.colors.colOnSecondaryContainer
-                }
-            }
-
-            ColumnLayout {
-                Layout.fillWidth: true
-                spacing: 0
-
-                StyledText {
-                    text: Translation.tr("Advanced keyboard")
-                    font.pixelSize: Appearance.font.pixelSize.large
-                    font.family: Appearance.font.family.title
-                    color: Appearance.colors.colOnLayer0
-                }
-
-                StyledText {
-                    Layout.fillWidth: true
-                    text: Translation.tr("XKB quirks and multiple layouts at once")
-                    font.pixelSize: Appearance.font.pixelSize.smaller
-                    color: Appearance.colors.colSubtext
-                    elide: Text.ElideRight
-                }
-            }
+        HyprXkbChoice {
+            title: Translation.tr("Caps Lock acts as")
+            icon: "keyboard_capslock"
+            group: ["caps:escape", "caps:ctrl_modifier", "caps:swapescape"]
+            options: [
+                { "displayName": Translation.tr("Caps Lock"), "value": "" },
+                { "displayName": Translation.tr("Escape"), "value": "caps:escape" },
+                { "displayName": Translation.tr("Control"), "value": "caps:ctrl_modifier" },
+                { "displayName": Translation.tr("Escape, and Escape as Caps Lock"), "value": "caps:swapescape" }
+            ]
         }
 
-        ContentSection {
-            title: Translation.tr("Key behaviour")
-            icon: "keyboard_option_key"
-
-            HyprXkbOptionSwitch {
-                option: "caps:escape"
-                buttonIcon: "keyboard_capslock"
-                text: Translation.tr("Caps Lock acts as Escape")
-            }
-
-            HyprXkbOptionSwitch {
-                option: "caps:swapescape"
-                buttonIcon: "swap_horiz"
-                text: Translation.tr("Swap Caps Lock and Escape")
-            }
-
-            HyprXkbOptionSwitch {
-                option: "compose:ralt"
-                buttonIcon: "add_circle"
-                text: Translation.tr("Right Alt is the Compose key")
-
-                StyledToolTip {
-                    text: Translation.tr("Compose then ' then e types é. Works in every app, without a layout that has the letter on it.")
-                }
-            }
-
-            HyprXkbOptionSwitch {
-                option: "terminate:ctrl_alt_bksp"
-                buttonIcon: "logout"
-                text: Translation.tr("Ctrl+Alt+Backspace kills the session")
-            }
-
-            HyprXkbOptionSwitch {
-                option: "grp:alt_shift_toggle"
-                buttonIcon: "language"
-                text: Translation.tr("Alt+Shift switches between layouts")
-            }
-
-            HyprSwitch {
-                optionKey: "input:resolve_binds_by_sym"
-                buttonIcon: "abc"
-                text: Translation.tr("Match shortcuts by symbol, not position")
-
-                StyledToolTip {
-                    text: Translation.tr("On an AZERTY layout, SUPER+A then means the key that types A rather than the key where A sits on QWERTY.")
-                }
-            }
+        HyprXkbOptionSwitch {
+            option: "compose:ralt"
+            buttonIcon: "add_circle"
+            text: Translation.tr("Right Alt is the Compose key")
+            textOn: Translation.tr("Right Alt, then ', then e types é - in every app, on any layout.")
+            textOff: Translation.tr("Right Alt is Alt Gr, as the layout defines it.")
         }
 
-        ContentSection {
-            title: Translation.tr("Several layouts at once")
-            icon: "list"
+        HyprXkbOptionSwitch {
+            option: "terminate:ctrl_alt_bksp"
+            buttonIcon: "logout"
+            text: Translation.tr("Ctrl+Alt+Backspace kills the session")
+            textOn: Translation.tr("Ctrl+Alt+Backspace ends the session at once, unsaved work and all.")
+            textOff: Translation.tr("Ctrl+Alt+Backspace does nothing special.")
+        }
 
-            HyprTextField {
-                optionKey: "input:kb_layout"
-                defaultValue: "us"
-                icon: "language"
-                text: Translation.tr("Layout codes")
-                placeholderText: "fr,us"
-                tooltip: Translation.tr("Comma separated. The first one is active at startup.")
-            }
+        HyprXkbOptionSwitch {
+            option: "grp:alt_shift_toggle"
+            buttonIcon: "language"
+            text: Translation.tr("Alt+Shift switches between layouts")
+            textOn: Translation.tr("Alt+Shift moves to the next layout in the list.")
+            textOff: Translation.tr("Alt+Shift does nothing special; layouts are switched from the bar or a shortcut.")
+        }
 
-            HyprTextField {
-                optionKey: "input:kb_variant"
-                icon: "tune"
-                text: Translation.tr("Variants")
-                placeholderText: ",intl"
-                tooltip: Translation.tr("One per layout, in the same order. Leave a slot empty for no variant.")
-            }
+        HyprSwitch {
+            optionKey: "input:resolve_binds_by_sym"
+            buttonIcon: "abc"
+            text: Translation.tr("Match shortcuts by symbol, not position")
+            textOn: Translation.tr("SUPER+A means the key that types A on the layout in use.")
+            textOff: Translation.tr("SUPER+A means the key where A sits on a US keyboard, whatever it types.")
+        }
 
-            HyprTextField {
-                optionKey: "input:kb_options"
-                icon: "settings"
-                text: Translation.tr("XKB options")
-                placeholderText: "caps:escape,compose:ralt"
-                tooltip: Translation.tr("The raw list. The switches above edit the same string.")
-            }
+        HyprOptionNote {
+            keys: ["input:kb_options", "input:resolve_binds_by_sym"]
+        }
+    }
 
-            HyprTextField {
-                optionKey: "input:kb_model"
-                icon: "keyboard_alt"
-                text: Translation.tr("Keyboard model")
-                placeholderText: "pc105"
-            }
+    ContentSection {
+        title: Translation.tr("Several layouts at once")
+        icon: "list"
 
-            HyprOptionNote {
-                keys: ["input:kb_layout", "input:kb_variant", "input:kb_options", "input:kb_model",
-                    "input:resolve_binds_by_sym"]
-            }
+        HyprTextField {
+            optionKey: "input:kb_layout"
+            defaultValue: "us"
+            icon: "language"
+            text: Translation.tr("Layout codes")
+            placeholderText: "fr,us"
+            tooltip: Translation.tr("Comma separated. The first one is active at startup.")
+        }
+
+        HyprTextField {
+            optionKey: "input:kb_variant"
+            icon: "tune"
+            text: Translation.tr("Variants")
+            placeholderText: ",intl"
+            tooltip: Translation.tr("One per layout, in the same order. Leave a slot empty for no variant.")
+        }
+
+        HyprTextField {
+            optionKey: "input:kb_options"
+            icon: "settings"
+            text: Translation.tr("XKB options")
+            placeholderText: "caps:escape,compose:ralt"
+            tooltip: Translation.tr("The raw list. The rows above edit the same string.")
+        }
+
+        HyprTextField {
+            optionKey: "input:kb_model"
+            icon: "keyboard_alt"
+            text: Translation.tr("Keyboard model")
+            placeholderText: "pc105"
+        }
+
+        HyprOptionNote {
+            keys: ["input:kb_layout", "input:kb_variant", "input:kb_model"]
         }
     }
 }
