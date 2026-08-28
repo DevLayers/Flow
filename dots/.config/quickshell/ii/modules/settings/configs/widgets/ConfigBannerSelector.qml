@@ -12,12 +12,26 @@ Item {
     id: bannerSelectorRoot
     property string text: ""
     property string placeholderText: "Click to select banner image"
-    property var nameFilters: ["Image files (*.png *.jpg *.jpeg *.webp *.bmp)"]
+    property var nameFilters: ["Image files (*.png *.jpg *.jpeg *.webp *.bmp *.gif)"]
 
     implicitWidth: 360
     implicitHeight: 220
 
     readonly property string defaultPreviewPath: `${Directories.assetsPath}/images/default_wallpaper.png`
+
+    readonly property string rawSource: Config.options.sidebar.bannerImage !== "" ? Config.options.sidebar.bannerImage : bannerSelectorRoot.defaultPreviewPath
+    readonly property string cleanSource: {
+        let p = bannerSelectorRoot.rawSource;
+        if (!p) return "";
+        const qIdx = p.indexOf("?");
+        if (qIdx !== -1) p = p.substring(0, qIdx);
+        return p.startsWith("file://") ? p : ("file://" + p);
+    }
+    readonly property bool isAnimated: {
+        const lower = bannerSelectorRoot.cleanSource.toLowerCase();
+        return lower.includes(".gif") || lower.includes(".webp");
+    }
+    readonly property bool shouldPlay: GlobalStates.settingsOpen && isAnimated
 
     // Open where wallpapers live, honoring the wallpaper selector's custom folder when set.
     readonly property string wallpaperFolder: {
@@ -28,11 +42,13 @@ Item {
         return `${Directories.pictures}/Wallpapers`;
     }
 
+    // Static Image preview
     StyledImage {
         id: bannerPreview
         anchors.fill: parent
         fillMode: Image.PreserveAspectCrop
-        source: Config.options.sidebar.bannerImage !== "" ? Config.options.sidebar.bannerImage : bannerSelectorRoot.defaultPreviewPath
+        source: !bannerSelectorRoot.isAnimated ? bannerSelectorRoot.cleanSource : ""
+        visible: !bannerSelectorRoot.isAnimated && status !== Image.Error
         cache: true
         layer.enabled: true
         layer.effect: OpacityMask {
@@ -44,10 +60,30 @@ Item {
         }
     }
 
+    // Animated GIF preview
+    AnimatedImage {
+        id: bannerPreviewAnimated
+        anchors.fill: parent
+        fillMode: Image.PreserveAspectCrop
+        source: bannerSelectorRoot.isAnimated ? bannerSelectorRoot.cleanSource : ""
+        playing: bannerSelectorRoot.shouldPlay
+        paused: !bannerSelectorRoot.shouldPlay
+        visible: bannerSelectorRoot.isAnimated && status === Image.Ready
+        cache: false
+        layer.enabled: true
+        layer.effect: OpacityMask {
+            maskSource: Rectangle {
+                width: bannerPreviewAnimated.width
+                height: bannerPreviewAnimated.height
+                radius: Appearance.rounding.normal
+            }
+        }
+    }
+
     StyledImage {
         id: bannerPreviewFallback
         anchors.fill: parent
-        visible: bannerPreview.status === Image.Error
+        visible: (!bannerSelectorRoot.isAnimated && bannerPreview.status === Image.Error) || (bannerSelectorRoot.isAnimated && bannerPreviewAnimated.status === Image.Error)
         source: bannerSelectorRoot.defaultPreviewPath
         fillMode: Image.PreserveAspectCrop
         cache: true

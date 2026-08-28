@@ -14,6 +14,7 @@ class UserProfileAvatarContractTests(unittest.TestCase):
         self.sidebar_qml = (ROOT / "modules/ii/sidebarDashboard/SidebarDashboardContent.qml").read_text(encoding="utf-8")
         self.user_header_qml = (ROOT / "modules/settings/UserHeader.qml").read_text(encoding="utf-8")
         self.profile_config_qml = (ROOT / "modules/settings/configs/UserProfileConfig.qml").read_text(encoding="utf-8")
+        self.banner_selector_qml = (ROOT / "modules/settings/configs/widgets/ConfigBannerSelector.qml").read_text(encoding="utf-8")
 
     def test_avatar_component_has_gif_and_material_shape_support(self):
         self.assertIn("AnimatedImage", self.avatar_qml)
@@ -31,6 +32,17 @@ class UserProfileAvatarContractTests(unittest.TestCase):
         self.assertIn("active: GlobalStates.dashboardPanelOpen", self.sidebar_qml)
         self.assertNotIn("id: hardcodedProfilePicture", self.sidebar_qml)
         self.assertNotIn("id: profilePicMask", self.sidebar_qml)
+
+    def test_sidebar_dashboard_banner_supports_animated_gifs(self):
+        self.assertIn("id: bannerAnimatedImage", self.sidebar_qml)
+        self.assertIn("playing: wallpaperArea.shouldPlayBanner", self.sidebar_qml)
+        self.assertIn("paused: !wallpaperArea.shouldPlayBanner", self.sidebar_qml)
+        self.assertIn("shouldPlayBanner: {", self.sidebar_qml)
+
+    def test_banner_selector_supports_gifs(self):
+        self.assertIn("*.gif", self.banner_selector_qml)
+        self.assertIn("AnimatedImage", self.banner_selector_qml)
+        self.assertIn("bannerPreviewAnimated", self.banner_selector_qml)
 
     def test_settings_user_header_uses_user_profile_avatar(self):
         self.assertIn("UserProfileAvatar", self.user_header_qml)

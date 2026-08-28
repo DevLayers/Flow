@@ -530,6 +530,30 @@ Item {
                     right: parent.right
                 }
                 height: parent.height * 0.7
+
+                readonly property string rawBannerSource: {
+                    if (Config.options.sidebar.useCustomBanner) {
+                        return Config.options.sidebar.bannerImage || `${Directories.assetsPath}/images/default_wallpaper.png`;
+                    }
+                    return Config.options.background.wallpaperPath || "";
+                }
+
+                readonly property string cleanBannerSource: {
+                    let p = wallpaperArea.rawBannerSource;
+                    if (!p) return "";
+                    const qIdx = p.indexOf("?");
+                    if (qIdx !== -1) p = p.substring(0, qIdx);
+                    return p.startsWith("file://") ? p : ("file://" + p);
+                }
+
+                readonly property bool isBannerAnimated: {
+                    const lower = wallpaperArea.cleanBannerSource.toLowerCase();
+                    return lower.includes(".gif") || lower.includes(".webp");
+                }
+
+                readonly property bool shouldPlayBanner: {
+                    return GlobalStates.dashboardPanelOpen && wallpaperArea.isBannerAnimated;
+                }
                 
                 Rectangle {
                     id: imageMask
@@ -538,17 +562,10 @@ Item {
                     visible: false
                 }
 
+                // Static Image Banner (zero QMovie overhead)
                 Image {
                     id: bannerImage
                     anchors.fill: parent
-                    // A wallpaper-sized banner costs RAM twice - decoded image plus GPU texture - for
-                    // detail this strip cannot show. PreserveAspectCrop makes sourceSize a cover box,
-                    // so the device-pixel size of the strip is all the decoder ever has to produce.
-                    //
-                    // The box only ever grows, and nothing loads before the strip is laid out in a
-                    // window: a source set against a zero-width box decodes at the file's native
-                    // size, and a box that shrinks - the window reports the integer output scale for
-                    // a moment before the fractional one arrives - re-decodes the file for nothing.
                     readonly property real windowDpr: (QsWindow.window as QsWindow)?.devicePixelRatio ?? 0
                     property size decodeBox: Qt.size(0, 0)
                     onWindowDprChanged: bannerImage.growDecodeBox()
@@ -565,13 +582,31 @@ Item {
                             Math.max(boxHeight, bannerImage.decodeBox.height));
                     }
 
-                    source: bannerImage.decodeBox.width <= 0 ? "" : (Config.options.sidebar.useCustomBanner
-                        ? (Config.options.sidebar.bannerImage || `${Directories.assetsPath}/images/default_wallpaper.png`)
-                        : Config.options.background.wallpaperPath)
+                    source: (!wallpaperArea.isBannerAnimated && bannerImage.decodeBox.width > 0)
+                        ? wallpaperArea.cleanBannerSource
+                        : ""
                     sourceSize: bannerImage.decodeBox
                     fillMode: Image.PreserveAspectCrop
                     cache: false
                     asynchronous: true
+                    visible: !wallpaperArea.isBannerAnimated
+                    layer.enabled: true
+                    layer.effect: OpacityMask {
+                        maskSource: imageMask
+                    }
+                }
+
+                // Animated GIF Banner (only active when isBannerAnimated is true, paused when sidebar is closed)
+                AnimatedImage {
+                    id: bannerAnimatedImage
+                    anchors.fill: parent
+                    source: wallpaperArea.isBannerAnimated ? wallpaperArea.cleanBannerSource : ""
+                    fillMode: Image.PreserveAspectCrop
+                    playing: wallpaperArea.shouldPlayBanner
+                    paused: !wallpaperArea.shouldPlayBanner
+                    cache: false
+                    asynchronous: true
+                    visible: wallpaperArea.isBannerAnimated && status === Image.Ready
                     layer.enabled: true
                     layer.effect: OpacityMask {
                         maskSource: imageMask
