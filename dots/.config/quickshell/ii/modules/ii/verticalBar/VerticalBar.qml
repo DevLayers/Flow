@@ -114,6 +114,17 @@ Scope {
                             }
                         }
                     }
+                    // ── Shell edge slide ─────────────────────────────────
+                    // Only the placement swap moves this bar off screen; a
+                    // fullscreen window is handled by the compositor stacking
+                    // (see the note on barRoot above). The direction comes from
+                    // the live config, so the bar exits through the edge it is
+                    // on and the horizontal bar takes over from the other side.
+                    readonly property real shellHide: GlobalStates.barPlacementSwapProgress
+                    readonly property real shellSlideX: (Config.options.bar.bottom ? 1 : -1)
+                        * shellHide * (Appearance.sizes.verticalBarWindowWidth + Appearance.rounding.screenRounding)
+                    readonly property bool shellSeated: shellHide < 0.999
+
                     property bool superShow: false
                     property bool mustShow: hoverRegion.containsMouse || superShow || GlobalStates.sidebarLeftOpen || GlobalStates.sidebarRightOpen
                     property real hiddenAmount: (Config.options.bar.autoHide.enable && !mustShow) ? Appearance.sizes.verticalBarWindowWidth : 0
@@ -151,6 +162,7 @@ Scope {
                     Loader {
                         active: Config.options.appearance.fakeScreenRounding == 3
                         anchors.fill: parent
+                        visible: barRoot.shellSeated
                         opacity: bar.lockUsesFade ? 1.0 - bar.lockTransitionProgress : 1.0
                         sourceComponent: Component {
                             Item {
@@ -159,6 +171,7 @@ Scope {
                                     showBarBackground: barRoot.showBarBackground
                                     hBarHiddenAmount: 0
                                     vBarHiddenAmount: barRoot.hiddenAmount
+                                    hideProgress: barRoot.shellHide
                                 }
                             }
                         }
@@ -168,9 +181,10 @@ Scope {
                         id: hoverRegion
                         hoverEnabled: true
                         anchors.fill: parent
+                        visible: barRoot.shellSeated
                         opacity: bar.lockUsesFade ? 1.0 - bar.lockTransitionProgress : 1.0
                         transform: Translate {
-                            x: bar.lockUsesFade ? 0 : bar.lockSlideOffsetX * bar.lockTransitionProgress
+                            x: (bar.lockUsesFade ? 0 : bar.lockSlideOffsetX * bar.lockTransitionProgress) + barRoot.shellSlideX
                         }
 
                         Item {

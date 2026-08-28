@@ -650,6 +650,44 @@ Singleton {
             }
         }
 
+        // Every size change that happens *inside* the bar reads from here: the
+        // widgets and the island backgrounds that wrap them have to reach their
+        // new size at the same instant, and they only do that if they share one
+        // duration and one curve. A widget that animates its own implicitWidth
+        // faster than the island around it makes the island look like it is
+        // chasing the content (and vice versa).
+        // 280ms is the duration the Dynamic Island already used; the fast
+        // spatial curve keeps its slight overshoot without the OutBack tail.
+        property QtObject barResize: QtObject {
+            property int duration: Math.round(280 * root.animMultiplier)
+            property int type: Easing.BezierSpline
+            property list<real> bezierCurve: animationCurves.expressiveFastSpatial
+            property Component numberAnimation: Component {
+                NumberAnimation {
+                    duration: root.animation.barResize.duration
+                    easing.type: root.animation.barResize.type
+                    easing.bezierCurve: root.animation.barResize.bezierCurve
+                }
+            }
+        }
+
+        // The bar and the wrapped frame leaving the screen together: a
+        // fullscreen window taking over, media mode, or a placement swap. The
+        // exit accelerates away and the entrance decelerates in, so a swap does
+        // not read as two halves of the same easing.
+        property QtObject shellEdgeSlide: QtObject {
+            property int exitDuration: Math.round(260 * root.animMultiplier)
+            property int enterDuration: Math.round(420 * root.animMultiplier)
+            property int swapHold: Math.round(90 * root.animMultiplier)
+            property Component numberAnimation: Component {
+                NumberAnimation {
+                    duration: root.animation.shellEdgeSlide.enterDuration
+                    easing.type: Easing.BezierSpline
+                    easing.bezierCurve: root.animationCurves.emphasized
+                }
+            }
+        }
+
         property QtObject clickBounce: QtObject {
             property int duration: Math.round(400 * root.animMultiplier)
             property int type: Easing.BezierSpline

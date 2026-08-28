@@ -400,7 +400,47 @@ PanelWindow {
         }
     }
 
+    // ── Media mode entrance ──────────────────────────────────────────────────
+    // Promoting this window from WlrLayer.Background to WlrLayer.Overlay is a
+    // hard cut: the wallpaper lands in front of every window in a single frame,
+    // and the media UI fading in behind that reads as "no animation at all".
+    // Fading the surface content instead makes media mode dissolve in over
+    // whatever was on screen.
+    //
+    // Guarded on there being something behind us. On an empty workspace the
+    // promotion is invisible anyway, and fading from zero would flash the
+    // compositor's black through — this window *is* the wallpaper.
+    property real mediaModeContentFade: 1.0
+
+    SequentialAnimation {
+        id: mediaModeEnterFade
+        // Not a Behavior: the drop to zero has to land in the same frame as the
+        // promotion, and only the way back up is animated.
+        PropertyAction {
+            target: bgRoot
+            property: "mediaModeContentFade"
+            value: 0
+        }
+        NumberAnimation {
+            target: bgRoot
+            property: "mediaModeContentFade"
+            to: 1
+            duration: Math.round(320 * Appearance.animMultiplier)
+            easing.type: Easing.BezierSpline
+            easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
+        }
+    }
+
     onMediaModeOpenChanged: {
+        if (mediaModeOpen) {
+            if (bgRoot.hasWindowsInActiveWorkspace)
+                mediaModeEnterFade.restart();
+            else
+                bgRoot.mediaModeContentFade = 1;
+        } else {
+            mediaModeEnterFade.stop();
+            bgRoot.mediaModeContentFade = 1;
+        }
         if (!mediaModeOpen) {
             // Force widgets window to re-stack after our layer transition from
             // WlrLayer.Overlay → WlrLayer.Bottom. Without this, the compositor
@@ -433,6 +473,7 @@ PanelWindow {
     Item {
         id: contentRoot
         anchors.fill: parent
+        opacity: bgRoot.mediaModeContentFade
         visible: GlobalStates.screenLocked || !bgRoot.deferredFullscreen || !(Config && Config.options && Config.options.background && Config.options.background.hideWhenFullscreen)
 
         WallpaperImage {

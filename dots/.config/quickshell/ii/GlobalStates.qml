@@ -169,6 +169,73 @@ Singleton {
         // overshoot and make a fade look like an abrupt blink.
         animation: Appearance.animation.elementMoveSlow.numberAnimation.createObject(root)
     }
+    // ── Bar placement swap ───────────────────────────────────────────────
+    // Moving the bar between edges used to be a hard cut: the loaders were
+    // destroyed and rebuilt on the other side. This is the shared clock that
+    // turns it into a round trip — the shell retracts through the edge it is
+    // on, the placement is written while it is off screen, and it comes back
+    // in through the new edge. Every host multiplies its own outward direction
+    // by this, so the direction flips on its own when the config does.
+    property real barPlacementSwapProgress: 0
+    property bool barPlacementSwapping: false
+    property bool _pendingBarBottom: false
+    property bool _pendingBarVertical: false
+
+    // Returns false when there is nothing to do, so callers can fall back to a
+    // plain write. Config is only touched from inside the animation.
+    function requestBarPlacement(bottom, vertical) {
+        if (!Config.ready)
+            return false;
+        if (Config.options.bar.bottom === bottom && Config.options.bar.vertical === vertical)
+            return false;
+        root._pendingBarBottom = bottom;
+        root._pendingBarVertical = vertical;
+        barPlacementSwapAnim.restart();
+        return true;
+    }
+
+    SequentialAnimation {
+        id: barPlacementSwapAnim
+        PropertyAction {
+            target: root
+            property: "barPlacementSwapping"
+            value: true
+        }
+        NumberAnimation {
+            target: root
+            property: "barPlacementSwapProgress"
+            to: 1
+            duration: Appearance.animation.shellEdgeSlide.exitDuration
+            easing.type: Easing.BezierSpline
+            easing.bezierCurve: Appearance.animationCurves.emphasizedAccel
+        }
+        ScriptAction {
+            script: {
+                Config.options.bar.bottom = root._pendingBarBottom;
+                Config.options.bar.vertical = root._pendingBarVertical;
+            }
+        }
+        // The bar loaders are torn down and rebuilt on the config change
+        // (see barExtraCondition in IllogicalImpulseFamily). Hold off screen
+        // long enough for the new ones to exist before sliding them in.
+        PauseAnimation {
+            duration: Appearance.animation.shellEdgeSlide.swapHold
+        }
+        NumberAnimation {
+            target: root
+            property: "barPlacementSwapProgress"
+            to: 0
+            duration: Appearance.animation.shellEdgeSlide.enterDuration
+            easing.type: Easing.BezierSpline
+            easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
+        }
+        PropertyAction {
+            target: root
+            property: "barPlacementSwapping"
+            value: false
+        }
+    }
+
     property bool lockScreenCentered: false
     property bool lockAnimationActive: false
     property bool workspaceRestoreInProgress: false

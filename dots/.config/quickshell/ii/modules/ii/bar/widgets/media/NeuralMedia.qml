@@ -108,7 +108,7 @@ Item {
     height: implicitHeight
 
     Behavior on implicitWidth {
-        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(root)
+        animation: Appearance.animation.barResize.numberAnimation.createObject(this)
     }
 
     onHasTrackChanged: {

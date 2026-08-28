@@ -96,11 +96,11 @@ Item {
     implicitHeight: hasTrack ? (vertical ? (isMaterial ? materialCol.implicitHeight : mediaCircProg.implicitHeight + 6) : Appearance.sizes.baseBarHeight) : 0
 
     Behavior on implicitWidth {
-        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(root)
+        animation: Appearance.animation.barResize.numberAnimation.createObject(this)
     }
 
     Behavior on implicitHeight {
-        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(root)
+        animation: Appearance.animation.barResize.numberAnimation.createObject(this)
     }
 
     width: implicitWidth
@@ -408,10 +408,7 @@ Item {
                         }
                     }
                     Behavior on Layout.preferredWidth {
-                        NumberAnimation {
-                            duration: 250
-                            easing.type: Easing.OutQuint
-                        }
+                        animation: Appearance.animation.barResize.numberAnimation.createObject(this)
                     }
 
                     layer.enabled: true
@@ -462,10 +459,7 @@ Item {
                         }
                     }
                     Behavior on Layout.preferredWidth {
-                        NumberAnimation {
-                            duration: 250
-                            easing.type: Easing.OutQuint
-                        }
+                        animation: Appearance.animation.barResize.numberAnimation.createObject(this)
                     }
 
                     StyledText {
@@ -640,10 +634,7 @@ Item {
                         }
                     }
                     Behavior on Layout.preferredWidth {
-                        NumberAnimation {
-                            duration: 250
-                            easing.type: Easing.OutQuint
-                        }
+                        animation: Appearance.animation.barResize.numberAnimation.createObject(this)
                     }
 
                     contentItem: MaterialSymbol {

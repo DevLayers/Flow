@@ -498,6 +498,7 @@ Item { // Bar content region
                 id: middleLeftRepeater
                 model: root.leftList
                 delegate: Bar.BarComponent {
+                    growthEdge: "trailing"
                     vertical: true
                     list: Config.options.bar.layouts.center
                     barSection: 1
@@ -534,6 +535,7 @@ Item { // Bar content region
                 id: middleRightRepeater
                 model: root.rightList
                 delegate: Bar.BarComponent {
+                    growthEdge: "leading"
                     vertical: true
                     list: Config.options.bar.layouts.center
                     barSection: 1

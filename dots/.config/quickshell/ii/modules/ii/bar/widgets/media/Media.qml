@@ -48,7 +48,7 @@ Item {
     implicitHeight: hasTrack ? Appearance.sizes.baseBarHeight : 0
 
     Behavior on implicitWidth {
-        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(root)
+        animation: Appearance.animation.barResize.numberAnimation.createObject(this)
     }
 
     function updatePopupRect() {

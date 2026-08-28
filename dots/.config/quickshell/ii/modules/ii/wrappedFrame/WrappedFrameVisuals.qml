@@ -36,7 +36,23 @@ Item {
     }
 
     property var screen: null
-    property int frameThickness: Config.options.appearance.wrappedFrameThickness
+
+    // ── Retract ──────────────────────────────────────────────────────────
+    // 0 = seated, 1 = fully gone. Driven by the host for the cases where the
+    // shell has to leave the screen: a fullscreen window taking over, media
+    // mode, and the placement swap.
+    //
+    // The ring collapses rather than sliding as a block. A 6px frame
+    // translated 6px out reads as a blink, and translating the concave corners
+    // far enough to actually clear a screen edge sends them flying across it.
+    // Shrinking the thickness folds the whole ring — strips, corners and the
+    // bar plate, since every margin here is derived from it — into the screen
+    // edges, and the silhouette shadow follows for free.
+    property real hideProgress: 0
+    readonly property real retract: 1 - Math.max(0, Math.min(1, hideProgress))
+
+    property int baseFrameThickness: Config.options.appearance.wrappedFrameThickness
+    property real frameThickness: baseFrameThickness * visualsRoot.retract
     property bool barVertical: Config.options.bar.vertical
     property bool barBottom: Config.options.bar.bottom
     property bool showBarBackground: false
@@ -55,16 +71,17 @@ Item {
     readonly property real staticLeftSidebarOffset: (leftSidebarMaskOffset > 0 && visualsRoot.screen && visualsRoot.screen.name === GlobalStates.activeLeftSidebarMonitor) ? leftSidebarMaskOffset : 0
     readonly property real staticRightSidebarOffset: (rightSidebarMaskOffset > 0 && visualsRoot.screen && visualsRoot.screen.name === GlobalStates.activeRightSidebarMonitor) ? rightSidebarMaskOffset : 0
 
-    readonly property real staticTotalLeftPush: staticLeftSidebarOffset + (!hasLeftFrame ? Math.max(0, Appearance.sizes.verticalBarWindowWidth - visualsRoot.vBarHiddenAmount) : 0)
-    readonly property real staticTotalRightPush: staticRightSidebarOffset + (!hasRightFrame ? Math.max(0, Appearance.sizes.verticalBarWindowWidth - visualsRoot.vBarHiddenAmount) : 0)
+    readonly property real staticTotalLeftPush: staticLeftSidebarOffset + (!hasLeftFrame ? Math.max(0, Appearance.sizes.verticalBarWindowWidth - visualsRoot.vBarHiddenAmount) * visualsRoot.retract : 0)
+    readonly property real staticTotalRightPush: staticRightSidebarOffset + (!hasRightFrame ? Math.max(0, Appearance.sizes.verticalBarWindowWidth - visualsRoot.vBarHiddenAmount) * visualsRoot.retract : 0)
 
-    // Consolidated pushes that account for both the sidebar AND the vertical bar (if present and visible)
-    readonly property real totalLeftPush: leftSidebarOffset + (!hasLeftFrame ? Math.max(0, Appearance.sizes.verticalBarWindowWidth - visualsRoot.vBarHiddenAmount) : 0)
-    readonly property real totalRightPush: rightSidebarOffset + (!hasRightFrame ? Math.max(0, Appearance.sizes.verticalBarWindowWidth - visualsRoot.vBarHiddenAmount) : 0)
+    // Consolidated pushes that account for both the sidebar AND the vertical bar (if present and visible).
+    // `retract` applies to the bar half only — the sidebar is not leaving with us.
+    readonly property real totalLeftPush: leftSidebarOffset + (!hasLeftFrame ? Math.max(0, Appearance.sizes.verticalBarWindowWidth - visualsRoot.vBarHiddenAmount) * visualsRoot.retract : 0)
+    readonly property real totalRightPush: rightSidebarOffset + (!hasRightFrame ? Math.max(0, Appearance.sizes.verticalBarWindowWidth - visualsRoot.vBarHiddenAmount) * visualsRoot.retract : 0)
 
     // Consolidated pushes for horizontal bars
-    readonly property real totalTopPush: !hasTopFrame ? Math.max(0, Appearance.sizes.barHeight - visualsRoot.hBarHiddenAmount) : 0
-    readonly property real totalBottomPush: !hasBottomFrame ? Math.max(0, Appearance.sizes.barHeight - visualsRoot.hBarHiddenAmount) : 0
+    readonly property real totalTopPush: !hasTopFrame ? Math.max(0, Appearance.sizes.barHeight - visualsRoot.hBarHiddenAmount) * visualsRoot.retract : 0
+    readonly property real totalBottomPush: !hasBottomFrame ? Math.max(0, Appearance.sizes.barHeight - visualsRoot.hBarHiddenAmount) * visualsRoot.retract : 0
 
     BarThemes {
         id: barThemes
@@ -220,7 +237,7 @@ Item {
             bottomMargin: hasBottomFrame ? frameThickness : Math.max(frameThickness, visualsRoot.totalBottomPush)
             leftMargin: hasLeftFrame ? frameThickness + visualsRoot.leftSidebarOffset : Math.max(frameThickness, visualsRoot.totalLeftPush)
         }
-        implicitSize: Appearance.rounding.screenRounding
+        implicitSize: Appearance.rounding.screenRounding * visualsRoot.retract
         color: visualsRoot.baseColor
         corner: RoundCorner.CornerEnum.BottomLeft
     }
@@ -234,7 +251,7 @@ Item {
             topMargin: hasTopFrame ? frameThickness : Math.max(frameThickness, visualsRoot.totalTopPush)
             leftMargin: hasLeftFrame ? frameThickness + visualsRoot.leftSidebarOffset : Math.max(frameThickness, visualsRoot.totalLeftPush)
         }
-        implicitSize: Appearance.rounding.screenRounding
+        implicitSize: Appearance.rounding.screenRounding * visualsRoot.retract
         color: visualsRoot.baseColor
         corner: RoundCorner.CornerEnum.TopLeft
     }
@@ -248,7 +265,7 @@ Item {
             topMargin: hasTopFrame ? frameThickness : Math.max(frameThickness, visualsRoot.totalTopPush)
             rightMargin: hasRightFrame ? frameThickness + visualsRoot.rightSidebarOffset : Math.max(frameThickness, visualsRoot.totalRightPush)
         }
-        implicitSize: Appearance.rounding.screenRounding
+        implicitSize: Appearance.rounding.screenRounding * visualsRoot.retract
         color: visualsRoot.baseColor
         corner: RoundCorner.CornerEnum.TopRight
     }
@@ -262,7 +279,7 @@ Item {
             bottomMargin: hasBottomFrame ? frameThickness : Math.max(frameThickness, visualsRoot.totalBottomPush)
             rightMargin: hasRightFrame ? frameThickness + visualsRoot.rightSidebarOffset : Math.max(frameThickness, visualsRoot.totalRightPush)
         }
-        implicitSize: Appearance.rounding.screenRounding
+        implicitSize: Appearance.rounding.screenRounding * visualsRoot.retract
         color: visualsRoot.baseColor
         corner: RoundCorner.CornerEnum.BottomRight
     }

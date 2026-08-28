@@ -20,17 +20,11 @@ Item {
     implicitHeight: vertical ? pill.implicitHeight : Appearance.sizes.baseBarHeight
 
     Behavior on implicitWidth {
-        NumberAnimation {
-            duration: 250
-            easing.type: Easing.OutQuint
-        }
+        animation: Appearance.animation.barResize.numberAnimation.createObject(this)
     }
 
     Behavior on implicitHeight {
-        NumberAnimation {
-            duration: 250
-            easing.type: Easing.OutQuint
-        }
+        animation: Appearance.animation.barResize.numberAnimation.createObject(this)
     }
 
     MouseArea {
@@ -70,17 +64,11 @@ Item {
         height: implicitHeight
 
         Behavior on implicitWidth {
-            NumberAnimation {
-                duration: 250
-                easing.type: Easing.OutQuint
-            }
+            animation: Appearance.animation.barResize.numberAnimation.createObject(this)
         }
 
         Behavior on implicitHeight {
-            NumberAnimation {
-                duration: 250
-                easing.type: Easing.OutQuint
-            }
+            animation: Appearance.animation.barResize.numberAnimation.createObject(this)
         }
 
         onPillColorChanged: requestPaint()

@@ -43,6 +43,25 @@ Item {
     required property int index
     property var originalIndex: index
     property bool vertical: false
+
+    // ── Growth anchor ─────────────────────────────────────────────────────────
+    // Which edge a widget stays pinned to while it changes size. Every bar
+    // section is anchored to one edge of the bar and lays its widgets out from
+    // there, so a widget that grows from its own centre expands *backwards*
+    // over the neighbour before it instead of pushing the ones after it. Pin it
+    // to the same edge its section is anchored to and the growth reads as a
+    // push. Only the genuinely centred group grows both ways.
+    //
+    //   "leading"  → top (vertical bar) / left (horizontal bar)
+    //   "trailing" → bottom (vertical bar) / right (horizontal bar)
+    //
+    // barSection 0/2 are the edge groups. Section 1 is the centre list, which
+    // the styles split into three sub-columns with different anchors, so those
+    // set this explicitly.
+    property string growthEdge: barSection === 0 ? "leading" : (barSection === 2 ? "trailing" : "center")
+    readonly property bool growsFromLeading: rootItem.growthEdge === "leading"
+    readonly property bool growsFromTrailing: rootItem.growthEdge === "trailing"
+    readonly property bool growsFromCenter: !rootItem.growsFromLeading && !rootItem.growsFromTrailing
     property bool widgetSelfVisible: (modelData && modelData.hasOwnProperty("visible")) ? modelData.visible : true
     property bool highlighted: false
 
@@ -91,8 +110,9 @@ Item {
         target: moveTranslation
         property: "x"
         to: 0
-        duration: 350
-        easing.type: Easing.OutExpo
+        duration: Appearance.animation.barResize.duration
+        easing.type: Appearance.animation.barResize.type
+        easing.bezierCurve: Appearance.animation.barResize.bezierCurve
     }
 
     NumberAnimation {
@@ -100,16 +120,36 @@ Item {
         target: moveTranslation
         property: "y"
         to: 0
-        duration: 350
-        easing.type: Easing.OutExpo
+        duration: Appearance.animation.barResize.duration
+        easing.type: Appearance.animation.barResize.type
+        easing.bezierCurve: Appearance.animation.barResize.bezierCurve
+    }
+
+    // Catch-up slide, for a widget that is *teleported* to a new spot: a reorder
+    // in Settings, or a neighbour that appeared. It must not fire while a
+    // neighbour is animating its size, because there the layout is already
+    // moving this widget smoothly — restarting the catch-up every frame turned
+    // that smooth push into a lag that compounded down the row. So it only
+    // triggers on the first frame of a move, and a move that keeps going is
+    // treated as the layout doing its job.
+    property bool _slidingWithLayout: false
+    Timer {
+        id: slideSettle
+        interval: 60
+        repeat: false
+        onTriggered: rootItem._slidingWithLayout = false
     }
 
     onXChanged: {
         if (rootItem.isReady) {
             let delta = rootItem.oldX - x;
             if (Math.abs(delta) > 1) {
-                moveXAnimation.from = moveTranslation.x + delta;
-                moveXAnimation.restart();
+                if (!rootItem._slidingWithLayout) {
+                    moveXAnimation.from = moveTranslation.x + delta;
+                    moveXAnimation.restart();
+                }
+                rootItem._slidingWithLayout = true;
+                slideSettle.restart();
             }
         }
         rootItem.oldX = x;
@@ -119,8 +159,12 @@ Item {
         if (rootItem.isReady) {
             let delta = rootItem.oldY - y;
             if (Math.abs(delta) > 1) {
-                moveYAnimation.from = moveTranslation.y + delta;
-                moveYAnimation.restart();
+                if (!rootItem._slidingWithLayout) {
+                    moveYAnimation.from = moveTranslation.y + delta;
+                    moveYAnimation.restart();
+                }
+                rootItem._slidingWithLayout = true;
+                slideSettle.restart();
             }
         }
         rootItem.oldY = y;
@@ -249,23 +293,44 @@ Item {
         return false;
     }
 
+    // This box only animates when the widget appears, disappears or changes notch
+    // state — a jump between 0 and its full size. Content growth is already
+    // animated by the widget itself on Appearance.animation.barResize, and a
+    // second animation here would chase a target that is still moving: the box
+    // ends up lagging behind its own content, which is what made a widget look
+    // like it grew out of its centre no matter where it was anchored.
+    property bool boxResizing: false
+    Timer {
+        id: boxResizeWindow
+        interval: Appearance.animation.barResize.duration + 120
+        repeat: false
+        onTriggered: rootItem.boxResizing = false
+    }
+    function beginBoxResize() {
+        rootItem.boxResizing = true;
+        boxResizeWindow.restart();
+    }
+    onHasActiveLayoutContentChanged: rootItem.beginBoxResize()
+    onIsWidgetVisibleInNotchChanged: rootItem.beginBoxResize()
+    onIsNotchModeChanged: rootItem.beginBoxResize()
+
     implicitWidth: rootItem.vertical ? (hasLayoutContent ? Appearance.sizes.baseVerticalBarWidth : 0) : targetWidth
     Behavior on implicitWidth {
-        enabled: !rootItem.vertical && (!rootItem.isNotchActive || rootItem.isNotchExpanded)
+        enabled: !rootItem.vertical && rootItem.boxResizing && (!rootItem.isNotchActive || rootItem.isNotchExpanded)
         NumberAnimation {
-            duration: rootItem.isNotchActive ? Config.options.bar.dynamicIsland.notchMode.expandAnimDuration : 250
-            easing.type: rootItem.isNotchActive ? Easing.BezierSpline : Easing.OutCubic
-            easing.bezierCurve: rootItem.isNotchActive ? Appearance.animationCurves.emphasizedDecel : [0, 0, 1, 1]
+            duration: rootItem.isNotchActive ? Config.options.bar.dynamicIsland.notchMode.expandAnimDuration : Appearance.animation.barResize.duration
+            easing.type: rootItem.isNotchActive ? Easing.BezierSpline : Appearance.animation.barResize.type
+            easing.bezierCurve: rootItem.isNotchActive ? Appearance.animationCurves.emphasizedDecel : Appearance.animation.barResize.bezierCurve
         }
     }
 
     implicitHeight: rootItem.vertical ? (hasLayoutContent ? wrapper.implicitHeight : 0) : wrapper.implicitHeight
     Behavior on implicitHeight {
-        enabled: rootItem.vertical && (!rootItem.isNotchActive || rootItem.isNotchExpanded)
+        enabled: rootItem.vertical && rootItem.boxResizing && (!rootItem.isNotchActive || rootItem.isNotchExpanded)
         NumberAnimation {
-            duration: rootItem.isNotchActive ? Config.options.bar.dynamicIsland.notchMode.expandAnimDuration : 250
-            easing.type: rootItem.isNotchActive ? Easing.BezierSpline : Easing.OutCubic
-            easing.bezierCurve: rootItem.isNotchActive ? Appearance.animationCurves.emphasizedDecel : [0, 0, 1, 1]
+            duration: rootItem.isNotchActive ? Config.options.bar.dynamicIsland.notchMode.expandAnimDuration : Appearance.animation.barResize.duration
+            easing.type: rootItem.isNotchActive ? Easing.BezierSpline : Appearance.animation.barResize.type
+            easing.bezierCurve: rootItem.isNotchActive ? Appearance.animationCurves.emphasizedDecel : Appearance.animation.barResize.bezierCurve
         }
     }
 
@@ -422,13 +487,16 @@ Item {
     BarGroup {
         id: wrapper
         vertical: rootItem.vertical
+        // The cross axis always fills; the growth axis is pinned to the edge
+        // this widget's section grows away from (see growthEdge above). Notch
+        // mode keeps neither: it positions the wrapper by `x` below.
         anchors {
-            top: rootItem.vertical ? undefined : parent.top
-            bottom: rootItem.vertical ? undefined : parent.bottom
-            left: rootItem.vertical ? parent.left : undefined
-            right: rootItem.vertical ? parent.right : undefined
-            verticalCenter: rootItem.vertical ? rootItem.verticalCenter : undefined
-            horizontalCenter: (rootItem.isNotchMode || rootItem.vertical) ? undefined : rootItem.horizontalCenter
+            top: rootItem.vertical ? (rootItem.growsFromLeading ? parent.top : undefined) : parent.top
+            bottom: rootItem.vertical ? (rootItem.growsFromTrailing ? parent.bottom : undefined) : parent.bottom
+            left: rootItem.vertical ? parent.left : ((!rootItem.isNotchMode && rootItem.growsFromLeading) ? parent.left : undefined)
+            right: rootItem.vertical ? parent.right : ((!rootItem.isNotchMode && rootItem.growsFromTrailing) ? parent.right : undefined)
+            verticalCenter: (rootItem.vertical && rootItem.growsFromCenter) ? rootItem.verticalCenter : undefined
+            horizontalCenter: (!rootItem.vertical && !rootItem.isNotchMode && rootItem.growsFromCenter) ? rootItem.horizontalCenter : undefined
         }
 
         x: rootItem.isNotchMode ? (rootItem.parent ? (rootItem.parent.width / 2 - rootItem.x - wrapper.implicitWidth / 2) : 0) : 0

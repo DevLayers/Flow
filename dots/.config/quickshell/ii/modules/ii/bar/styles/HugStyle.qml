@@ -165,6 +165,7 @@ Item {
             Repeater {
                 model: root.leftList
                 delegate: BarComponent {
+                    growthEdge: "trailing"
                     list: Config.options.bar.layouts.center; barSection: 1
                     originalIndex: Config.options.bar.layouts.center.findIndex(e => e.id === modelData.id)
                 }
@@ -187,6 +188,7 @@ Item {
             Repeater {
                 model: root.rightList
                 delegate: BarComponent {
+                    growthEdge: "leading"
                     list: Config.options.bar.layouts.center; barSection: 1
                     originalIndex: Config.options.bar.layouts.center.findIndex(e => e.id === modelData.id)
                 }
