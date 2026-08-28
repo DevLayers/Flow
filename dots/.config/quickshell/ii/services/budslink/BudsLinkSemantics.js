@@ -21,6 +21,13 @@ const NOISE_MODE_METADATA = {
 };
 
 /**
+ * Metadata (label/icon/legacy name) for a canonical noise mode key; null when unknown.
+ */
+function noiseModeMetadata(key) {
+    return NOISE_MODE_METADATA[key] || null;
+}
+
+/**
  * Normalizes MAC address string to standard format: AA:BB:CC:DD:EE:FF
  */
 function normalizeMac(mac) {

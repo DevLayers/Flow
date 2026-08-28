@@ -24,6 +24,11 @@ Singleton {
     property bool _manualHoldRequested: false
     property bool _diagnosticsActive: false
     property bool _stopping: false
+    // True once the bridge has reported a serviceStatus for the current run (available or not)
+    property bool _statusKnown: false
+    // One-shot service restart when BudsLink is up but never claimed a connected audio device
+    property bool _recovering: false
+    property bool _recoveryDone: false
 
     // Canonical bridge script path
     readonly property string bridgeScriptPath: Quickshell.shellPath("scripts/budslink/bridge.js")
@@ -49,6 +54,11 @@ Singleton {
     readonly property var devicesByMac: root._devicesByMac
     readonly property list<var> devices: Object.values(root._devicesByMac)
     readonly property int activeDeviceCount: root.devices.length
+
+    // Legacy RFCOMM helpers (scripts/buds/core.js) register the same BlueZ profile as BudsLink; BlueZ only
+    // allows one owner, and whichever loses the race silently ends up without the device. Keep the legacy
+    // path parked while BudsLink is being probed, usable, or being restarted.
+    readonly property bool legacyDeferred: root.shouldBridgeRun && (!root._statusKnown || root.serviceCompatible || root._recovering)
 
     // =========================================================================
     // Candidate-Aware Activation Heuristics (Plan Sections 32 & 33)
@@ -165,6 +175,34 @@ Singleton {
         }
     }
 
+    // BudsLink is up and held, an audio device is connected, but BudsLink never published it: most likely its
+    // profile registration lost the race at startup. Restart it once per connection so it re-registers.
+    readonly property bool unclaimedCandidate: root.serviceCompatible && root.serviceHeld && root.hasAudioCandidate && !root.hasConnectedClaimedBuds
+
+    onHasAudioCandidateChanged: {
+        if (!hasAudioCandidate)
+            root._recoveryDone = false;
+    }
+
+    Timer {
+        id: unclaimedRecoveryTimer
+        interval: 15000
+        running: root.unclaimedCandidate && !root._recoveryDone && !root._recovering
+        onTriggered: {
+            root._recoveryDone = true;
+            root._recovering = true;
+            recoveryTimeoutTimer.restart();
+            console.log("[BudsLinkService] BudsLink has not claimed a connected audio device; restarting the service");
+            root.sendCommand({ command: "restartService" });
+        }
+    }
+
+    Timer {
+        id: recoveryTimeoutTimer
+        interval: 20000
+        onTriggered: root._recovering = false
+    }
+
     Timer {
         id: idleGraceTimer
         interval: 8000 // 8-second grace period (5-10s range)
@@ -223,10 +261,14 @@ Singleton {
             root._serviceVersion = "";
             root._devicesByMac = ({});
 
+            recoveryTimeoutTimer.stop();
+            root._recovering = false;
+
             if (root.shouldBridgeRun) {
                 if (exitCode !== 0) {
                     root._lastErrorCode = "bridgeFailed";
                     root._lastError = `BudsLink bridge exited with code ${exitCode}`;
+                    root._statusKnown = true;
                 }
                 bridgeRestartTimer.restart();
             }
@@ -247,6 +289,8 @@ Singleton {
     function ensureBridgeRunning(): void {
         if (!bridgeProc.running && !root._stopping) {
             bridgeRestartTimer.stop();
+            // A bridge that keeps crashing must not park the legacy path forever
+            root._statusKnown = root._lastErrorCode === "bridgeFailed";
             bridgeProc.running = true;
         }
     }
@@ -307,6 +351,11 @@ Singleton {
                 root._serviceAvailable = Boolean(event.available);
                 root._serviceVersion = event.version || "";
                 root._serviceHeld = Boolean(event.held);
+                root._statusKnown = true;
+                if (root._recovering && root._serviceAvailable && root._serviceHeld) {
+                    recoveryTimeoutTimer.stop();
+                    root._recovering = false;
+                }
 
                 if (!root._serviceAvailable) {
                     root._devicesByMac = ({});
@@ -410,6 +459,10 @@ Singleton {
             case "error":
                 root._lastErrorCode = event.code || "unknown";
                 root._lastError = event.message || "An error occurred in BudsLink bridge";
+                if (event.code === "restartSkipped" || event.code === "restartFailed") {
+                    recoveryTimeoutTimer.stop();
+                    root._recovering = false;
+                }
                 break;
 
             default:

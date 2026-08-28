@@ -260,12 +260,15 @@ Singleton {
             let currentKey = "off";
             if (rawMode === "Transparency") currentKey = "transparency";
             else if (rawMode === "NoiseCanceling") currentKey = "anc";
+            else if (rawMode === "Adaptive") currentKey = "adaptive";
 
-            const modes = [
-                { key: "off", buttonIndex: 1, label: "Off", icon: "hearing", legacyName: "Normal" },
-                { key: "transparency", buttonIndex: 2, label: "Transparency", icon: "visibility", legacyName: "Transparency" },
-                { key: "anc", buttonIndex: 3, label: "ANC", icon: "noise_control_off", legacyName: "NoiseCanceling" }
-            ];
+            const supportedKeys = provider === "legacyBuds"
+                ? Array.from(BudsService.getSupportedModesForMac(mac))
+                : ["off", "transparency", "anc"];
+            const modes = supportedKeys.map((key, idx) => {
+                const meta = BudsLinkSemantics.noiseModeMetadata(key) || { key: key, label: key, icon: "tune", legacyName: key };
+                return { key: key, buttonIndex: idx + 1, label: meta.label, icon: meta.icon, legacyName: meta.legacyName };
+            });
 
             const currentMeta = modes.find(m => m.key === currentKey) || modes[0];
 
@@ -277,7 +280,7 @@ Singleton {
                 currentModeLabel: currentMeta.label,
                 currentModeIcon: currentMeta.icon,
                 currentState: currentMeta.buttonIndex,
-                hasAdaptive: false,
+                hasAdaptive: modes.some(m => m.key === "adaptive"),
                 hasTransparency: true,
                 hasAnc: true
             };
@@ -331,6 +334,7 @@ Singleton {
         if (targetKey === "transparency") legacyModeName = "Transparency";
         else if (targetKey === "anc") legacyModeName = "NoiseCanceling";
         else if (targetKey === "off") legacyModeName = "Normal";
+        else if (targetKey === "adaptive" && provider === "legacyBuds") legacyModeName = "Adaptive";
         else {
             console.warn(`[EarbudsControlService] Unsupported noise mode "${modeKey}" for provider ${provider}`);
             return;

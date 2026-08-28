@@ -656,6 +656,56 @@ async function handleActionCommand(cmd) {
     }
 }
 
+function sleepMs(ms) {
+    return new Promise(resolve => GLib.timeout_add(GLib.PRIORITY_DEFAULT, ms, () => {
+        resolve();
+        return GLib.SOURCE_REMOVE;
+    }));
+}
+
+/**
+ * Restart the BudsLink service process so it re-registers its BlueZ profiles.
+ * Used when BudsLink is up but never claimed a connected audio device (its
+ * RegisterProfile lost a race against another RFCOMM client at startup).
+ * Only works when nothing else keeps BudsLink alive (no open window, no other
+ * holder); in that case the restart is skipped and the hold is re-established.
+ */
+async function doRestartService() {
+    if (isServiceAvailable) {
+        await doReleaseService();
+        for (let i = 0; i < 48 && isServiceAvailable; i++) {
+            await sleepMs(250);
+        }
+        if (isServiceAvailable) {
+            printerr('[BudsLink bridge] Service restart skipped: BudsLink is still running (window open or other holder)');
+            emitError('restartSkipped', 'BudsLink did not exit; restart skipped');
+            if (desiredHeld) await doHoldService();
+            emitEvent({
+                type: 'serviceStatus',
+                available: true,
+                version: currentServiceVersion,
+                held: isServiceHeld
+            });
+            return;
+        }
+    }
+
+    // Re-activate via D-Bus autostart; the name watcher then runs the normal appear flow.
+    try {
+        await Gio.DBusProxy.new_for_bus(
+            Gio.BusType.SESSION,
+            Gio.DBusProxyFlags.DO_NOT_LOAD_PROPERTIES,
+            null,
+            BUS_NAME,
+            MANAGER_PATH,
+            MANAGER_INTERFACE,
+            null
+        );
+    } catch (err) {
+        emitError('restartFailed', `Failed to re-activate BudsLink: ${err.message}`);
+    }
+}
+
 async function processCommand(line) {
     if (!line || line.trim().length === 0) return;
     let cmdObj;
@@ -699,6 +749,10 @@ async function processCommand(line) {
                 held: false
             });
         }
+        break;
+
+    case 'restartService':
+        await doRestartService();
         break;
 
     case 'release':

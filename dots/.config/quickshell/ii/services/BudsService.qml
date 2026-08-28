@@ -11,8 +11,15 @@ Singleton {
 
     // Dictionary to store active modes by device MAC address
     property var deviceModes: ({})
+    // Supported noise-control mode keys by MAC (reported by core.js "get"); default is the classic trio
+    property var deviceSupportedModes: ({})
+    readonly property list<string> defaultSupportedModes: ["off", "transparency", "anc"]
 
     function isSuppressed(deviceOrMac) {
+        // BudsLink and core.js compete for the same BlueZ RFCOMM profile: stay out of the way while
+        // BudsLink is still being probed or is known to be usable, or its registration loses the race.
+        if (BudsLinkService.legacyDeferred)
+            return true;
         return BudsLinkService.hasDevice(deviceOrMac) || BudsLinkService.hasMac(deviceOrMac);
     }
 
@@ -56,6 +63,16 @@ Singleton {
 
     function getModeForMac(mac) {
         return deviceModes[mac] || "Normal";
+    }
+
+    function getSupportedModesForMac(mac) {
+        return deviceSupportedModes[mac] || defaultSupportedModes;
+    }
+
+    function updateSupportedModes(mac, modes) {
+        let copy = Object.assign({}, deviceSupportedModes);
+        copy[mac] = modes;
+        deviceSupportedModes = copy;
     }
 
     function updateDeviceMode(mac, mode) {
@@ -115,9 +132,16 @@ Singleton {
 
             stdout: StdioCollector {
                 onStreamFinished: {
-                    let trimmed = text.trim();
-                    if (trimmed.length > 0) {
-                        root.updateDeviceMode(proc.mac, trimmed);
+                    const lines = text.split("\n").map(l => l.trim()).filter(l => l.length > 0);
+                    const modesLine = lines.find(l => l.startsWith("MODES:"));
+                    const modeLine = lines.find(l => !l.startsWith("MODES:"));
+                    if (modesLine) {
+                        const modes = modesLine.slice(6).split(",").map(m => m.trim()).filter(m => m.length > 0);
+                        if (modes.length > 0)
+                            root.updateSupportedModes(proc.mac, modes);
+                    }
+                    if (modeLine) {
+                        root.updateDeviceMode(proc.mac, modeLine);
                     }
                     proc.destroy(); // Auto-free memory upon completion
                 }
@@ -129,5 +153,12 @@ Singleton {
         if (isConnected) {
             refreshAllConnected();
         }
+    }
+
+    // BudsLink turned out to be unavailable (or was disabled): take over the connected earbuds now
+    readonly property bool legacyDeferred: BudsLinkService.legacyDeferred
+    onLegacyDeferredChanged: {
+        if (!legacyDeferred)
+            refreshAllConnected();
     }
 }
