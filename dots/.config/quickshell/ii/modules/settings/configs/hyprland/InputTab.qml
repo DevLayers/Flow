@@ -172,7 +172,7 @@ ContentPage {
         icon: "touchpad_mouse"
 
         HyprSwitch {
-            optionKey: "input:touchpad:tap-to-click"
+            optionKey: "input:touchpad:tap_to_click"
             defaultValue: true
             buttonIcon: "touch_app"
             text: Translation.tr("Tap to click")
@@ -202,7 +202,7 @@ ContentPage {
             buttonIcon: "tune"
             text: Translation.tr("Advanced touchpad")
             description: Translation.tr("Gestures, clicks, orientation")
-            keys: ["input:touchpad:tap-and-drag", "input:touchpad:drag_lock", "input:touchpad:drag_3fg",
+            keys: ["input:touchpad:tap_and_drag", "input:touchpad:drag_lock", "input:touchpad:drag_3fg",
                 "input:touchpad:scroll_factor", "input:touchpad:clickfinger_behavior",
                 "input:touchpad:middle_button_emulation", "input:touchpad:tap_button_map",
                 "input:touchpad:flip_x", "input:touchpad:flip_y"]
@@ -210,7 +210,7 @@ ContentPage {
         }
 
         HyprOptionNote {
-            keys: ["input:touchpad:tap-to-click", "input:touchpad:natural_scroll",
+            keys: ["input:touchpad:tap_to_click", "input:touchpad:natural_scroll",
                 "input:touchpad:disable_while_typing"]
         }
     }

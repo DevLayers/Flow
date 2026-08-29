@@ -22,7 +22,7 @@ HyprSubPage {
         icon: "gesture"
 
         HyprSwitch {
-            optionKey: "input:touchpad:tap-and-drag"
+            optionKey: "input:touchpad:tap_and_drag"
             defaultValue: true
             buttonIcon: "drag_pan"
             text: Translation.tr("Tap then drag to move things")

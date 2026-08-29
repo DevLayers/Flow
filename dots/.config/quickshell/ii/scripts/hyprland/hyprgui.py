@@ -471,8 +471,15 @@ def flatten_config(table, prefix=""):
     return out
 
 
+def lua_parts(path):
+    """The Lua table path for a hyprctl-style key. hyprctl still answers to the old dashed
+    spellings (input:touchpad:tap-to-click); the Lua config API knows only the underscored
+    ones, and an unknown table key is rejected on load, so every part is written that way."""
+    return [part.replace("-", "_") for part in path.split(":")]
+
+
 def nest_config(path, value):
-    parts = path.split(":")
+    parts = lua_parts(path)
     node = value
     for part in reversed(parts):
         node = {part: node}
@@ -654,7 +661,7 @@ _MISSING = object()
 def resolve_config(table, key):
     """The value at a colon-separated key inside an hl.config table."""
     node = table
-    for part in key.split(":"):
+    for part in lua_parts(key):
         if not isinstance(node, dict) or part not in node:
             return _MISSING
         node = node[part]
