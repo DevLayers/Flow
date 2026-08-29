@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Effects
+import Qt5Compat.GraphicalEffects
 import qs.modules.common
 import qs.modules.common.functions
 import qs.modules.common.widgets
@@ -13,16 +14,28 @@ Item {
 
     clip: true
 
-    property real largeFontSize: Appearance.font.pixelSize.hugeass * 1.8
+    // Size of a *resting* line. The centred line is this scaled by
+    // focusedFontSizeMultiplier, so the gap between the two is the transition.
+    property real largeFontSize: Appearance.font.pixelSize.hugeass * 1.5
     property color activeColor: Appearance.colors.colPrimary
-    property int rowTransitionDuration: 2000
-    property int minimumRowTransitionDuration: 250
+    // Upper clamp only: the effective duration is derived per line from the
+    // song's own cadence, so fast tracks stop dragging through a fixed 2s scroll.
+    property int rowTransitionDuration: 1400
+    property int minimumRowTransitionDuration: 320
+    // Share of a line's on-screen time the scroll into it is allowed to consume.
+    property real rowTransitionPaceFactor: 0.7
     property real nearBlurRadius: 10
     property real farBlurRadius: 32
-    property real rowSpacingFactor: 0.94
-    property real focusedFontSizeMultiplier: 1.06
-    property real baseFontWeight: 660
+    property real rowSpacingFactor: 0.78
+    property real focusedFontSizeMultiplier: 1.42
+    property int maximumLyricLines: 3
+    property real baseFontWeight: 500
+    property real focusedFontWeight: 820
     property real focusedFontGrade: 100
+    property real minimumRowOpacity: 0.24
+    property real rowOpacityFalloff: 0.34
+    // Top/bottom fade: how much of the viewport each edge dissolves over.
+    property real edgeFadeFraction: 0.16
     property int activeRowTransitionDuration: rowTransitionDuration
     property real focusReveal: hasCurrentLine ? 1 : 0
     property real waveProgress: 1
@@ -38,8 +51,34 @@ Item {
     readonly property int visibleLineCount: halfVisibleLines * 2 + 1
     readonly property int currentIndex: LyricsService.currentIndex
     readonly property bool hasCurrentLine: currentIndex >= 0
-    readonly property real rowHeight: height / visibleLineCount * rowSpacingFactor
+    readonly property real layoutFontSize: largeFontSize * focusedFontSizeMultiplier
+    // A row only decides spacing. Text is laid out inside a taller centred box so
+    // that tightening the spacing can never clip a wrapped line.
+    readonly property real rowContentHeight: Math.ceil(layoutFontSize * 1.3) * maximumLyricLines
+    // Tight spacing, but never tighter than one focused line: a short panel must
+    // not stack the rows on top of each other.
+    readonly property real rowHeight: Math.max(layoutFontSize * 1.32,
+        height / visibleLineCount * rowSpacingFactor)
     readonly property real viewportEdgePadding: Math.max(0, height / 2 - rowHeight / 2)
+    readonly property real playbackRate: Math.max(0.25, MprisController.activePlayer?.rate ?? 1)
+    // Median gap between synced lines, i.e. this track's own lyric cadence.
+    readonly property real songPaceMs: {
+        const lines = LyricsService.syncedLines;
+        if (!lines || lines.length < 3)
+            return 0;
+
+        const gaps = [];
+        for (let i = 1; i < lines.length; i++) {
+            const gap = (lines[i].time - lines[i - 1].time) * 1000;
+            if (isFinite(gap) && gap > 120 && gap < 20000)
+                gaps.push(gap);
+        }
+        if (gaps.length === 0)
+            return 0;
+
+        gaps.sort((a, b) => a - b);
+        return gaps[Math.floor(gaps.length / 2)];
+    }
     readonly property real parallaxMaximum: Appearance.font.pixelSize.hugeass * 1.75
     readonly property real waveLift: Appearance.font.pixelSize.normal * 0.075
     readonly property bool waveRunning: waveAnimation.running
@@ -68,21 +107,28 @@ Item {
         return lyricsList.originY + Math.min(lastIndex, index) * root.rowHeight;
     }
 
+    // The scroll has to land well before the line it reveals is over, so the
+    // budget is a fraction of that line's own on-screen time. One long gap (an
+    // instrumental break) must not slow the song back down, so the track's median
+    // cadence caps it; playback rate compresses it further.
     function transitionDurationForIndex(index) {
-        const line = LyricsService.syncedLines[index];
-        const nextLine = LyricsService.syncedLines[index + 1];
-        if (!line || !nextLine)
-            return Math.max(root.minimumRowTransitionDuration,
-                Math.min(root.rowTransitionDuration, 1000));
+        const lines = LyricsService.syncedLines;
+        const line = lines[index];
+        const nextLine = lines[index + 1];
 
-        const lineDurationMs = (nextLine.time - line.time) * 1000;
-        if (!isFinite(lineDurationMs))
-            return Math.max(root.minimumRowTransitionDuration,
-                Math.min(root.rowTransitionDuration, 1000));
+        let paceMs = root.songPaceMs > 0 ? root.songPaceMs : root.rowTransitionDuration;
+        if (line && nextLine) {
+            const lineDurationMs = (nextLine.time - line.time) * 1000;
+            if (isFinite(lineDurationMs) && lineDurationMs > 0)
+                paceMs = root.songPaceMs > 0
+                    ? Math.min(lineDurationMs, root.songPaceMs * 1.35)
+                    : lineDurationMs;
+        }
 
         return Math.max(
             root.minimumRowTransitionDuration,
-            Math.min(root.rowTransitionDuration, lineDurationMs)
+            Math.min(root.rowTransitionDuration,
+                paceMs * root.rowTransitionPaceFactor / root.playbackRate)
         );
     }
 
@@ -104,6 +150,13 @@ Item {
             return 1;
         return /[\u0590-\u08ff\ufb1d-\ufdff\ufe70-\ufefc]/.test(firstStrong[0])
             ? -1 : 1;
+    }
+
+    // Smootherstep. The centre line snaps into focus rather than crossing it
+    // linearly, which is what reads as impact during the row change.
+    function focusEasing(linearFocus) {
+        const t = Math.max(0, Math.min(1, linearFocus));
+        return t * t * t * (t * (t * 6 - 15) + 10);
     }
 
     function cancelMagnificationWave() {
@@ -132,7 +185,7 @@ Item {
         );
         if (!rowMoveAnimation.running
                 || jumpDistance > root.halfVisibleLines
-                || transitionDuration < 450)
+                || transitionDuration < 240)
             return;
 
         root.waveTargetIndex = root.currentIndex;
@@ -257,6 +310,21 @@ Item {
 
         anchors.fill: parent
         interactive: false
+        // Distance blur alone never made the far rows leave; the edges now
+        // dissolve so the column reads as depth instead of as a cropped list.
+        layer.enabled: true
+        layer.effect: OpacityMask {
+            maskSource: Rectangle {
+                width: lyricsList.width
+                height: lyricsList.height
+                gradient: Gradient {
+                    GradientStop { position: 0.0; color: "transparent" }
+                    GradientStop { position: root.edgeFadeFraction; color: "black" }
+                    GradientStop { position: 1.0 - root.edgeFadeFraction; color: "black" }
+                    GradientStop { position: 1.0; color: "transparent" }
+                }
+            }
+        }
         boundsBehavior: Flickable.StopAtBounds
         reuseItems: true
         currentIndex: -1
@@ -290,8 +358,15 @@ Item {
             readonly property real focusedBlurRadius: root.blurForDistance(distanceInRows)
             readonly property real blurRadius: root.farBlurRadius
                 + (focusedBlurRadius - root.farBlurRadius) * root.focusReveal
-            readonly property real focusFactor: Math.max(0,
-                Math.min(1, 1 - distanceInRows)) * root.focusReveal
+            readonly property real focusFactor: root.focusEasing(1 - distanceInRows)
+                * root.focusReveal
+            // Quantised so the variable-axis font object (and the relayout it
+            // forces) churns a handful of times per row change, not every frame.
+            readonly property int weightAxis: Math.round((root.baseFontWeight
+                + (root.focusedFontWeight - root.baseFontWeight) * focusFactor) / 20) * 20
+            readonly property int gradeAxis: Math.round(root.focusedFontGrade * focusFactor / 5) * 5
+            readonly property real depthOpacity: Math.max(root.minimumRowOpacity,
+                1 - distanceInRows * root.rowOpacityFalloff)
             readonly property string lineText: LyricsService.syncedLines[lyricRow.index]
                 ? LyricsService.syncedLines[lyricRow.index].text
                 : ""
@@ -305,7 +380,10 @@ Item {
             Item {
                 id: blurLayer
 
-                anchors.fill: parent
+                width: parent.width
+                height: Math.max(parent.height, root.rowContentHeight)
+                anchors.verticalCenter: parent.verticalCenter
+                opacity: lyricRow.depthOpacity
                 transform: Translate {
                     y: lyricRow.parallaxTranslation
                 }
@@ -322,10 +400,17 @@ Item {
 
                     property real firstVisualLineSpan: 1
                     property real secondVisualLineSpan: 1
+                    property real thirdVisualLineSpan: 1
+                    // Where the laid-out block sits inside this taller box, in
+                    // normalised coordinates, so the wave shader can locate each line.
+                    readonly property real textTopNorm: height > 0
+                        ? (height - contentHeight) / 2 / height : 0
+                    readonly property real lineSpanNorm: (height > 0 && lineCount > 0)
+                        ? contentHeight / lineCount / height : 1
 
                     anchors.fill: parent
-                    anchors.leftMargin: root.farBlurRadius + Appearance.font.pixelSize.normal
-                    anchors.rightMargin: root.farBlurRadius + Appearance.font.pixelSize.normal
+                    anchors.leftMargin: root.nearBlurRadius + Appearance.font.pixelSize.normal
+                    anchors.rightMargin: root.nearBlurRadius + Appearance.font.pixelSize.normal
                     text: lyricRow.lineText
                     color: ColorUtils.mix(
                         root.focusedTextColor,
@@ -335,13 +420,13 @@ Item {
                     font.family: Appearance.font.family.main
                     // Layout always uses the focused metrics. A real transform supplies
                     // the visual size transition without relayout or integer pixel steps.
-                    font.pixelSize: root.largeFontSize * root.focusedFontSizeMultiplier
+                    font.pixelSize: root.layoutFontSize
                     font.variableAxes: ({
-                        "wght": root.baseFontWeight,
+                        "wght": lyricRow.weightAxis,
                         "wdth": 100,
-                        "opsz": root.largeFontSize * root.focusedFontSizeMultiplier,
+                        "opsz": root.layoutFontSize,
                         // GRAD changes stroke emphasis without changing glyph advances.
-                        "GRAD": root.focusedFontGrade * lyricRow.focusFactor,
+                        "GRAD": lyricRow.gradeAxis,
                         "ROND": Config.options.appearance.fonts.roundnessFull ? 100 : 0
                     })
                     scale: (1 + (root.focusedFontSizeMultiplier - 1)
@@ -350,12 +435,13 @@ Item {
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
                     wrapMode: Text.WordWrap
-                    maximumLineCount: 2
+                    maximumLineCount: root.maximumLyricLines
                     elide: Text.ElideRight
 
                     onTextChanged: {
                         firstVisualLineSpan = 1;
                         secondVisualLineSpan = 1;
+                        thirdVisualLineSpan = 1;
                     }
                     onLineLaidOut: line => {
                         const span = Math.max(0.05, Math.min(1,
@@ -364,6 +450,8 @@ Item {
                             firstVisualLineSpan = span;
                         else if (line.number === 1)
                             secondVisualLineSpan = span;
+                        else if (line.number === 2)
+                            thirdVisualLineSpan = span;
                     }
 
                     // The extra texture exists only during the one-shot focus wave. The
@@ -378,6 +466,9 @@ Item {
                         property real lineCountValue: lyricText.lineCount
                         property real firstLineSpan: lyricText.firstVisualLineSpan
                         property real secondLineSpan: lyricText.secondVisualLineSpan
+                        property real thirdLineSpan: lyricText.thirdVisualLineSpan
+                        property real textTopNorm: lyricText.textTopNorm
+                        property real lineSpanNorm: lyricText.lineSpanNorm
                         property real waveDirection: lyricRow.waveDirection
                         property real colorStrength: root.waveColorStrength
                         property color waveColor: root.activeColor
