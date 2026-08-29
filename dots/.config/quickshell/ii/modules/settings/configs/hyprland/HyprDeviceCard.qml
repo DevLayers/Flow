@@ -14,8 +14,9 @@ import qs.modules.common.widgets
  * rather than leaving a stub behind. Fields follow what the device is: a trackpoint has no
  * layout, a keyboard has no pointer acceleration.
  */
-ContentSubsection {
+ColumnLayout {
     id: card
+    Layout.fillWidth: true
 
     required property var device
     /// "pointer", "keyboard", "tablet" or "touch"
@@ -27,15 +28,42 @@ ContentSubsection {
     readonly property bool isPointer: card.kind === "pointer"
     readonly property bool isKeyboard: card.kind === "keyboard"
     readonly property bool isSurface: card.kind === "tablet" || card.kind === "touch"
-
-    title: card.deviceName
-    icon: {
+    readonly property string deviceIcon: {
         if (card.isKeyboard) return "keyboard";
         if (card.kind === "tablet") return "stylus";
         if (card.kind === "touch") return "touch_app";
         return HyprlandDevices.isTouchpad(card.device) ? "touchpad_mouse" : "mouse";
     }
-    Layout.fillWidth: true
+
+    /// Off on the device's own page, where the name is already the page title.
+    property bool showHeader: true
+
+    // The controls below already draw their own surfaces. Keep the device identity as a
+    // lightweight heading so it does not become a second card behind the first switch.
+    RowLayout {
+        visible: card.showHeader
+        Layout.fillWidth: true
+        Layout.topMargin: 4
+        Layout.bottomMargin: 4
+        spacing: 10
+
+        MaterialSymbol {
+            text: card.deviceIcon
+            iconSize: Appearance.font.pixelSize.large
+            color: Appearance.colors.colOnLayer1
+            Layout.alignment: Qt.AlignVCenter
+        }
+
+        StyledText {
+            Layout.fillWidth: true
+            text: card.deviceName
+            font.pixelSize: Appearance.font.pixelSize.normal
+            font.weight: Font.DemiBold
+            color: Appearance.colors.colOnLayer1
+            elide: Text.ElideRight
+        }
+    }
+
 
     function put(key: string, value: var) {
         const next = Object.assign({ "name": card.deviceName }, card.spec ?? {});

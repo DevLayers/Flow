@@ -26,6 +26,12 @@ ContentPage {
     property bool showEverything: false
 
     readonly property string query: tab.rawQuery.trim().toLowerCase()
+    readonly property bool searching: tab.query !== ""
+
+    /// Where the shortcuts live, what the shell's own buttons open, and the switch that adds the
+    /// unnamed binds to the list are all things you go looking for. They are behind the switch
+    /// in the corner; the list and the search box are not.
+    readonly property bool advanced: Config.options.hyprland.advancedSettings
 
     /// Whether one row is on screen right now. The list itself is grouped once from every row
     /// and rows hide instead of being torn down: rebuilding a hundred delegates per keystroke
@@ -107,13 +113,10 @@ ContentPage {
 
         StyledText {
             Layout.fillWidth: true
-            text: HyprlandBinds.ready
-                ? Translation.tr("%1 shortcuts have a name, out of %2 keys bound in total.")
-                    .arg(HyprlandBinds.listed.length).arg(HyprlandBinds.effective.length)
-                : Translation.tr("Reading the config files…")
+            visible: !HyprlandBinds.ready
+            text: Translation.tr("Reading the config files…")
             font.pixelSize: Appearance.font.pixelSize.small
             color: Appearance.colors.colSubtext
-            wrapMode: Text.WordWrap
         }
 
         MaterialTextField {
@@ -123,6 +126,7 @@ ContentPage {
         }
 
         HyprToggle {
+            visible: tab.advanced
             buttonIcon: "visibility"
             text: Translation.tr("Show the ones with no name")
             switchOn: tab.showEverything
@@ -135,6 +139,7 @@ ContentPage {
                 for (const missing of HyprlandBinds.missingEssentials)
                     out.push({
                         "icon": "warning",
+                        "always": true,
                         "text": Translation.tr("Nothing on this keyboard can %1. Add a shortcut for it before you need one.")
                             .arg(String(missing.label).toLowerCase())
                     });
@@ -152,7 +157,18 @@ ContentPage {
         }
     }
 
-    // ── The list ──────────────────────────────────────────────────────────────
+    /**
+     * The list, one group at a time.
+     *
+     * A stock config binds around a hundred and fifty keys. Every one of them used to be a
+     * button with its own ripple, highlight overlay, scroll animation and row of key chips,
+     * built the instant the tab was opened - which is why the tab took seconds to appear and
+     * then scrolled for a screen and a half per category.
+     *
+     * A group is now a heading with a count, and its rows are built when it is opened. Typing
+     * in the search box opens the groups that have a hit and closes them again when the box is
+     * cleared, so searching still reaches everything without any of it being built up front.
+     */
     Repeater {
         model: tab.groups
 
@@ -161,8 +177,14 @@ ContentPage {
 
             required property var modelData
 
-            visible: group.modelData.rows.some(row => tab.shows(row))
-            title: group.modelData.name
+            readonly property int shownCount: group.modelData.rows.filter(row => tab.shows(row)).length
+
+            visible: group.shownCount > 0
+            collapsible: true
+            expanded: false
+            // The count is in the heading because a collapsed section shows nothing else, and
+            // "how many shortcuts are in here" is the only thing worth knowing before opening it.
+            title: Translation.tr("%1 · %2").arg(group.modelData.name).arg(group.shownCount)
             icon: {
                 const known = { "Shell": "widgets", "Window": "web_asset", "Workspace": "space_dashboard",
                     "Workspaces": "space_dashboard", "Utilities": "build", "Apps": "apps",
@@ -171,15 +193,34 @@ ContentPage {
                 return known[group.modelData.name] ?? "keyboard";
             }
 
-            Repeater {
-                model: group.modelData.rows
+            // A search is a request to see the answer, not to be told which drawer it is in.
+            Connections {
+                target: tab
+                function onSearchingChanged() {
+                    group.expanded = tab.searching && group.shownCount > 0;
+                }
+            }
 
-                delegate: HyprShortcutRow {
-                    required property var modelData
+            Loader {
+                Layout.fillWidth: true
+                active: group.expanded
+                visible: active
+                asynchronous: true
 
-                    visible: tab.shows(modelData)
-                    row: modelData
-                    onOpenSubPage: tab.edit(modelData)
+                sourceComponent: ColumnLayout {
+                    spacing: 4
+
+                    Repeater {
+                        model: group.modelData.rows
+
+                        delegate: HyprShortcutRow {
+                            required property var modelData
+
+                            visible: tab.shows(modelData)
+                            row: modelData
+                            onOpenSubPage: tab.edit(modelData)
+                        }
+                    }
                 }
             }
         }
@@ -212,6 +253,7 @@ ContentPage {
 
         StyledText {
             Layout.fillWidth: true
+            visible: tab.advanced
             text: Translation.tr("Each of these is a list of programs tried in order, so the config works on a machine that has none of your usual ones. The first one installed is the one that opens.")
             font.pixelSize: Appearance.font.pixelSize.small
             color: Appearance.colors.colSubtext
@@ -259,11 +301,13 @@ ContentPage {
 
     // ── What the shell itself opens ───────────────────────────────────────────
     ContentSection {
+        visible: tab.advanced
         title: Translation.tr("Apps the shell opens")
         icon: "widgets"
 
         StyledText {
             Layout.fillWidth: true
+            visible: tab.advanced
             text: Translation.tr("These are not shortcuts. They are what opens when you press a button in the shell — the settings link on the Wi-Fi popup, the mixer on the volume slider — and they are kept here because it is the same question about the other half of the desktop.")
             font.pixelSize: Appearance.font.pixelSize.small
             color: Appearance.colors.colSubtext
@@ -271,7 +315,7 @@ ContentPage {
         }
 
         Repeater {
-            model: tab.shellApps
+            model: tab.advanced ? tab.shellApps : []
 
             delegate: ConfigTextField {
                 id: shellAppField
@@ -297,11 +341,12 @@ ContentPage {
 
     // ── Where it all lives ────────────────────────────────────────────────────
     ContentSection {
+        visible: tab.advanced
         title: Translation.tr("Where shortcuts live")
         icon: "folder"
 
         Repeater {
-            model: HyprlandBinds.parsedFiles
+            model: tab.advanced ? HyprlandBinds.parsedFiles : []
 
             delegate: HyprNavRow {
                 required property var modelData

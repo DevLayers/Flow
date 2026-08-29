@@ -19,8 +19,9 @@ import qs.modules.settings.configs.hyprland
  * opens as a sub-page instead, so drilling down stays a push and switching stays a tab.
  *
  * Everything written from here lands in a fenced block at the end of the matching file in
- * ~/.config/hypr/custom/. The strip at the top is the only place that says so, so it stays
- * visible on every tab.
+ * ~/.config/hypr/custom/. Where that is, how much of it there is and how old the backup is used
+ * to be a strip across the top of every tab; it is a page of its own now, reached from the menu
+ * in the corner, because none of it is something you act on while changing a setting.
  *
  * An edit is staged, not written. The two buttons in the corner are the only things that touch
  * the files, and they only appear once there is something to touch them for.
@@ -41,29 +42,64 @@ Item {
             page.contentY = hubRoot.contentY;
     }
 
+    /**
+     * Whether this page shows everything the compositor can be told, or the part of it a
+     * desktop actually needs.
+     *
+     * Hyprland has 353 options and this hub grew a control for most of them. Nearly none of
+     * that is something a person setting up a laptop will ever touch, and putting it all on
+     * screen at once made the settings that do matter - the touchpad, the shortcut you want to
+     * change - impossible to find among them. So the rare half is behind this, and the switch
+     * lives in the menu in the corner.
+     */
+    readonly property bool advanced: Config.options.hyprland.advancedSettings
+
     /// `name` is the untranslated key, translated in the tab delegate — the same split the page
     /// registry uses. Putting Translation.tr in here instead would rebuild the model on every
     /// language switch, and a rebuilt tab model drops SwipeView back to a different tab.
-    readonly property var tabs: [
-        { "id": "input", "name": "Input", "icon": "keyboard", "file": "hyprland/InputTab.qml" },
-        { "id": "layout", "name": "Layout", "icon": "dashboard", "file": "hyprland/LayoutTab.qml" },
+    ///
+    /// The raw option list is a tab for people who already know what they are looking for, so
+    /// it only exists in advanced mode - and the page opens on Input, which is the one thing
+    /// everybody changes.
+    readonly property var allTabs: [
+        { "id": "input", "name": "Input", "icon": "keyboard", "file": "hyprland/InputTab.qml",
+          "advanced": false },
+        { "id": "layout", "name": "Layout", "icon": "dashboard", "file": "hyprland/LayoutTab.qml",
+          "advanced": false },
         { "id": "shortcuts", "name": "Shortcuts", "icon": "keyboard_command_key",
-          "file": "hyprland/ShortcutsTab.qml" },
-        { "id": "rules", "name": "Rules", "icon": "filter_alt", "file": "hyprland/RulesTab.qml" },
+          "file": "hyprland/ShortcutsTab.qml", "advanced": false },
+        { "id": "rules", "name": "Rules", "icon": "filter_alt", "file": "hyprland/RulesTab.qml",
+          "advanced": false },
         { "id": "environment", "name": "Environment", "icon": "terminal",
-          "file": "hyprland/EnvironmentTab.qml" },
+          "file": "hyprland/EnvironmentTab.qml", "advanced": false },
         { "id": "allOptions", "name": "All options", "icon": "tune",
-          "file": "hyprland/AllOptionsTab.qml" }
+          "file": "hyprland/AllOptionsTab.qml", "advanced": true }
     ]
+
+    readonly property var tabs: hubRoot.allTabs.filter(tab => !tab.advanced || hubRoot.advanced)
+
+    // Turning advanced mode off takes a tab away, so whatever index was current may now be
+    // past the end - or be a different tab entirely. `swipeView` may not exist yet the first
+    // time this list is evaluated, which is why the guard is here and not only in the body.
+    onTabsChanged: {
+        if (!swipeView)
+            return;
+        if (swipeView.currentIndex >= hubRoot.tabs.length)
+            swipeView.currentIndex = 0;
+        hubRoot.markVisited(swipeView.currentIndex);
+    }
 
     /// A tab keeps its component tree while it stays among the last few used, so switching
     /// back is instant and the slide animates between two real pages instead of one and a
     /// hole. Six tabs of controls all alive at once is most of this page's memory, so the
     /// count is capped: the least recently used one is unloaded, and rebuilds behind its
     /// placeholder when it is next visited.
-    property var visited: [true, false, false, false, false, false]
-    /// Live tabs, most recently used first.
-    property var recent: [0]
+    ///
+    /// Keyed by tab id rather than by position: the list of tabs is not fixed any more, and an
+    /// index into it means a different tab depending on whether advanced mode is on.
+    property var visited: ({ "input": true })
+    /// Live tab ids, most recently used first.
+    property var recent: ["input"]
     readonly property int maxLiveTabs: 3
     /// True while the tab strip is animating between two pages. Only then are the other built
     /// tabs kept visible: the renderer walks whatever is visible on every frame, and five idle
@@ -95,13 +131,14 @@ Item {
     function markVisited(index: int) {
         if (index < 0 || index >= hubRoot.tabs.length)
             return;
-        const order = [index].concat(Array.from(hubRoot.recent).filter(other => other !== index));
-        const next = Array.from(hubRoot.visited);
-        next[index] = true;
+        const id = hubRoot.tabs[index].id;
+        const order = [id].concat(Array.from(hubRoot.recent).filter(other => other !== id));
+        const next = Object.assign({}, hubRoot.visited);
+        next[id] = true;
         while (order.length > hubRoot.maxLiveTabs)
             next[order.pop()] = false;
         hubRoot.recent = order;
-        if (String(next) !== String(hubRoot.visited))
+        if (JSON.stringify(next) !== JSON.stringify(hubRoot.visited))
             hubRoot.visited = next;
     }
 
@@ -174,7 +211,7 @@ Item {
         id: retireTimer
         interval: 10000
         onTriggered: {
-            hubRoot.visited = hubRoot.tabs.map(() => false);
+            hubRoot.visited = ({});
             hubRoot.recent = [];
         }
     }
@@ -212,10 +249,40 @@ Item {
         spacing: 10
         opacity: subPageOverlay.slideProgress
 
-        HyprlandHealthStrip {
+        /// The one thing the old strip said that cannot wait to be asked for: a write that did
+        /// not take. Nothing is shown while everything is fine.
+        Rectangle {
             Layout.fillWidth: true
-            onReviewRequested: hubRoot.openReview()
-            onRemoveAllRequested: removeDialog.show = true
+            visible: HyprlandGui.lastError !== ""
+            implicitHeight: errorRow.implicitHeight + 20
+            radius: Appearance.rounding.normal
+            color: Appearance.colors.colErrorContainer
+
+            RowLayout {
+                id: errorRow
+                anchors {
+                    left: parent.left
+                    right: parent.right
+                    verticalCenter: parent.verticalCenter
+                    leftMargin: 16
+                    rightMargin: 16
+                }
+                spacing: 10
+
+                MaterialSymbol {
+                    text: "sync_problem"
+                    iconSize: 20
+                    color: Appearance.colors.colOnErrorContainer
+                }
+
+                StyledText {
+                    Layout.fillWidth: true
+                    text: HyprlandGui.lastError.split("\n")[0]
+                    elide: Text.ElideRight
+                    font.pixelSize: Appearance.font.pixelSize.small
+                    color: Appearance.colors.colOnErrorContainer
+                }
+            }
         }
 
         Item {
@@ -310,7 +377,7 @@ Item {
                         id: tabLoader
                         anchors.fill: parent
 
-                        active: hubRoot.visited[tabHost.index] ?? false
+                        active: hubRoot.visited[tabHost.modelData.id] ?? false
                         asynchronous: hubRoot.settled || !tabHost.SwipeView.isCurrentItem
                         source: Qt.resolvedUrl(tabHost.modelData.file)
 
@@ -326,129 +393,6 @@ Item {
                         description: Translation.tr("Just a moment…")
                     }
                 }
-            }
-        }
-    }
-
-    // ── Review dialog ─────────────────────────────────────────────────────────
-    /// [{ file, text, pending }] - the pending ones are a diff of what has not been written
-    /// yet, the rest are the block exactly as it sits on disk.
-    property var reviewBlocks: []
-    property int reviewPending: 0
-    /// Reopening the dialog while the previous round of diffs is still in flight would let those
-    /// answers land in the new list. They are stamped instead, and stale ones are dropped.
-    property int reviewGeneration: 0
-
-    function openReview() {
-        hubRoot.reviewGeneration += 1;
-        const generation = hubRoot.reviewGeneration;
-        const targets = Object.keys(HyprlandGui.targetFiles);
-        hubRoot.reviewBlocks = [];
-        hubRoot.reviewPending = targets.length;
-        reviewDialog.show = true;
-        for (const target of targets)
-            HyprlandGui.previewDiff(target, (name, diff) => hubRoot.collectReview(generation, name, diff));
-    }
-
-    function collectReview(generation: int, target: string, diff: string) {
-        if (generation !== hubRoot.reviewGeneration)
-            return;
-        const blocks = Array.from(hubRoot.reviewBlocks);
-        const file = String(HyprlandGui.targetFiles[target] ?? target).split("/").pop();
-        const current = HyprlandGui.regionText(target);
-        if (diff !== "")
-            blocks.push({ "file": file, "text": diff, "pending": true });
-        else if (current !== "")
-            blocks.push({ "file": file, "text": current, "pending": false });
-        hubRoot.reviewBlocks = blocks;
-        hubRoot.reviewPending -= 1;
-    }
-
-    WindowDialog {
-        id: reviewDialog
-        parent: hubRoot.parent ?? hubRoot
-        anchors.fill: parent
-        show: false
-        backgroundWidth: 720
-        onDismiss: show = false
-        z: 100000
-
-        WindowDialogTitle {
-            text: Translation.tr("Managed Lua")
-        }
-
-        WindowDialogParagraph {
-            Layout.fillWidth: true
-            text: Translation.tr("Everything below sits between this page's own markers at the end of the file. Anything you wrote above them is never touched.")
-        }
-
-        StyledFlickable {
-            id: reviewFlickable
-            Layout.fillWidth: true
-            Layout.preferredHeight: Math.min(blockColumn.implicitHeight, 360)
-            contentHeight: blockColumn.implicitHeight
-            flickableDirection: Flickable.VerticalFlick
-            clip: true
-
-            ColumnLayout {
-                id: blockColumn
-                width: reviewFlickable.width
-                spacing: 10
-
-                StyledText {
-                    Layout.fillWidth: true
-                    visible: hubRoot.reviewBlocks.length === 0
-                    text: hubRoot.reviewPending > 0 ? Translation.tr("Reading…")
-                        : Translation.tr("This page has not written anything yet.")
-                    color: Appearance.colors.colSubtext
-                    font.pixelSize: Appearance.font.pixelSize.small
-                }
-
-                Repeater {
-                    model: hubRoot.reviewBlocks
-
-                    delegate: ColumnLayout {
-                        required property var modelData
-
-                        Layout.fillWidth: true
-                        spacing: 4
-
-                        StyledText {
-                            Layout.fillWidth: true
-                            text: modelData.pending
-                                ? Translation.tr("%1 — not written yet").arg(modelData.file) : modelData.file
-                            font.pixelSize: Appearance.font.pixelSize.smaller
-                            font.weight: Font.DemiBold
-                            color: modelData.pending ? Appearance.colors.colPrimary
-                                : Appearance.colors.colSubtext
-                        }
-
-                        Rectangle {
-                            Layout.fillWidth: true
-                            implicitHeight: blockText.implicitHeight + 16
-                            radius: Appearance.rounding.small
-                            color: Appearance.colors.colSurfaceContainerHigh
-
-                            StyledText {
-                                id: blockText
-                                anchors.fill: parent
-                                anchors.margins: 8
-                                text: modelData.text
-                                font.family: Appearance.font.family.monospace || "monospace"
-                                font.pixelSize: Appearance.font.pixelSize.smallest
-                                color: Appearance.colors.colOnSurface
-                                wrapMode: Text.WrapAnywhere
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        WindowDialogButtonRow {
-            DialogButton {
-                buttonText: Translation.tr("Close")
-                onClicked: reviewDialog.show = false
             }
         }
     }
@@ -563,43 +507,77 @@ Item {
         }
     }
 
-    // ── Save / Rollback ───────────────────────────────────────────────────────
+    // ── The corner ────────────────────────────────────────────────────────────
     /// Above the sub-page overlay rather than inside the page, because a rule or a keybind is
     /// edited on a sub-page and there is no sense in having to come back out to save it.
-    FadeLoader {
+    ///
+    /// Three things live here: the menu, and - only once there is something to write - rollback
+    /// and save. Everything the old strip said is either in the menu's review page or on the
+    /// save button, which counts what it is about to write.
+    Item {
+        id: fabHost
         parent: hubRoot.parent ?? hubRoot
-        anchors.bottom: parent ? parent.bottom : undefined
-        anchors.right: parent ? parent.right : undefined
-        anchors.margins: 25
+        anchors.fill: parent
         z: 9999
-        shown: HyprlandGui.dirty
 
-        sourceComponent: RowLayout {
+        RowLayout {
+            anchors.right: parent.right
+            anchors.bottom: parent.bottom
+            anchors.margins: 25
             spacing: 12
 
-            FloatingActionButton {
-                iconText: "history"
-                buttonText: Translation.tr("Rollback")
-                expanded: hovered
-                colBackground: Appearance.colors.colSurfaceContainerHigh
-                colBackgroundHover: Appearance.colors.colSurfaceContainerHighest
-                colOnBackground: Appearance.colors.colOnSurface
-                onClicked: HyprlandGui.rollback()
-
-                StyledToolTip {
-                    text: Translation.tr("Forget the changes above and go back to what the files say")
+            HyprFabMenu {
+                Layout.alignment: Qt.AlignBottom
+                icon: "code"
+                tooltipText: Translation.tr("Review, advanced settings and cleanup")
+                scrimParent: fabHost
+                actions: [
+                    { "icon": "code", "label": Translation.tr("Review") },
+                    { "icon": "tune", "label": Translation.tr("Advanced settings"),
+                      "checkable": true, "checked": hubRoot.advanced },
+                    { "icon": "delete_sweep", "label": Translation.tr("Remove all"), "danger": true }
+                ]
+                onTriggered: index => {
+                    if (index === 0) hubRoot.activeSubPage = Qt.resolvedUrl("hyprland/HyprReviewPage.qml");
+                    else if (index === 1) Config.options.hyprland.advancedSettings = !hubRoot.advanced;
+                    else removeDialog.show = true;
                 }
             }
 
-            FloatingActionButton {
-                iconText: "save"
-                buttonText: Translation.tr("Save to Hyprland")
-                expanded: hovered
-                enabled: !HyprlandGui.busy
-                onClicked: HyprlandGui.save()
+            FadeLoader {
+                Layout.alignment: Qt.AlignBottom
+                shown: HyprlandGui.dirty
 
-                StyledToolTip {
-                    text: Translation.tr("Write the changes to ~/.config/hypr/custom/ and reload Hyprland")
+                sourceComponent: RowLayout {
+                    spacing: 12
+
+                    FloatingActionButton {
+                        iconText: "history"
+                        buttonText: Translation.tr("Rollback")
+                        expanded: hovered
+                        colBackground: Appearance.colors.colSurfaceContainerHigh
+                        colBackgroundHover: Appearance.colors.colSurfaceContainerHighest
+                        colOnBackground: Appearance.colors.colOnSurface
+                        onClicked: HyprlandGui.rollback()
+
+                        StyledToolTip {
+                            text: Translation.tr("Forget the changes above and go back to what the files say")
+                        }
+                    }
+
+                    FloatingActionButton {
+                        iconText: "save"
+                        // The count is the whole of what the strip's "N change(s) staged" line
+                        // used to say, in the one place it is already being looked at.
+                        buttonText: Translation.tr("Save %1 change(s)").arg(Math.max(1, HyprlandGui.pending.count))
+                        expanded: hovered
+                        enabled: !HyprlandGui.busy
+                        onClicked: HyprlandGui.save()
+
+                        StyledToolTip {
+                            text: Translation.tr("Write the changes to ~/.config/hypr/custom/ and reload Hyprland")
+                        }
+                    }
                 }
             }
         }

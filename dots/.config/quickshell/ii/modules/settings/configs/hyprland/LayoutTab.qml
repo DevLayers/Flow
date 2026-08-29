@@ -26,6 +26,10 @@ ContentPage {
 
     forceWidth: false
 
+    /// The "More …" doors at the end of each section are what advanced mode is for: each one is
+    /// a page of settings that exist because Hyprland has them, not because anybody asked.
+    readonly property bool advanced: Config.options.hyprland.advancedSettings
+
     readonly property string engine:
         String(HyprlandGui.displayValue("general:layout", "dwindle") ?? "dwindle")
     readonly property bool knownEngine:
@@ -138,6 +142,7 @@ ContentPage {
             }
 
             HyprNavRow {
+                visible: tab.advanced
                 buttonIcon: "tune"
                 text: Translation.tr("More dwindle settings")
                 description: Translation.tr("Sideways splits, what a closing window leaves behind, dragging, scratchpad size")
@@ -202,6 +207,7 @@ ContentPage {
             }
 
             HyprNavRow {
+                visible: tab.advanced
                 buttonIcon: "tune"
                 text: Translation.tr("More master settings")
                 description: Translation.tr("Stack order, several masters, a centred master, dragging, scratchpad size")
@@ -276,6 +282,7 @@ ContentPage {
             }
 
             HyprNavRow {
+                visible: tab.advanced
                 buttonIcon: "tune"
                 text: Translation.tr("More scrolling settings")
                 description: Translation.tr("A lone column, following focus, preset widths")
@@ -314,6 +321,7 @@ ContentPage {
         }
 
         HyprNavRow {
+            visible: tab.advanced
             buttonIcon: "tune"
             text: Translation.tr("More focus settings")
             description: Translation.tr("Which neighbour is picked, fullscreen, groups")
@@ -367,6 +375,7 @@ ContentPage {
         }
 
         HyprNavRow {
+            visible: tab.advanced
             buttonIcon: "tune"
             text: Translation.tr("More workspace settings")
             description: Translation.tr("Scratchpad, pinned windows, scroll-wheel and drag thresholds")
@@ -407,6 +416,7 @@ ContentPage {
         }
 
         HyprNavRow {
+            visible: tab.advanced
             buttonIcon: "tune"
             text: Translation.tr("Advanced workspace swipe")
             description: Translation.tr("When a swipe commits, direction lock, touchscreen, wrap-around")

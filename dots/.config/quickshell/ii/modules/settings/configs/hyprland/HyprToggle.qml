@@ -39,9 +39,22 @@ ConfigSwitch {
     /// A small pill before the switch. The hub puts who set the option in it.
     property string badgeText: ""
 
-    readonly property string subtitle: root.checked
-        ? (root.textOn !== "" ? root.textOn : root.description)
-        : (root.textOff !== "" ? root.textOff : root.description)
+    /**
+     * Keeps the line under the title in basic mode.
+     *
+     * A settings page where every row carries a sentence is a page nobody reads: eight rows of
+     * title-plus-explanation is a wall, and the eight titles alone are a list you can scan. So
+     * the sentence is part of advanced mode, and a row sets this only when its title genuinely
+     * cannot be understood on its own.
+     */
+    property bool alwaysExplain: false
+
+    readonly property bool explains: root.alwaysExplain || Config.options.hyprland.advancedSettings
+
+    readonly property string subtitle: !root.explains ? ""
+        : (root.checked
+            ? (root.textOn !== "" ? root.textOn : root.description)
+            : (root.textOff !== "" ? root.textOff : root.description))
 
     checked: root.switchOn
     implicitHeight: toggleLayout.implicitHeight + 20

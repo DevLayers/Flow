@@ -81,15 +81,58 @@ Item {
 
         Quickshell.execDetached(["hyprctl", "keyword", "input:kb_layout", layoutValue]);
         Quickshell.execDetached(["hyprctl", "keyword", "input:kb_variant", variantValue]);
-        HyprlandConfig.setMany({
-            "input:kb_layout": layoutValue,
-            "input:kb_variant": variantValue
-        }, {});
+        root.persistLayout(layoutValue, variantValue);
 
         root.statusIsError = false;
         root.statusText = Translation.tr("Keyboard layout saved to Hyprland.");
         feedbackTimer.restart();
         return true;
+    }
+
+    /**
+     * The permanent half of the change, into the managed block of custom/general.lua - the same
+     * place Settings -> Hyprland writes.
+     *
+     * It used to go into hyprland/shellOverrides/main.lua, which exists for the transient
+     * overrides Modes, Game Mode and the screen shader lay on top. That file loads after every
+     * custom file, so a permanent choice left in it shadowed the settings page from then on, and
+     * nothing ever took it out again.
+     *
+     * The store refuses edits until it has read the files, which on a cold first login it may
+     * still be doing, so this waits rather than dropping the choice on the floor.
+     */
+    function persistLayout(layoutValue: string, variantValue: string) {
+        if (!HyprlandGui.ready) {
+            persistRetry.layoutValue = layoutValue;
+            persistRetry.variantValue = variantValue;
+            persistRetry.restart();
+            return;
+        }
+        HyprlandGui.setKey("input:kb_layout", layoutValue);
+        HyprlandGui.setKey("input:kb_variant", variantValue);
+        HyprlandGui.save();
+    }
+
+    Timer {
+        id: persistRetry
+        property string layoutValue: ""
+        property string variantValue: ""
+        property int tries: 0
+
+        interval: 250
+        repeat: true
+        onRunningChanged: {
+            if (persistRetry.running) persistRetry.tries = 0;
+        }
+        onTriggered: {
+            if (HyprlandGui.ready) {
+                persistRetry.stop();
+                root.persistLayout(persistRetry.layoutValue, persistRetry.variantValue);
+                return;
+            }
+            persistRetry.tries += 1;
+            if (persistRetry.tries > 20) persistRetry.stop();
+        }
     }
 
     function prepareNext(): bool {

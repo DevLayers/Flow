@@ -24,6 +24,11 @@ ContentPage {
 
     forceWidth: false
 
+    /// A window rule that is not "this app should behave differently" is something a person
+    /// goes looking for, not something they should have to scroll past. Apps is the tab in
+    /// basic mode; the raw window, layer and workspace lists are behind advanced.
+    readonly property bool advanced: Config.options.hyprland.advancedSettings
+
     readonly property url editorPage: Qt.resolvedUrl("HyprRuleEditorPage.qml")
     readonly property url pickerPage: Qt.resolvedUrl("HyprAppPickerPage.qml")
 
@@ -43,6 +48,12 @@ ContentPage {
     function edit(kind: string, id: string) {
         HyprlandRules.beginEdit(kind, id);
         tab.openSubPage(tab.editorPage);
+    }
+
+    /// The app's own page, which holds the card the list used to inline.
+    function editApp(id: string) {
+        HyprlandRules.beginEdit("windowrule", id);
+        tab.openSubPage(Qt.resolvedUrl("HyprAppRulePage.qml"));
     }
 
     function addRule(kind: string, prefix: string, spec: var) {
@@ -75,21 +86,38 @@ ContentPage {
 
         StyledText {
             Layout.fillWidth: true
+            visible: tab.advanced
             text: Translation.tr("Rules for one application's windows. Each card is a single line in your config, and the list under it shows which of your open windows it currently catches.")
             font.pixelSize: Appearance.font.pixelSize.small
             color: Appearance.colors.colSubtext
             wrapMode: Text.WordWrap
         }
 
+        /**
+         * One row per app, not one card per app.
+         *
+         * Every rule used to be its whole editor, inline: sixteen controls each, stacked, so
+         * three apps filled the tab and the list of which apps have rules at all - the reason
+         * anybody opens this tab - was not visible anywhere. Each row now says what it catches
+         * and what it does, and opens the controls on its own page.
+         */
         Repeater {
             model: HyprlandRules.appIds
 
-            delegate: HyprAppRuleCard {
+            delegate: HyprNavRow {
+                id: appRow
+
                 required property var modelData
 
-                ruleId: modelData
-                onEditRequested: tab.edit("windowrule", modelData)
-                onRemoveRequested: HyprlandRules.remove("windowrule", modelData)
+                readonly property var spec: HyprlandRules.find("windowrule", appRow.modelData) ?? ({})
+                readonly property string windowClass:
+                    HyprlandRules.patternLabel(String((appRow.spec.match ?? {}).class ?? ""))
+
+                buttonIcon: "widgets"
+                text: HyprlandRules.appEntry(appRow.windowClass)?.name
+                    ?? (appRow.windowClass === "" ? Translation.tr("New rule") : appRow.windowClass)
+                description: HyprlandRules.effectSummary("windowrule", appRow.spec)
+                onOpenSubPage: tab.editApp(appRow.modelData)
             }
         }
 
@@ -103,6 +131,7 @@ ContentPage {
 
     // ── Raw window rules ──────────────────────────────────────────────────────
     ContentSection {
+        visible: tab.advanced
         title: Translation.tr("Window rules")
         icon: "filter_alt"
 
@@ -143,6 +172,7 @@ ContentPage {
 
     // ── Layer rules ───────────────────────────────────────────────────────────
     ContentSection {
+        visible: tab.advanced
         title: Translation.tr("Layer rules")
         icon: "layers"
 
@@ -188,6 +218,7 @@ ContentPage {
 
     // ── Workspace rules ───────────────────────────────────────────────────────
     ContentSection {
+        visible: tab.advanced
         title: Translation.tr("Workspace rules")
         icon: "space_dashboard"
 
@@ -224,6 +255,7 @@ ContentPage {
 
     // ── Related ───────────────────────────────────────────────────────────────
     ContentSection {
+        visible: tab.advanced
         title: Translation.tr("Related settings")
         icon: "link"
 

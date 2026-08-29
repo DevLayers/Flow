@@ -19,8 +19,11 @@ import qs.modules.common.functions
  *   managed    - what this page put in the region
  *   inherited  - what hand-written Lua above the region, or another custom file, set
  *
- * A fourth layer sits above all of them: hyprland/shellOverrides/main.lua loads last, so Modes,
- * Game Mode and the screen shader shadow anything set here. Those keys are reported, not hidden.
+ * A fourth layer sits above all of them: hyprland/shellOverrides/main.lua loads last, so a line
+ * in it shadows anything set here. Nothing on this side ever writes to that file; the transient
+ * overrides that do - Modes, Game Mode, the screen shader - remove their own keys again when they
+ * end. A key of ours still sitting in there is therefore a leftover, and saving clears it, so a
+ * setting made on this page is the last word rather than a change that quietly does nothing.
  *
  * Nothing here reaches disk on its own. An edit is staged, `dirty` goes true, and the page's
  * Save button writes every staged file in one go; Rollback throws the staging away. Writing on
@@ -439,9 +442,51 @@ Singleton {
         dropProc.running = true;
     }
 
+    /**
+     * Keys this page manages that `hyprland/shellOverrides/main.lua` also sets.
+     *
+     * That file is loaded after every custom file, so its line always wins: the edit is saved,
+     * the compositor keeps the old value, and the page looks like it silently refused. The keys
+     * the shell deliberately re-asserts on every reload (gaps, rounding, the accent colours) are
+     * left out - clearing one of those would only have it written straight back.
+     */
+    readonly property var shadowingKeys: {
+        const out = [];
+        for (const key of Object.keys(root.managedConfig))
+            if (root.shadowed[key] !== undefined && root.shellOwnedKeys[key] === undefined)
+                out.push(key);
+        return out;
+    }
+
+    /// Take the shadowing lines out of shellOverrides so this page's own value is the last word.
+    /// Called by every save, and offered on its own where a single row reports the conflict.
+    function clearShadowing(keys: var) {
+        const wanted = Array.from(keys ?? root.shadowingKeys)
+            .filter(key => root._validKey(key) && root.shellOwnedKeys[key] === undefined);
+        if (wanted.length === 0) return;
+        HyprlandConfig.resetMany(wanted, null);
+    }
+
     /// Write every staged file. Hyprland picks the change up from the reload each write causes.
+    ///
+    /// The shadowing lines go first: they are in a different file, written by a different tool,
+    /// and leaving them there is the one way a successful save can still change nothing.
     function save() {
+        root.clearShadowing(root._shadowingAfterSave());
         root._flush();
+    }
+
+    /// What would be shadowed once the staged edits are on disk - the keys already managed plus
+    /// the ones this save is about to add.
+    function _shadowingAfterSave(): var {
+        const out = {};
+        for (const key of root.shadowingKeys) out[key] = true;
+        for (const target of Object.keys(root._desired))
+            for (const entry of root._desired[target])
+                if (entry.kind === "config" && entry.key && root.shadowed[entry.key] !== undefined
+                    && root.shellOwnedKeys[entry.key] === undefined)
+                    out[entry.key] = true;
+        return Object.keys(out);
     }
 
     /// Throw the staged edits away and go back to what the files say.

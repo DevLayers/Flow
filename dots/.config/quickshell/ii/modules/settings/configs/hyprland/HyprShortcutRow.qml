@@ -9,21 +9,26 @@ import qs.modules.common.widgets
 /**
  * One shortcut in the list: the keys on the left, what they do on the right.
  *
- * The badges are the part that is easy to get wrong. A shortcut can be stock, replaced from
- * here, written by hand in custom/keybinds.lua, sharing its key with something else, or only
- * live inside a key mode - and every one of those changes what pressing the key actually does,
- * so each gets said rather than folded into a single "custom" flag.
+ * The same shape the cheatsheet uses, deliberately - it is the same information, and a shortcut
+ * that looks like two different things in two places is two things to learn. What used to sit
+ * under the name was "keybinds.lua:214", the file and line the bind was parsed from, on every
+ * row: never something to act on, and it doubled the height of the list. Where a bind came from
+ * is on the editor page, where changing it is the point.
+ *
+ * Nothing else is flagged here either. The stock config deliberately pairs most shell actions
+ * with a fallback command on the same key, so a "something else is on this key" marker was on
+ * every row in the list and therefore told nobody anything; the editor says it where it matters,
+ * which is while you are about to take a key over.
  */
 RippleButton {
     id: root
 
     required property var row
-    readonly property var others: HyprlandBinds.othersOn(root.row)
 
     signal openSubPage
 
     Layout.fillWidth: true
-    implicitHeight: contentLayout.implicitHeight + 20
+    implicitHeight: contentLayout.implicitHeight + 16
     useDynamicRadius: true
 
     colBackground: Appearance.colors.colLayer2
@@ -38,25 +43,23 @@ RippleButton {
         color: Appearance.colors.colSecondaryContainer
     }
 
-    ScrollAnimate {}
-
     contentItem: Item {
         anchors.fill: parent
 
         RowLayout {
             id: contentLayout
             anchors.fill: parent
-            anchors.leftMargin: 16
-            anchors.rightMargin: 16
-            anchors.topMargin: 10
-            anchors.bottomMargin: 10
+            anchors.leftMargin: 14
+            anchors.rightMargin: 14
+            anchors.topMargin: 8
+            anchors.bottomMargin: 8
             spacing: 12
 
             // A fixed width rather than a maximum: a Flow only knows to wrap once it has been
             // given one, and four modifiers plus a key is wider than a settings row.
             Flow {
                 Layout.alignment: Qt.AlignVCenter
-                Layout.preferredWidth: 170
+                Layout.preferredWidth: 168
                 spacing: 4
 
                 Repeater {
@@ -66,54 +69,33 @@ RippleButton {
                         required property var modelData
 
                         subdued: true
+                        symbolKey: modelData
                         text: HyprlandBinds.modLabels[modelData] ?? modelData
                     }
                 }
 
                 HyprKeyChip {
+                    symbolKey: root.row.resolved ? root.row.key : ""
                     text: root.row.resolved ? HyprlandBinds.keyLabel(root.row.key)
-                        : Translation.tr("Built in a loop")
+                        : Translation.tr("In a loop")
                 }
             }
 
-            ColumnLayout {
+            StyledText {
                 Layout.fillWidth: true
-                spacing: 2
-
-                StyledText {
-                    Layout.fillWidth: true
-                    text: HyprlandBinds.titleOf(root.row)
-                    font.pixelSize: Appearance.font.pixelSize.small
-                    color: Appearance.colors.colOnLayer2
-                    wrapMode: Text.WordWrap
-                }
-
-                StyledText {
-                    Layout.fillWidth: true
-                    visible: text !== ""
-                    text: {
-                        const parts = [];
-                        if (root.row.managed) parts.push(Translation.tr("Set here"));
-                        else if (root.row.file !== "") parts.push(`${root.row.file}:${root.row.line}`);
-                        if (root.row.submap !== "")
-                            parts.push(Translation.tr("only in the %1 mode").arg(root.row.submap));
-                        if (root.others.length > 0)
-                            parts.push(Translation.tr("%1 more on this key").arg(root.others.length));
-                        return parts.join(" · ");
-                    }
-                    elide: Text.ElideRight
-                    font.pixelSize: Appearance.font.pixelSize.smaller
-                    color: root.others.length > 0 ? Appearance.colors.colOnSurfaceVariant
-                        : Appearance.colors.colSubtext
-                }
+                Layout.alignment: Qt.AlignVCenter
+                text: HyprlandBinds.titleOf(root.row)
+                font.pixelSize: Appearance.font.pixelSize.small
+                color: Appearance.colors.colOnLayer2
+                elide: Text.ElideRight
             }
 
             MaterialSymbol {
                 Layout.alignment: Qt.AlignVCenter
-                visible: root.row.complex === true
-                text: "code"
-                iconSize: Appearance.font.pixelSize.large
-                color: Appearance.colors.colSubtext
+                visible: root.row.managed === true
+                text: "edit"
+                iconSize: Appearance.font.pixelSize.normal
+                color: Appearance.colors.colPrimary
             }
 
             MaterialSymbol {

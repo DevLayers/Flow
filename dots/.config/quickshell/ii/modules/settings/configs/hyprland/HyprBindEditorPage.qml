@@ -45,6 +45,11 @@ Item {
 
     readonly property var current: HyprlandBinds.editing
 
+    /// Somebody who opened this page opened it to change which key does the thing. Eleven
+    /// switches about long presses, modifier masks and shortcut inhibitors are for the day they
+    /// want one of those specifically, and that day they can turn advanced mode on.
+    readonly property bool advanced: Config.options.hyprland.advancedSettings
+
     readonly property bool isManaged: HyprlandBinds.managedBind(HyprlandBinds.editId) !== null
     readonly property bool lastEssential: subPageRoot.current !== null
         && HyprlandBinds.isLastEssential(subPageRoot.current)
@@ -181,6 +186,7 @@ Item {
                     for (const other of subPageRoot.occupants)
                         out.push({
                             "icon": "warning",
+                            "always": true,
                             "text": Translation.tr("%1 is already \"%2\" (%3). Saving replaces it.")
                                 .arg(HyprlandBinds.comboLabel(other.mods, other.key))
                                 .arg(HyprlandBinds.titleOf(other))
@@ -311,11 +317,12 @@ Item {
 
         // ── Fine print ────────────────────────────────────────────────────────
         ContentSection {
+            visible: subPageRoot.advanced
             title: Translation.tr("Fine print")
             icon: "tune"
 
             Repeater {
-                model: subPageRoot.options
+                model: subPageRoot.advanced ? subPageRoot.options : []
 
                 delegate: HyprToggle {
                     required property var modelData
@@ -362,7 +369,7 @@ Item {
             HyprOptionNote {
                 notes: {
                     if (subPageRoot.lastEssential)
-                        return [{ "icon": "shield", "text": Translation.tr("This is the only shortcut left that opens a terminal or reaches the session menu. Bind another one first — without either, a keyboard-only mistake can only be undone from a text console.") }];
+                        return [{ "icon": "shield", "always": true, "text": Translation.tr("This is the only shortcut left that opens a terminal or reaches the session menu. Bind another one first — without either, a keyboard-only mistake can only be undone from a text console.") }];
                     if (subPageRoot.isManaged)
                         return [{ "icon": "info", "text": Translation.tr("Removing it puts back whatever the config files had on this key, if anything.") }];
                     return [{ "icon": "info", "text": Translation.tr("The config file is not touched. A release is written into this page's own block instead, which runs afterwards and takes the key back.") }];

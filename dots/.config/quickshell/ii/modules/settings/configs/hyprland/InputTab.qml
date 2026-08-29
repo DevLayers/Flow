@@ -21,12 +21,24 @@ ContentPage {
 
     forceWidth: false
 
+    /// The four "Advanced …" doors, the per-device overrides and the prose all sit behind the
+    /// switch in the corner. What is left is the six settings a laptop actually needs.
+    readonly property bool advanced: Config.options.hyprland.advancedSettings
+
     Component.onCompleted: {
-        HyprlandDevices.refresh();
         // The Layout row names the layout in words, so the catalogue is needed before the
         // sub-page is ever opened.
         XkbCatalog.load();
+        tab.loadDevices();
     }
+
+    /// Asking Hyprland for the device list is a process, and in basic mode there is nothing on
+    /// the page that would show the answer.
+    function loadDevices() {
+        if (tab.advanced) HyprlandDevices.refresh();
+    }
+
+    onAdvancedChanged: tab.loadDevices()
 
     ContentSection {
         title: Translation.tr("Keyboard")
@@ -60,6 +72,7 @@ ContentPage {
         }
 
         HyprNavRow {
+            visible: tab.advanced
             buttonIcon: "tune"
             text: Translation.tr("Advanced keyboard")
             description: Translation.tr("Caps Lock, Compose, XKB quirks, several layouts at once")
@@ -139,6 +152,7 @@ ContentPage {
         }
 
         HyprNavRow {
+            visible: tab.advanced
             buttonIcon: "tune"
             text: Translation.tr("Advanced mouse")
             description: Translation.tr("Focus, scrolling, buttons")
@@ -184,6 +198,7 @@ ContentPage {
         }
 
         HyprNavRow {
+            visible: tab.advanced
             buttonIcon: "tune"
             text: Translation.tr("Advanced touchpad")
             description: Translation.tr("Gestures, clicks, orientation")
@@ -216,6 +231,7 @@ ContentPage {
         }
 
         HyprSwitch {
+            visible: tab.advanced
             optionKey: "cursor:enable_hyprcursor"
             defaultValue: true
             buttonIcon: "brush"
@@ -225,6 +241,7 @@ ContentPage {
         }
 
         HyprNavRow {
+            visible: tab.advanced
             buttonIcon: "tune"
             text: Translation.tr("Advanced cursor")
             description: Translation.tr("Zoom, warping, hardware")
@@ -241,6 +258,7 @@ ContentPage {
         StyledText {
             Layout.fillWidth: true
             Layout.topMargin: 4
+            visible: tab.advanced
             text: Translation.tr("The cursor's theme and size are environment variables, not compositor options, so they live in the Environment tab.")
             font.pixelSize: Appearance.font.pixelSize.smaller
             color: Appearance.colors.colSubtext
@@ -250,6 +268,7 @@ ContentPage {
 
     ContentSection {
         id: perDeviceSection
+        visible: tab.advanced
         title: Translation.tr("Per device")
         icon: "devices"
 

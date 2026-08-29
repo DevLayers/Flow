@@ -23,6 +23,15 @@ ContentPage {
 
     forceWidth: false
 
+    /**
+     * The pointer and the icon pack stay: they are things people change, and they are the two
+     * settings on this tab that take effect at once. Everything else here is an environment
+     * variable - it reaches the next program you open and nothing that is already running - so
+     * presets, the raw variable list, what the shell set before this page and the explanation
+     * of when any of it applies are all behind advanced mode.
+     */
+    readonly property bool advanced: Config.options.hyprland.advancedSettings
+
     readonly property var currentTheme: HyprlandEnv.themeEntry(HyprlandEnv.cursorTheme)
 
     function openSubPage(page: url) {
@@ -134,10 +143,10 @@ ContentPage {
             notes: {
                 const out = [{ "icon": "bolt", "text": Translation.tr("The pointer is the one thing here that changes at once: the compositor is told directly, and every other copy of the setting follows - GTK, KDE apps, the X11 fallback Steam reads, flatpaks. The four variables are written as well, so it survives a reboot.") }];
                 if (HyprlandEnv.cursorSplit)
-                    out.push({ "icon": "warning", "text": Translation.tr("Hyprland is drawing %1 while X11 windows get %2. Picking a theme here sets both.")
+                    out.push({ "icon": "warning", "always": true, "text": Translation.tr("Hyprland is drawing %1 while X11 windows get %2. Picking a theme here sets both.")
                         .arg(HyprlandEnv.envValue("HYPRCURSOR_THEME")).arg(HyprlandEnv.envValue("XCURSOR_THEME")) });
                 if (HyprlandEnv.gtkOutOfStep)
-                    out.push({ "icon": "sync_problem", "text": Translation.tr("GTK apps are still using %1. Choosing a theme here brings them into line.")
+                    out.push({ "icon": "sync_problem", "always": true, "text": Translation.tr("GTK apps are still using %1. Choosing a theme here brings them into line.")
                         .arg(String(HyprlandEnv.probe.gtkTheme ?? "")) });
                 if (tab.currentTheme && !tab.currentTheme.hypr)
                     out.push({ "icon": "info", "text": Translation.tr("%1 has no hyprcursor version, so Hyprland falls back to the X11 one. It works, and it does not scale as cleanly.")
@@ -174,6 +183,7 @@ ContentPage {
 
     // ── The honest part ───────────────────────────────────────────────────────
     ContentSection {
+        visible: tab.advanced
         title: Translation.tr("When the rest of this takes effect")
         icon: "schedule"
 
@@ -195,6 +205,7 @@ ContentPage {
 
     // ── Presets ───────────────────────────────────────────────────────────────
     ContentSection {
+        visible: tab.advanced
         title: Translation.tr("Presets")
         icon: "widgets"
 
@@ -207,7 +218,7 @@ ContentPage {
         }
 
         Repeater {
-            model: HyprlandEnv.presets
+            model: tab.advanced ? HyprlandEnv.presets : []
 
             delegate: ContentSubsection {
                 id: presetGroup
@@ -275,6 +286,7 @@ ContentPage {
 
     // ── Everything else ───────────────────────────────────────────────────────
     ContentSection {
+        visible: tab.advanced
         title: Translation.tr("Variables")
         icon: "code"
 
@@ -290,7 +302,7 @@ ContentPage {
         }
 
         Repeater {
-            model: HyprlandEnv.otherVariables
+            model: tab.advanced ? HyprlandEnv.otherVariables : []
 
             delegate: VariableRow {
                 required property var modelData
@@ -324,6 +336,7 @@ ContentPage {
 
     // ── What is already set ───────────────────────────────────────────────────
     ContentSection {
+        visible: tab.advanced
         title: Translation.tr("Set before this page")
         icon: "inventory"
 
@@ -336,7 +349,7 @@ ContentPage {
         }
 
         Repeater {
-            model: HyprlandEnv.upstream
+            model: tab.advanced ? HyprlandEnv.upstream : []
 
             delegate: HyprNavRow {
                 required property var modelData
@@ -369,6 +382,7 @@ ContentPage {
 
     // ── Related ───────────────────────────────────────────────────────────────
     ContentSection {
+        visible: tab.advanced
         title: Translation.tr("Related settings")
         icon: "link"
 

@@ -18,7 +18,7 @@ import qs.modules.common.widgets
  * from not having an opinion - and a card whose switches are all off should leave nothing behind.
  * The full vocabulary, including the explicit `false`, is a tap away in the rule editor.
  */
-ContentSubsection {
+ColumnLayout {
     id: card
 
     /// Looked up by id rather than passed as a row object, so the card only hears about its
@@ -33,9 +33,37 @@ ContentSubsection {
     signal removeRequested
     signal editRequested
 
-    title: card.entry?.name ?? (card.windowClass === "" ? Translation.tr("New rule") : card.windowClass)
-    icon: "widgets"
+    readonly property string cardTitle: card.entry?.name
+        ?? (card.windowClass === "" ? Translation.tr("New rule") : card.windowClass)
+    /// Off on the app's own page, where the name is already the page title.
+    property bool showHeader: true
     Layout.fillWidth: true
+
+    // Rule controls own their surfaces. The rule identity stays a lightweight heading rather
+    // than placing several full-width toggles inside another subsection card.
+    RowLayout {
+        visible: card.showHeader
+        Layout.fillWidth: true
+        Layout.topMargin: 4
+        Layout.bottomMargin: 4
+        spacing: 10
+
+        MaterialSymbol {
+            text: "widgets"
+            iconSize: Appearance.font.pixelSize.large
+            color: Appearance.colors.colOnLayer1
+            Layout.alignment: Qt.AlignVCenter
+        }
+
+        StyledText {
+            Layout.fillWidth: true
+            text: card.cardTitle
+            font.pixelSize: Appearance.font.pixelSize.normal
+            font.weight: Font.DemiBold
+            color: Appearance.colors.colOnLayer1
+            elide: Text.ElideRight
+        }
+    }
 
     function value(key: string, fallback: var): var {
         return card.spec[key] !== undefined ? card.spec[key] : fallback;

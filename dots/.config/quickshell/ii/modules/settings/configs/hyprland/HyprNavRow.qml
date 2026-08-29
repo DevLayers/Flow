@@ -33,7 +33,9 @@ RippleButton {
     signal openSubPage
 
     readonly property int changedCount: HyprOrigin.changedCount(root.keys)
-    readonly property string badgeText: root.changedCount > 0
+    /// Defaults to how many of `keys` are set, and a row with something better to say about
+    /// itself - a device that has its own settings, say - replaces it.
+    property string badgeText: root.changedCount > 0
         ? Translation.tr("%1 changed").arg(root.changedCount) : ""
 
     Layout.fillWidth: true

@@ -142,11 +142,16 @@ ColumnLayout {
         onTriggered: root.capturing = false
     }
 
+    /// The manual field, the physical-key escape hatch and the sentence explaining the
+    /// difference are all for a keyboard layout that moves its keys around. Somebody who opened
+    /// this page to move one shortcut off F1 does not need any of it.
+    readonly property bool advanced: Config.options.hyprland.advancedSettings
+
     RippleButton {
         id: captureButton
         Layout.fillWidth: true
-        implicitHeight: 68
-        buttonRadius: Appearance.rounding.normal
+        implicitHeight: 92
+        buttonRadius: Appearance.rounding.large
         colBackground: root.capturing ? Appearance.colors.colPrimaryContainer : Appearance.colors.colLayer2
         colBackgroundHover: root.capturing ? Appearance.colors.colPrimaryContainerHover
             : Appearance.colors.colLayer2Hover
@@ -179,15 +184,25 @@ ColumnLayout {
             root.capturing = false;
         }
 
-        // Wrapped in a plain Item, the way every other button on this page is: a Control
-        // positions its contentItem itself, and a layout anchored straight into that fights it.
+        /**
+         * A record button that looks like one.
+         *
+         * What was here before showed the keys and, underneath, "Click to record a different
+         * one" - so it read as a preview of the shortcut with a caption, and people looked at
+         * it without ever realising it was the control. The dot and the word "Record" are on
+         * the same line as the keys now, on the right, where every recorder in every other
+         * program puts them.
+         */
         contentItem: Item {
-            ColumnLayout {
-                anchors.centerIn: parent
-                spacing: 6
+            RowLayout {
+                anchors.fill: parent
+                anchors.leftMargin: 20
+                anchors.rightMargin: 16
+                spacing: 16
 
                 Flow {
-                    Layout.alignment: Qt.AlignHCenter
+                    Layout.fillWidth: true
+                    Layout.alignment: Qt.AlignVCenter
                     visible: !root.capturing && root.key !== ""
                     spacing: 4
 
@@ -198,23 +213,58 @@ ColumnLayout {
                             required property var modelData
 
                             subdued: true
+                            symbolKey: modelData
                             text: HyprlandBinds.modLabels[modelData] ?? modelData
                         }
                     }
 
                     HyprKeyChip {
+                        symbolKey: root.key
                         text: HyprlandBinds.keyLabel(root.key)
                     }
                 }
 
                 StyledText {
-                    Layout.alignment: Qt.AlignHCenter
+                    Layout.fillWidth: true
+                    Layout.alignment: Qt.AlignVCenter
+                    visible: root.capturing || root.key === ""
                     text: root.capturing ? Translation.tr("Press the shortcut now — Esc to stop")
-                        : (root.key === "" ? Translation.tr("Click, then press the shortcut")
-                            : Translation.tr("Click to record a different one"))
-                    font.pixelSize: Appearance.font.pixelSize.smaller
+                        : Translation.tr("No shortcut yet")
+                    font.pixelSize: Appearance.font.pixelSize.normal
                     color: root.capturing ? Appearance.colors.colOnPrimaryContainer
                         : Appearance.colors.colSubtext
+                }
+
+                Rectangle {
+                    Layout.alignment: Qt.AlignVCenter
+                    implicitHeight: 40
+                    implicitWidth: recordRow.implicitWidth + 28
+                    radius: Appearance.rounding.full
+                    color: root.capturing ? Appearance.colors.colOnPrimaryContainer
+                        : Appearance.colors.colPrimary
+
+                    RowLayout {
+                        id: recordRow
+                        anchors.centerIn: parent
+                        spacing: 8
+
+                        MaterialSymbol {
+                            text: root.capturing ? "stop_circle" : "fiber_manual_record"
+                            iconSize: 20
+                            fill: 1
+                            color: root.capturing ? Appearance.colors.colPrimaryContainer
+                                : Appearance.colors.colOnPrimary
+                        }
+
+                        StyledText {
+                            text: root.capturing ? Translation.tr("Listening")
+                                : Translation.tr("Record")
+                            font.pixelSize: Appearance.font.pixelSize.small
+                            font.weight: Font.DemiBold
+                            color: root.capturing ? Appearance.colors.colPrimaryContainer
+                                : Appearance.colors.colOnPrimary
+                        }
+                    }
                 }
             }
         }
@@ -222,6 +272,7 @@ ColumnLayout {
 
     RowLayout {
         Layout.fillWidth: true
+        visible: root.advanced
         spacing: 8
 
         ConfigTextField {
@@ -249,28 +300,34 @@ ColumnLayout {
             }
         }
 
+        // A sentence-long button next to a text field made the row look broken. The idea is
+        // one action on one key, so it is one round button with the explanation on hover.
         RippleButton {
             visible: root.lastScanCode > 0 && !root.isPhysical
-            implicitHeight: 40
-            implicitWidth: physicalLabel.implicitWidth + 24
+            implicitHeight: 44
+            implicitWidth: 44
             buttonRadius: Appearance.rounding.full
             colBackground: Appearance.colors.colSecondaryContainer
             colBackgroundHover: Appearance.colors.colSecondaryContainerHover
             colRipple: Appearance.colors.colSecondaryContainerActive
             onClicked: root.usePhysicalKey()
 
-            StyledText {
-                id: physicalLabel
+            MaterialSymbol {
                 anchors.centerIn: parent
-                text: Translation.tr("Use the physical key")
-                font.pixelSize: Appearance.font.pixelSize.smaller
+                text: "pin_drop"
+                iconSize: Appearance.font.pixelSize.large
                 color: Appearance.colors.colOnSecondaryContainer
+            }
+
+            StyledToolTip {
+                text: Translation.tr("Use the key in this position instead, so it survives a layout change")
             }
         }
     }
 
     StyledText {
         Layout.fillWidth: true
+        visible: root.advanced
         text: root.isPhysical
             ? Translation.tr("This is the key in that position on the keyboard, whatever it prints. It keeps working if you change layout.")
             : Translation.tr("This is the character the key produces, so it moves if you change keyboard layout. Digits and punctuation are the ones that move most.")

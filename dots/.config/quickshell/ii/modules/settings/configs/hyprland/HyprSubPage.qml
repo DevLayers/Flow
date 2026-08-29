@@ -18,6 +18,10 @@ Item {
     signal goBack
     property bool showBackButton: false
 
+    /// A page of this shape can push one of its own; the host is here rather than in each page
+    /// that needs one, so going back from the deeper page returns here instead of two levels up.
+    property alias activeSubPage: subPageOverlay.activeSubPage
+
     property string title: ""
     property string subtitle: ""
 
@@ -27,6 +31,7 @@ Item {
         id: page
         anchors.fill: parent
         forceWidth: false
+        opacity: subPageOverlay.slideProgress
 
         RowLayout {
             visible: root.showBackButton
@@ -71,5 +76,11 @@ Item {
                 }
             }
         }
+    }
+
+    ConfigSubPageHost {
+        id: subPageOverlay
+        anchors.fill: parent
+        z: 10
     }
 }

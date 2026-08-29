@@ -65,6 +65,34 @@ Singleton {
         return /touchpad|trackpad|synaptics|glidepoint/i.test(String(device?.name ?? ""));
     }
 
+    // ------------------------------------------------------------- one device at a time
+
+    /**
+     * Which device the per-device editor is open on.
+     *
+     * The list used to be one settings card per device, all expanded on one page - a laptop with
+     * a gaming keyboard and a receiver reports a dozen devices, so that was a dozen identical
+     * "Settings just for this device" switches in a row and nothing else legible. It is a list
+     * of names now, and the settings for one of them are a page. The page is opened by URL, so
+     * which device it is has to be left somewhere both sides can see.
+     */
+    property string editName: ""
+    property string editKind: ""
+
+    function beginEdit(name: string, kind: string) {
+        root.editName = String(name ?? "");
+        root.editKind = String(kind ?? "");
+    }
+
+    /// The device object behind `editName`, whichever list it came from.
+    readonly property var editing: {
+        const lists = [root.realKeyboards, root.realMice, root.realTablets, root.realTouch];
+        for (const list of lists)
+            for (const device of list)
+                if (String(device.name ?? "") === root.editName) return device;
+        return null;
+    }
+
     function refresh() {
         root.stale = false;
         if (devicesProc.running) return;
