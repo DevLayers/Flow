@@ -320,7 +320,9 @@ PanelWindow {
     // mapped in WlrLayer.Bottom, where Hyprland's map order could leave the
     // wallpaper above the widgets after startup or a reload.
     WlrLayershell.layer: bgRoot.mediaModeOpen ? WlrLayer.Overlay : WlrLayer.Background
-    WlrLayershell.keyboardFocus: bgRoot.mediaModeOpen ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
+    // Media Mode owns focus in a short-lived dedicated PanelWindow. Keeping the
+    // persistent wallpaper window focusable would make both surfaces compete.
+    WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
     WlrLayershell.namespace: "quickshell:background"
     anchors {
         top: true
@@ -365,14 +367,55 @@ PanelWindow {
         wallpaperProbeTimeout.restart();
     }
 
-    property bool mediaModeOpen: mediaModeLoader.active && MprisController.activePlayer
+    property bool mediaModeOpen: mediaModeLoader.active
+    property bool mediaModeRegistered: false
+    property string registeredMediaModeScreenName: ""
+
+    function registerMediaMode() {
+        if (bgRoot.mediaModeRegistered)
+            return;
+
+        const screenName = bgRoot.screen ? bgRoot.screen.name : "";
+        bgRoot.mediaModeRegistered = true;
+        bgRoot.registeredMediaModeScreenName = screenName;
+        GlobalStates.setMediaModeActiveForScreen(screenName, true);
+        GlobalStates.mediaModeCount++;
+        LyricsService.mediaModeOpenCount++;
+    }
+
+    function releaseMediaModeRegistration() {
+        if (!bgRoot.mediaModeRegistered)
+            return;
+
+        const screenName = bgRoot.registeredMediaModeScreenName;
+        bgRoot.mediaModeRegistered = false;
+        bgRoot.registeredMediaModeScreenName = "";
+        GlobalStates.setMediaModeActiveForScreen(screenName, false);
+        GlobalStates.mediaModeCount = Math.max(0, GlobalStates.mediaModeCount - 1);
+        LyricsService.mediaModeOpenCount = Math.max(0, LyricsService.mediaModeOpenCount - 1);
+    }
+
+    function openMediaMode() {
+        if (mediaModeLoader.active || !MprisController.activePlayer)
+            return;
+        mediaModeLoader.active = true;
+    }
+
+    function closeMediaMode() {
+        MusicVideoService.stopVideo();
+        if (mediaModeLoader.active)
+            mediaModeLoader.active = false;
+        // onActiveChanged normally releases this synchronously. Keep the call
+        // idempotent so teardown also works while a monitor is disappearing.
+        bgRoot.releaseMediaModeRegistration();
+    }
 
     function restoreWallpaperColors() {
         if (Config.options.appearance.palette.type.startsWith("scheme")
                 && !GlobalStates.mediaModeActive
                 && bgRoot.isMonitorFocused) {
-            // Restore only after the global close has completed and all loader
-            // destruction handlers have balanced mediaModeCount.
+            // Restore only after every BackgroundRoot has released its media
+            // mode registration.
             Quickshell.execDetached([
                 Directories.wallpaperSwitchScriptPath,
                 "--noswitch",
@@ -397,6 +440,14 @@ PanelWindow {
                 LyricsService.shellColorChanged = false;
                 bgRoot.restoreWallpaperColors();
             }
+        }
+    }
+
+    Connections {
+        target: MprisController
+        function onActivePlayerChanged() {
+            if (!MprisController.activePlayer)
+                bgRoot.closeMediaMode();
         }
     }
 
@@ -463,6 +514,9 @@ PanelWindow {
     }
 
     Component.onDestruction: {
+        if (bgRoot.mediaModeRegistered)
+            MusicVideoService.stopVideo();
+        bgRoot.releaseMediaModeRegistration();
         GlobalStates.unregisterOverviewBackgroundController(bgRoot.screen ? bgRoot.screen.name : "", overviewController);
     }
 
@@ -518,12 +572,10 @@ PanelWindow {
             onPressed: {
                 if (!monitor.focused && Config.options.background.mediaMode.togglePerMonitor)
                     return;
-                mediaModeLoader.active = !mediaModeLoader.active;
-                if (!mediaModeLoader.active) {
-                    MusicVideoService.stopVideo();
-                }
-                GlobalStates.mediaModeCount = Math.max(0, GlobalStates.mediaModeCount + (mediaModeLoader.active ? 1 : -1));
-                LyricsService.mediaModeOpenCount += mediaModeLoader.active ? 1 : -1;
+                if (mediaModeLoader.active)
+                    bgRoot.closeMediaMode();
+                else
+                    bgRoot.openMediaMode();
             }
         }
 
@@ -532,27 +584,67 @@ PanelWindow {
         Connections {
             target: GlobalStates
             function onMediaModeCloseAllTriggerChanged() {
-                if (GlobalStates.mediaModeCloseAllTrigger > bgRoot._lastCloseAllTrigger && mediaModeLoader.active) {
-                    bgRoot._lastCloseAllTrigger = GlobalStates.mediaModeCloseAllTrigger;
-                    MusicVideoService.stopVideo();
-                    mediaModeLoader.active = false;
-                    GlobalStates.mediaModeCount = Math.max(0, GlobalStates.mediaModeCount - 1);
-                }
+                if (GlobalStates.mediaModeCloseAllTrigger <= bgRoot._lastCloseAllTrigger)
+                    return;
+                bgRoot._lastCloseAllTrigger = GlobalStates.mediaModeCloseAllTrigger;
+                if (mediaModeLoader.active || bgRoot.mediaModeRegistered)
+                    bgRoot.closeMediaMode();
             }
         }
 
-        Loader {
-            id: mediaModeLoader
-            anchors.fill: parent
-            active: false
-            asynchronous: true
-            sourceComponent: MediaMode {}
-            opacity: mediaModeLoader.status === Loader.Ready ? 1 : 0
-            onActiveChanged: {
-                GlobalStates.setMediaModeActiveForScreen(bgRoot.screen ? bgRoot.screen.name : "", active);
-            }
-            Behavior on opacity {
-                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+        // Fullscreen effects must not share the wallpaper's permanent QQuickWindow.
+        // Destroying only their Item tree leaves large render targets in that
+        // window's scenegraph/resource pools. A dedicated short-lived window gives
+        // Qt/RHI a real teardown boundary on every close.
+        Scope {
+            id: mediaModeWindowScope
+
+            LazyLoader {
+                id: mediaModeLoader
+
+                active: false
+                onActiveChanged: {
+                    if (active) {
+                        if (!MprisController.activePlayer) {
+                            active = false;
+                            return;
+                        }
+                        bgRoot.registerMediaMode();
+                    } else {
+                        bgRoot.releaseMediaModeRegistration();
+                    }
+                }
+
+                component: PanelWindow {
+                    id: mediaModeWindow
+
+                    screen: bgRoot.screen
+                    visible: true
+                    color: "transparent"
+                    exclusionMode: ExclusionMode.Ignore
+                    exclusiveZone: 0
+
+                    WlrLayershell.namespace: "quickshell:mediaMode"
+                    WlrLayershell.layer: WlrLayer.Overlay
+                    WlrLayershell.keyboardFocus: WlrKeyboardFocus.OnDemand
+
+                    anchors {
+                        top: true
+                        bottom: true
+                        left: true
+                        right: true
+                    }
+
+                    MediaMode {
+                        anchors.fill: parent
+                        onCloseRequested: function(allMonitors) {
+                            if (allMonitors)
+                                GlobalStates.mediaModeCloseAllTrigger++;
+                            else
+                                bgRoot.closeMediaMode();
+                        }
+                    }
+                }
             }
         }
     }

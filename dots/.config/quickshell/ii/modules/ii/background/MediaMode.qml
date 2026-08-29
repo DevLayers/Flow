@@ -17,6 +17,8 @@ import qs.modules.common.functions
 Item { // Fullscreen MediaMode instance
     id: root
 
+    signal closeRequested(bool allMonitors)
+
     opacity: 0
     Behavior on opacity {
         NumberAnimation {
@@ -125,14 +127,12 @@ Item { // Fullscreen MediaMode instance
 
     Component.onCompleted: {
         Persistent.states.background.mediaMode.userScrollOffset = 0;
-        GlobalStates.mediaModeCount++;
         root.opacity = 1.0;
         if (videoActive) {
             Quickshell.execDetached(["hyprctl", "keyword", "layerrule", "unset,quickshell:background"]);
         }
     }
     Component.onDestruction: {
-        GlobalStates.mediaModeCount--;
         Quickshell.execDetached(["hyprctl", "keyword", "layerrule", "blur,quickshell:background"]);
     }
 
@@ -606,24 +606,7 @@ Item { // Fullscreen MediaMode instance
                                 }
 
                                 onClicked: {
-                                    if (!Config.options.background.mediaMode.togglePerMonitor) {
-                                        // Global mode: trigger closes ALL loaders on all monitors.
-                                        // Set counts to 0 since all instances are closing.
-                                        LyricsService.mediaModeOpenCount = 0;
-                                        GlobalStates.mediaModeCloseAllTrigger++;
-                                        // NOTE: the trigger above destroys this component synchronously
-                                        // (via Connections → loader.active=false → Loader destroys MediaMode).
-                                        // Nothing after this point executes.
-                                    } else if (typeof mediaModeLoader !== "undefined") {
-                                        // Per-monitor mode: close only this instance.
-                                        LyricsService.mediaModeOpenCount = Math.max(0, LyricsService.mediaModeOpenCount - 1);
-                                        mediaModeLoader.active = false;
-                                        // Balance count: onDestruction handles -1, this handles the other -1.
-                                        GlobalStates.mediaModeCount = Math.max(0, GlobalStates.mediaModeCount - 1);
-                                    } else {
-                                        LyricsService.mediaModeOpenCount = Math.max(0, LyricsService.mediaModeOpenCount - 1);
-                                        GlobalStates.mediaModeCount = Math.max(0, GlobalStates.mediaModeCount - 1);
-                                    }
+                                    root.closeRequested(!Config.options.background.mediaMode.togglePerMonitor);
                                 }
 
                                 StyledToolTip {

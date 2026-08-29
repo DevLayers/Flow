@@ -26,6 +26,25 @@ QtObject {
         }
     }
 
+    // ── Deferred removal ─────────────────────────────────────────────────────
+    // `exiting` is set on the model entry, the delegate plays its exit, and this
+    // timer runs the sync a second time with `reapDue` set so the entry is
+    // actually dropped. Kept slightly longer than the exit animation so the
+    // widget is never destroyed mid-fade.
+    property bool reapDue: false
+    property Timer reapTimer: Timer {
+        interval: Math.round(260 * Appearance.animMultiplier)
+        repeat: false
+        onTriggered: {
+            manager.reapDue = true;
+            manager.syncActiveWidgets();
+            manager.reapDue = false;
+        }
+    }
+    function scheduleReap() {
+        manager.reapTimer.restart();
+    }
+
     function syncActiveWidgets() {
         let configList = Config.options.background.activeWidgets || [];
         console.log("[Background] syncActiveWidgets called. Config activeWidgets count: " + configList.length + ", current model count: " + widgetListModel.count);
@@ -44,7 +63,15 @@ QtObject {
                 }
             }
             if (!found) {
-                widgetListModel.remove(i);
+                // Deferred removal: the Repeater destroys a delegate the moment
+                // it leaves the model, so an exit animation had nowhere to run.
+                // Flag it, let the widget animate itself out, and reap it after.
+                if (!widgetListModel.get(i).exiting) {
+                    widgetListModel.setProperty(i, "exiting", true);
+                    manager.scheduleReap();
+                } else if (manager.reapDue) {
+                    widgetListModel.remove(i);
+                }
             }
         }
 
@@ -68,7 +95,8 @@ QtObject {
                     "placementStrategy": configItem.placementStrategy || "free",
                     "lockBehavior": configItem.lockBehavior || "hide",
                     "staggerDelay": addCount * 60,
-                    "scale": configItem.scale ?? 1.0
+                    "scale": configItem.scale ?? 1.0,
+                    "exiting": false
                 });
                 addCount++;
             } else {
