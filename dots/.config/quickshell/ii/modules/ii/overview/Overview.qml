@@ -532,6 +532,10 @@ Scope {
         togglePrefixedSearch(Config.options.search.prefix.materialSymbols);
     }
 
+    function toggleTranslator() {
+        togglePrefixedSearch(Config.options.search.prefix.translator);
+    }
+
     function toggleAi() {
         if (!Ai.enabled)
             return;
@@ -570,6 +574,10 @@ Scope {
         function materialSymbolsToggle() {
             GlobalStates.superReleaseMightTrigger = false;
             overviewScope.toggleMaterialSymbols();
+        }
+        function translatorToggle() {
+            GlobalStates.superReleaseMightTrigger = false;
+            overviewScope.toggleTranslator();
         }
         function aiToggle() {
             GlobalStates.superReleaseMightTrigger = false;
@@ -686,6 +694,16 @@ Scope {
         onPressed: {
             GlobalStates.superReleaseMightTrigger = false;
             overviewScope.toggleMaterialSymbols();
+        }
+    }
+
+    GlobalShortcut {
+        name: "overviewTranslatorToggle"
+        description: "Toggle Translator search on overview widget"
+
+        onPressed: {
+            GlobalStates.superReleaseMightTrigger = false;
+            overviewScope.toggleTranslator();
         }
     }
 

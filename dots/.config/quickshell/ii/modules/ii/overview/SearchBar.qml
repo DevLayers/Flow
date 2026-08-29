@@ -610,12 +610,18 @@ RowLayout {
                 event.accepted = true;
                 return;
             }
-            if (root.activePanelMode && event.key === Qt.Key_Left) {
+            // Grid/list panels (Settings, Keybinds, File Browser...) use bare
+            // Left/Right to move between cells. clipboardMode panels are
+            // excluded here — Translator, Media Downloader and Material
+            // Symbols each have a real text field where Left/Right must move
+            // the cursor instead, and the dedicated handling further below
+            // already makes that distinction per-panel.
+            if (root.activePanelMode && !root.clipboardMode && event.key === Qt.Key_Left) {
                 root.navigateLeft();
                 event.accepted = true;
                 return;
             }
-            if (root.activePanelMode && event.key === Qt.Key_Right) {
+            if (root.activePanelMode && !root.clipboardMode && event.key === Qt.Key_Right) {
                 root.navigateRight();
                 event.accepted = true;
                 return;
@@ -630,8 +636,10 @@ RowLayout {
                 event.accepted = true;
                 return;
             }
-            const isEmojiOrMaterialSymbols = root.searchPrefixType === SearchBar.SearchPrefixType.Emojis || root.searchPrefixType === SearchBar.SearchPrefixType.MaterialSymbols;
-            if (isEmojiOrMaterialSymbols || root.clipboardMode) {
+            // Emoji picker is grid-only — no text field where Left/Right ever
+            // needs to move a cursor, unlike Material Symbols below.
+            const isEmojiMode = root.searchPrefixType === SearchBar.SearchPrefixType.Emojis;
+            if (isEmojiMode) {
                 if (event.key === Qt.Key_Left) {
                     root.navigateLeft();
                     event.accepted = true;
@@ -649,7 +657,18 @@ RowLayout {
                     return;
                 }
                 const isPanelFocused = root.isTranslatorPanelFocused || root.isMediaDownloaderPanelFocused || root.isMaterialSymbolsPanelFocused;
-                if ((root.searchPrefixType !== SearchBar.SearchPrefixType.Translator && root.searchPrefixType !== SearchBar.SearchPrefixType.MediaDownloader && root.searchPrefixType !== SearchBar.SearchPrefixType.MaterialSymbols) || isPanelFocused) {
+                // `searchPrefixType` reflects whether the raw text currently
+                // starts with the literal prefix string — true only for the
+                // instant before the hosted panel consumes it, not "is this
+                // panel active". Once inside Translator/Media
+                // Downloader/Material Symbols the "@"/etc. is long gone from
+                // the text, so this must check the panel's own id (stable for
+                // as long as the panel is open) instead — otherwise Left/Right
+                // only ever reaches the text field right after retyping the
+                // prefix character.
+                const activePanelId = String(root.activePanel?.id ?? "");
+                const isTextFieldPanel = activePanelId === "translator" || activePanelId === "mediaDownloader" || activePanelId === "materialSymbols";
+                if (!isTextFieldPanel || isPanelFocused) {
                     if (event.key === Qt.Key_Left) {
                         root.navigateLeft();
                         event.accepted = true;

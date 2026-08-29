@@ -76,6 +76,14 @@ Item {
 
     function focusInput() { focusedControlIndex = 0 }
 
+    // This is a flat panel — there is no sub-level to back out of. Without
+    // this, Backspace on an empty query falls through to
+    // SearchWidget.exitActivePanel() and kicks the user back to plain Search,
+    // so clearing the query to retype something silently exits the panel.
+    function navigateBack(): bool {
+        return true;
+    }
+
     function navigateDown() {
         if (focusedControlIndex === -1) {
             focusedControlIndex = 0;
