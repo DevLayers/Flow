@@ -13,7 +13,6 @@ KEYWORDS="~amd64 ~arm64 ~x86"
 DEPEND=""
 RDEPEND="
 	gui-apps/fuzzel
-	dev-libs/gjs
 	dev-libs/glib
 	media-gfx/imagemagick
 	gui-apps/hypridle
@@ -24,5 +23,3 @@ RDEPEND="
 	gui-apps/wlogout
 	sci-libs/libqalculate
 "
-##### CUSTOM EBUILDS
-# app-misc/songrec
