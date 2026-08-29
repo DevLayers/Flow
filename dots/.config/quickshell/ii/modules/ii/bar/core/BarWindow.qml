@@ -131,6 +131,7 @@ Scope {
         readonly property real shellSlideY: (Config.options.bar.bottom ? 1 : -1)
             * shellHide * (Appearance.sizes.barHeight + Appearance.rounding.screenRounding)
         readonly property bool shellSeated: shellHide < 0.999
+        readonly property bool shellFullySeated: shellHide < 0.001
 
         property bool superShow: false
         property bool mustShow: hoverRegion.containsMouse || superShow || GlobalStates.sidebarLeftOpen || GlobalStates.sidebarRightOpen
@@ -146,9 +147,12 @@ Scope {
 
         // Mask extends only over bar content (plus autoHide hover region).
         // Shadow from MultiEffect is visual-only and outside the mask.
-        // In fullscreen, mask becomes empty to allow clicks through.
+        // Keep the mask empty until the translated shell is fully seated. Item-based
+        // regions can otherwise retain the geometry captured midway through the slide.
         mask: Region {
-            item: barRoot.hasFullscreenWindowOnMonitor || root.lockTransitionActive ? null : hoverMaskRegion
+            item: barRoot.hasFullscreenWindowOnMonitor || root.lockTransitionActive || !barRoot.shellFullySeated
+                ? null
+                : hoverMaskRegion
         }
         color: "transparent"
 
