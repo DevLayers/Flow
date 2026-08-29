@@ -65,6 +65,18 @@ Item {
     property bool widgetSelfVisible: (modelData && modelData.hasOwnProperty("visible")) ? modelData.visible : true
     property bool highlighted: false
 
+    // Resolved once, at creation: an arrival gets the entry animation, a rebuild
+    // lands silently. See GlobalStates.isNewBarWidget for why every delegate in
+    // a group is recreated when one widget is added or removed.
+    readonly property bool isNewWidget: GlobalStates.isNewBarWidget(modelData ? modelData.id : "")
+
+    Component.onCompleted: {
+        // Deferred on purpose: every delegate in this same build must still read
+        // `false` and animate in, so the bar keeps its entrance at startup.
+        if (!GlobalStates.barWidgetsIntroduced)
+            Qt.callLater(() => GlobalStates.barWidgetsIntroduced = true);
+    }
+
     // ── Smooth Slide and Move Animations ──────────────────────────────────────
     property real oldX: x
     property real oldY: y
@@ -72,8 +84,11 @@ Item {
     resources: [
         Translate {
             id: entryTranslation
-            x: rootItem.vertical ? 15 : 0
-            y: rootItem.vertical ? 0 : 15
+            // Only an arrival starts offset. A rebuilt widget would otherwise
+            // sit 15px out of place forever, because the animation that walks
+            // this back to zero never runs for it.
+            x: (rootItem.vertical && rootItem.isNewWidget) ? 15 : 0
+            y: (!rootItem.vertical && rootItem.isNewWidget) ? 15 : 0
         },
         Translate {
             id: moveTranslation
@@ -86,7 +101,7 @@ Item {
 
     ParallelAnimation {
         id: entryAnimation
-        running: true
+        running: rootItem.isNewWidget
         NumberAnimation {
             target: entryTranslation
             property: rootItem.vertical ? "x" : "y"
@@ -104,6 +119,7 @@ Item {
             easing.type: Easing.OutCubic
         }
     }
+
 
     NumberAnimation {
         id: moveXAnimation
@@ -310,7 +326,18 @@ Item {
         rootItem.boxResizing = true;
         boxResizeWindow.restart();
     }
-    onHasActiveLayoutContentChanged: rootItem.beginBoxResize()
+    // The very first time content shows up is either this widget arriving — worth
+    // animating from zero — or the same widget being rebuilt, where growing from
+    // zero is exactly the reflow that reads as a flicker.
+    property bool _initialSizeSettled: false
+    onHasActiveLayoutContentChanged: {
+        if (!rootItem._initialSizeSettled) {
+            rootItem._initialSizeSettled = true;
+            if (!rootItem.isNewWidget)
+                return;
+        }
+        rootItem.beginBoxResize();
+    }
     onIsWidgetVisibleInNotchChanged: rootItem.beginBoxResize()
     onIsNotchModeChanged: rootItem.beginBoxResize()
 

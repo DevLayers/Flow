@@ -230,32 +230,30 @@ Item {
                 Layout.maximumWidth: 540
                 Layout.alignment: Qt.AlignHCenter
 
-                property real currentPosition: root.player?.position ?? 0
-                Connections {
-                    target: root.player
-                    function onPositionChanged() {
-                        positionSlider.currentPosition = root.player?.position ?? 0;
-                    }
-                }
                 Timer {
                     interval: 250
                     running: (root.player?.isPlaying ?? false) && !positionSlider.pressed
                     repeat: true
                     onTriggered: {
-                        positionSlider.currentPosition += 0.25;
+                        if (root.player) {
+                            root.player.positionChanged();
+                        }
                     }
                 }
 
                 configuration: StyledSlider.Configuration.Wavy
+                // Media Mode is the foreground experience itself. The desktop
+                // widget pauses this animation behind application windows, but
+                // that optimization must not apply to this dedicated surface.
+                animateWave: root.player?.isPlaying ?? false
                 trackWidth: 14 // Increased thickness for prominent M3 wavy track!
                 highlightColor: coverArt.accentColor
                 trackColor: ColorUtils.transparentize(coverArt.accentColor, 0.25)
                 handleColor: coverArt.accentColor
-                value: (root.player?.length > 0) ? Math.min(1.0, Math.max(0, positionSlider.currentPosition / root.player.length)) : 0
+                value: (root.player?.length > 0) ? Math.min(1.0, Math.max(0, root.player.position / root.player.length)) : 0
                 onMoved: {
                     if (root.player?.length > 0) {
-                        positionSlider.currentPosition = value * root.player.length;
-                        root.player.position = positionSlider.currentPosition;
+                        root.player.position = value * root.player.length;
                     }
                 }
             }
@@ -266,7 +264,7 @@ Item {
                 Layout.alignment: Qt.AlignHCenter
 
                 StyledText {
-                    text: coverArt.formatTime(positionSlider.currentPosition || 0)
+                    text: coverArt.formatTime(root.player?.position || 0)
                     font.pixelSize: Appearance.font.pixelSize.smaller
                     color: coverArt.onAccentContainerColor
                     opacity: 0.8

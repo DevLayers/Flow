@@ -169,6 +169,53 @@ Singleton {
         // overshoot and make a fade look like an abrupt blink.
         animation: Appearance.animation.elementMoveSlow.numberAnimation.createObject(root)
     }
+    // ── Bar widget lifecycle ─────────────────────────────────────────────
+    // Assigning `Config.options.bar.layouts.<group>` replaces the whole JS
+    // array, so the Repeater backing that group destroys and recreates *every*
+    // delegate — not only the one that changed. With no way to tell an arrival
+    // from a rebuild, all of them replayed their entry animation and grew from
+    // zero width at once: that is the flicker when a single widget is added or
+    // removed, and it happened on every config reload too.
+    //
+    // This is the id census of the layout as it stood *before* the current
+    // change. Delegates are recreated synchronously when the array is
+    // reassigned, so they read this while it still describes the old layout;
+    // the refresh is deferred to the next event loop pass on purpose.
+    property var barLayoutSnapshot: ({})
+    readonly property var _barLayoutIds: {
+        const out = {};
+        const groups = [Config.options.bar.layouts.left, Config.options.bar.layouts.center, Config.options.bar.layouts.right];
+        for (let g = 0; g < groups.length; g++) {
+            const group = groups[g];
+            if (!group)
+                continue;
+            for (let i = 0; i < group.length; i++) {
+                const id = group[i] ? group[i].id : "";
+                if (!id)
+                    continue;
+                out[id] = (out[id] ?? 0) + 1;
+            }
+        }
+        return out;
+    }
+    on_BarLayoutIdsChanged: Qt.callLater(() => root.barLayoutSnapshot = root._barLayoutIds)
+
+    // The snapshot is filled in a deferred pass, which lands long before the bar
+    // is first built — so without this the whole bar would come up silently at
+    // startup. The first build flips it (deferred too, so every delegate in that
+    // same build still counts as arriving) and from then on the census rules.
+    property bool barWidgetsIntroduced: false
+
+    // False for a widget that was already on the bar a moment ago — it is being
+    // rebuilt, not arriving, and must land silently.
+    function isNewBarWidget(widgetId) {
+        if (!root.barWidgetsIntroduced)
+            return true;
+        if (!widgetId)
+            return false;
+        return (root.barLayoutSnapshot[widgetId] ?? 0) === 0;
+    }
+
     // ── Bar placement swap ───────────────────────────────────────────────
     // Moving the bar between edges used to be a hard cut: the loaders were
     // destroyed and rebuilt on the other side. This is the shared clock that

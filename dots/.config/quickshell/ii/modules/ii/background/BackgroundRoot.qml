@@ -319,7 +319,10 @@ PanelWindow {
     // Keep the wallpaper below the dedicated widgets surface. Both used to be
     // mapped in WlrLayer.Bottom, where Hyprland's map order could leave the
     // wallpaper above the widgets after startup or a reload.
-    WlrLayershell.layer: bgRoot.mediaModeOpen ? WlrLayer.Overlay : WlrLayer.Background
+    // Media Mode has its own short-lived Overlay window. Promoting this
+    // permanent fullscreen surface as well creates two competing input regions
+    // and can leave the wallpaper above the interactive media controls.
+    WlrLayershell.layer: WlrLayer.Background
     // Media Mode owns focus in a short-lived dedicated PanelWindow. Keeping the
     // persistent wallpaper window focusable would make both surfaces compete.
     WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
