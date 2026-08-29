@@ -60,6 +60,10 @@ ContentPage {
             }
             configPage: Qt.resolvedUrl("HyprKeyboardLayoutPage.qml")
             onOpenSubPage: XkbCatalog.load()
+
+            // The row reads the layout, and nothing else on this tab asks Hyprland for it, so it
+            // showed the fallback ("English (US)") until the sub-page had been opened once.
+            Component.onCompleted: HyprlandGui.watch(["input:kb_layout", "input:kb_variant"])
         }
 
         HyprSwitch {
@@ -210,7 +214,7 @@ ContentPage {
         }
 
         HyprOptionNote {
-            keys: ["input:touchpad:tap_to_click", "input:touchpad:natural_scroll",
+            keys: ["input:touchpad:tap-to-click", "input:touchpad:natural_scroll",
                 "input:touchpad:disable_while_typing"]
         }
     }
