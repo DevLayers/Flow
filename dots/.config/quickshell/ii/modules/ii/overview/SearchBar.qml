@@ -419,10 +419,6 @@ RowLayout {
                 root.activate();
                 return;
             }
-            if (root.showSuggestionsPanel) {
-                root.activate();
-                return;
-            }
             if (appResults.count > 0) {
                 // The delegate became a Loader when settings results joined the
                 // list, so the row that answers to `clicked` is one level down.
@@ -592,7 +588,11 @@ RowLayout {
                 return;
             }
             if (root.matchesShortcut(event, "historyPrevious", "Up")) {
-                if (!root.activePanelMode && searchInput.text.length === 0) {
+                // An idle field is only "nothing to arrow through" when the
+                // results list agrees — idle Suggestions and Always List Apps
+                // both populate it on an empty query, and Up/Down must move
+                // the selection there the same way it does for a typed query.
+                if (!root.activePanelMode && searchInput.text.length === 0 && appResults.count === 0) {
                     root.historyPrevious();
                     event.accepted = true;
                     return;
@@ -601,7 +601,7 @@ RowLayout {
                 event.accepted = true;
                 return;
             } else if (root.matchesShortcut(event, "historyNext", "Down")) {
-                if (!root.activePanelMode && searchInput.text.length === 0) {
+                if (!root.activePanelMode && searchInput.text.length === 0 && appResults.count === 0) {
                     root.historyNext();
                     event.accepted = true;
                     return;

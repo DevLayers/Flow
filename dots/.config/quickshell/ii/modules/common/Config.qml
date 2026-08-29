@@ -621,7 +621,7 @@ Singleton {
     //
     // Bump `currentConfigVersion` and add a matching block to `migrateRaw()`
     // whenever an existing key changes type or meaning.
-    readonly property int currentConfigVersion: 13
+    readonly property int currentConfigVersion: 14
     // Defaults have to be captured before the file lands, because deserializing
     // is what destroys them. FileView loads asynchronously, so at component
     // completion the adapter still holds nothing but the QML defaults.
@@ -984,6 +984,23 @@ Singleton {
                 }
             }
             console.log("[Config] Split Content search results into Quick links and Text snippets");
+        }
+
+        // v13 -> v14: idle Search (empty query) grew a dedicated frecency-ranked
+        // "Suggestions" strip. It is idle-only — a typed query never populates
+        // it — but it shares the same reorder/on-off list as every other
+        // result class, so an upgraded order needs the id too.
+        if (from < 14) {
+            if (raw.search === undefined || raw.search === null
+                    || typeof raw.search !== "object" || Array.isArray(raw.search))
+                raw.search = {};
+            const sectionOrder = raw.search.sectionOrder;
+            if (Array.isArray(sectionOrder) && sectionOrder.length > 0) {
+                const hasSuggested = sectionOrder.some(entry => String(entry?.id ?? entry) === "suggested");
+                if (!hasSuggested)
+                    sectionOrder.unshift({ "id": "suggested" });
+            }
+            console.log("[Config] Added idle Suggestions search result group");
         }
 
         raw.configVersion = root.currentConfigVersion;
@@ -3878,7 +3895,7 @@ Singleton {
                     // only when the exact and layout-corrected passes found
                     // nothing, so a typo returns the app instead of an empty
                     // list. Off by default — it changes what a miss looks like.
-                    property bool enable: false
+                    property bool enable: true
                     // 0.30 lands every case from the upstream PR's table on its
                     // target while still rejecting a query that is simply not a
                     // typo of anything. Lower widens the net.
@@ -3906,8 +3923,8 @@ Singleton {
                 // order and the on/off switch. Reordered from Settings; the
                 // catalogue of ids lives in SearchResultSectionRegistry.
                 property list<var> sectionOrder: [
+                    { "id": "suggested" },
                     { "id": "aliases" },
-                    { "id": "media" },
                     { "id": "best" },
                     { "id": "apps" },
                     { "id": "sites" },
@@ -4177,11 +4194,17 @@ Singleton {
                 property real centerVerticalRatio: 0.3
                 property JsonObject suggestions: JsonObject {
                     property bool enable: false
+                    // Applies only to the "Suggestions" strip below — every
+                    // other idle category shows in full, the same way its
+                    // real-search counterpart does.
                     property int maxSuggestionsPerSection: 5
                     property bool showFrecency: true
                     property bool showCommands: false
                     property bool showApps: true
                     property bool showAliases: true
+                    property bool showToggles: true
+                    property bool showPanels: true
+                    property bool showQuicklinks: true
                 }
             }
 

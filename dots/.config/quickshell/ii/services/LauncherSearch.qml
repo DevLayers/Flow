@@ -218,6 +218,46 @@ Singleton {
     // so that GlobalStates is accessible in the correct QML context
     signal requestOpenSettings
 
+    // Shared between the typed `:` query match below and the idle Suggestions
+    // strip, so the two never drift into two different command lists.
+    readonly property var systemControlDefinitions: [
+        {
+            cmd: "lock",
+            label: Translation.tr("Lock Screen"),
+            execute: () => Quickshell.execDetached(["hyprlock"]),
+            icon: "lock",
+            desc: Translation.tr("Lock the current session")
+        },
+        {
+            cmd: "poweroff",
+            label: Translation.tr("Shutdown PC"),
+            execute: () => Quickshell.execDetached(["systemctl", "poweroff"]),
+            icon: "power_settings_new",
+            desc: Translation.tr("Power off the computer")
+        },
+        {
+            cmd: "reboot",
+            label: Translation.tr("Reboot PC"),
+            execute: () => Quickshell.execDetached(["systemctl", "reboot"]),
+            icon: "restart_alt",
+            desc: Translation.tr("Restart the computer")
+        },
+        {
+            cmd: "suspend",
+            label: Translation.tr("Suspend PC"),
+            execute: () => Quickshell.execDetached(["systemctl", "suspend"]),
+            icon: "bedtime",
+            desc: Translation.tr("Put the computer to sleep")
+        },
+        {
+            cmd: "restart",
+            label: Translation.tr("Restart Quickshell"),
+            execute: () => Quickshell.reload(),
+            icon: "refresh",
+            desc: Translation.tr("Restart Quickshell shell seamlessly")
+        }
+    ]
+
     /**
      * Application matching, as a cascade of increasingly forgiving passes.
      *
@@ -1503,6 +1543,159 @@ Singleton {
     onFileResultsChanged: _scheduleResultsUpdate()
     onMprisTriggerChanged: _scheduleResultsUpdate()
 
+    /**
+     * The idle Search home screen: a Raycast-style root view, built out of
+     * exactly the same result shapes and section ids a typed query uses.
+     *
+     * Every row here reuses the section id its typed-query counterpart would
+     * get from `resultSectionId()` in SearchWidget — "app:" lands in
+     * Applications, "qtoggle:" in Controls, "panel:" in Tools or Settings, and
+     * so on. That is deliberate: it means the whole rendering, keyboard
+     * navigation, pagination and animation pipeline is the *same* ListView a
+     * real query uses, not a second bespoke implementation of it. It also
+     * means a section a user removed from `Config.options.search.sectionOrder`
+     * disappears from this screen too, instead of silently reappearing here.
+     *
+     * The one exception is "suggested:" — a short frecency-ranked strip mixing
+     * favorites, most-used apps and most-used panels. It has no typed-query
+     * equivalent, so it is exempt from `sectionOrder` (see
+     * `SearchWidget.sectionOrder`) and is the only list here still capped by
+     * `maxSuggestionsPerSection`. Every other category below lists everything
+     * it has; the shared ListView already pages and virtualizes long lists.
+     */
+    function _computeIdleSuggestions(): var {
+        const cfg = Config.options.search.suggestions;
+        let result = [];
+
+        if (cfg.showAliases) {
+            for (const entry of root.configuredAliases) {
+                if (!root.aliasAvailable(entry))
+                    continue;
+                const panel = entry.type === "builtin" ? SearchPanelRegistry.byId(entry.target) : null;
+                // App icons are system icon-theme names, not Material Symbol
+                // glyphs — the two IconType values are not interchangeable.
+                const isAppAlias = entry.type === "app";
+                const icon = panel?.icon
+                    ?? (isAppAlias ? (DesktopEntries.byId(entry.target)?.icon ?? "apps")
+                        : entry.type === "folder" ? "folder"
+                        : entry.type === "command" ? "terminal" : "label");
+                result.push(resultComp.createObject(null, {
+                    key: "alias:" + String(entry.alias ?? ""),
+                    name: entry.alias ?? "",
+                    comment: panel?.label ?? entry.target ?? "",
+                    type: Translation.tr("Alias"),
+                    iconName: icon,
+                    iconType: isAppAlias ? LauncherSearchResult.IconType.System : LauncherSearchResult.IconType.Material,
+                    isAlias: true,
+                    keepOverviewOpen: entry.type === "folder" || entry.type === "builtin",
+                    execute: () => root.executeAlias(entry)
+                }));
+            }
+        }
+
+        if (cfg.showApps) {
+            for (const app of AppSearch.list)
+                result.push(root.createAppResultObject(app));
+        }
+
+        if (cfg.showToggles && Config.options.search.modules.quickToggles.enable) {
+            for (const entry of QuickToggleRegistry.entries) {
+                const model = entry.model;
+                result.push(resultComp.createObject(null, {
+                    key: "qtoggle:" + entry.id,
+                    name: model.name,
+                    type: Translation.tr("Quick Toggle"),
+                    comment: model.statusText,
+                    iconName: model.icon,
+                    iconType: LauncherSearchResult.IconType.Material,
+                    verb: model.toggled ? Translation.tr("Disable") : Translation.tr("Enable"),
+                    keepOverviewOpen: true,
+                    controlKind: "switch",
+                    controlValue: model.toggled,
+                    execute: () => model.mainAction()
+                }));
+            }
+        }
+
+        if (cfg.showCommands && Config.options.search.modules.systemControls) {
+            for (const cmd of root.systemControlDefinitions) {
+                result.push(resultComp.createObject(null, {
+                    key: "sys:" + cmd.cmd,
+                    name: cmd.label,
+                    type: Translation.tr("System Control"),
+                    comment: cmd.desc,
+                    verb: Translation.tr("Execute"),
+                    iconName: cmd.icon,
+                    iconType: LauncherSearchResult.IconType.Material,
+                    execute: cmd.execute
+                }));
+            }
+        }
+
+        if (cfg.showPanels) {
+            for (const panel of SearchPanelRegistry.enabledPanels) {
+                if (panel.id === "ai")
+                    continue;
+                result.push(root.createSearchPanelResult(panel));
+            }
+        }
+
+        if (cfg.showQuicklinks && Config.options.search.modules.quicklinks.enable) {
+            for (const link of Array.from(Config.options.search.modules.quicklinks.links ?? []))
+                result.push(root.createQuicklinkResult({ link, remainder: "" }));
+        }
+
+        if (Config.options.search.ai?.trigger === "suggest" && Ai.enabled) {
+            result.push(resultComp.createObject(null, {
+                key: "tool:ai-ask",
+                name: Translation.tr("Ask AI"),
+                comment: Translation.tr("Open a chat with the selected model"),
+                type: Translation.tr("AI chat"),
+                iconName: "auto_awesome",
+                iconType: LauncherSearchResult.IconType.Material,
+                keepOverviewOpen: true,
+                execute: () => Ai.surfaceRouter.open({ surface: "search", focusIntent: "composer" })
+            }));
+        }
+
+        if (cfg.showFrecency) {
+            const cap = Math.max(2, cfg.maxSuggestionsPerSection ?? 5);
+            const candidates = [];
+            if (Config.options.search.favorites.enable) {
+                for (const fav of root.favoriteResults())
+                    candidates.push({ score: Number.POSITIVE_INFINITY, ref: fav });
+            }
+            for (const app of AppSearch.list) {
+                const score = AppUsage.getScore(app.id);
+                if (score > 0)
+                    candidates.push({ score, ref: root.createAppResultObject(app) });
+            }
+            if (Config.options.search.frecencyData.trackPanels) {
+                for (const row of Array.from(Persistent.states.search.panelUsage ?? [])) {
+                    const panel = SearchPanelRegistry.byId(String(row?.id ?? ""));
+                    if (panel?.enabled())
+                        candidates.push({ score: Number(row?.count ?? 0), ref: root.createSearchPanelResult(panel) });
+                }
+            }
+            candidates.sort((a, b) => b.score - a.score);
+
+            const seenKeys = new Set();
+            const suggested = [];
+            for (const candidate of candidates) {
+                const key = String(candidate.ref?.key ?? "");
+                if (key.length === 0 || seenKeys.has(key))
+                    continue;
+                seenKeys.add(key);
+                suggested.push(Object.assign({}, candidate.ref, { key: "suggested:" + key }));
+                if (suggested.length >= cap)
+                    break;
+            }
+            result = suggested.concat(result);
+        }
+
+        return result;
+    }
+
     function _computeResults() {
         let _apps = AppSearch.list; // Keep reference for reactive tracking (unused directly)
 
@@ -1557,6 +1750,9 @@ Singleton {
                 const appResultObjects = AppSearch.fuzzyQuery("").slice(0, 60).map(entry => root.createAppResultObject(entry));
                 return mprisResults.concat(appResultObjects);
             }
+
+            if (Config.options.search.suggestions.enable)
+                return mprisResults.concat(root._computeIdleSuggestions());
 
             return mprisResults;
         }
@@ -1935,43 +2131,7 @@ Singleton {
         }
 
         if (Config.options.search.modules.systemControls && (hasColonPrefix || queryClean.length >= 2)) {
-            const sysCommands = [
-                {
-                    cmd: "lock",
-                    label: Translation.tr("Lock Screen"),
-                    execute: () => Quickshell.execDetached(["hyprlock"]),
-                    icon: "lock",
-                    desc: Translation.tr("Lock the current session")
-                },
-                {
-                    cmd: "poweroff",
-                    label: Translation.tr("Shutdown PC"),
-                    execute: () => Quickshell.execDetached(["systemctl", "poweroff"]),
-                    icon: "power_settings_new",
-                    desc: Translation.tr("Power off the computer")
-                },
-                {
-                    cmd: "reboot",
-                    label: Translation.tr("Reboot PC"),
-                    execute: () => Quickshell.execDetached(["systemctl", "reboot"]),
-                    icon: "restart_alt",
-                    desc: Translation.tr("Restart the computer")
-                },
-                {
-                    cmd: "suspend",
-                    label: Translation.tr("Suspend PC"),
-                    execute: () => Quickshell.execDetached(["systemctl", "suspend"]),
-                    icon: "bedtime",
-                    desc: Translation.tr("Put the computer to sleep")
-                },
-                {
-                    cmd: "restart",
-                    label: Translation.tr("Restart Quickshell"),
-                    execute: () => Quickshell.reload(),
-                    icon: "refresh",
-                    desc: Translation.tr("Restart Quickshell shell seamlessly")
-                },
-            ];
+            const sysCommands = root.systemControlDefinitions;
             const matches = sysCommands.filter(c => c.cmd.startsWith(queryClean));
             for (const match of matches) {
                 const isPendingConfirm = root.confirmKey === match.cmd;

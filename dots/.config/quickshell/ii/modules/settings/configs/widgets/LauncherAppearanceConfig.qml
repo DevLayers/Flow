@@ -235,14 +235,14 @@ Item {
                 ConfigSwitch {
                     buttonIcon: "auto_awesome"
                     text: Translation.tr("Empty-query suggestions")
-                    description: Translation.tr("Shows app suggestions, frequent actions, and recent query chips on empty query.")
+                    description: Translation.tr("Fills the normal Search results with your most-used apps, panels, toggles and more as soon as it opens.")
                     checked: Config.options.search.suggestions.enable
                     configPage: Qt.resolvedUrl("LauncherSuggestionsConfig.qml")
                     onCheckedChanged: {
                         Config.options.search.suggestions.enable = checked;
                     }
                     StyledToolTip {
-                        text: Translation.tr("Toggle suggestions panel. Click button text to configure apps, items count, and actions.")
+                        text: Translation.tr("Toggle idle Search suggestions. Click the button text to choose which sections show.")
                     }
                 }
             }

@@ -394,6 +394,12 @@ Item {
                 root.consumePanelIntent();
         }
     }
+    // Idle Search (empty query, suggestions on) renders through the exact same
+    // ListView as a typed query — LauncherSearch populates `results` with a
+    // curated home screen instead of match rows (see
+    // LauncherSearch._computeIdleSuggestions). This flag is now purely
+    // cosmetic: it widens the field and switches the search icon's shape, the
+    // same way a real query does, before any row has actually loaded.
     readonly property bool showSuggestionsPanel: Config.options.search.suggestions.enable && !Config.options.search.alwaysListApps && !root.isAnySpecialMode && root.searchingText === ""
     readonly property bool alwaysListAppsMode: Config.options.search.alwaysListApps && !root.isAnySpecialMode
     readonly property bool showIdleNowPlaying: searchingText === ""
@@ -401,7 +407,7 @@ Item {
         && !alwaysListAppsMode
         && (Config.options.search.nowPlaying?.enable ?? Config.options.search.showNowPlayingBubble)
         && LauncherSearch.results.some(result => String(result?.key ?? "") === "mpris:now-playing")
-    property bool showResults: searchingText !== "" || isAnySpecialMode || alwaysListAppsMode || showIdleNowPlaying
+    property bool showResults: searchingText !== "" || isAnySpecialMode || alwaysListAppsMode || showIdleNowPlaying || showSuggestionsPanel
     property string overviewPosition: (Config.options.bar?.bottom ? "bottom" : (Config.options.overview?.position ?? ""))
 
     // Re-enable item transitions after panel open animation completes
@@ -487,7 +493,7 @@ Item {
                 // Wipe stale results immediately so panel opens empty (no ghost expansion)
                 resultModel.clear();
                 root.loadedResultsCount = root.resultPageSize;
-                if (root.alwaysListAppsMode || root.showIdleNowPlaying) {
+                if (root.alwaysListAppsMode || root.showIdleNowPlaying || root.showSuggestionsPanel) {
                     Qt.callLater(() => {
                         appResults.applyResultDiff(root.processResults(LauncherSearch.results));
                         root.focusFirstItem();
@@ -549,10 +555,7 @@ Item {
     readonly property bool openStateStable: root.inNotchMode ? false : (!root._heightAnimating && !root._widthAnimating)
 
     function focusFirstItem() {
-        if (root.showSuggestionsPanel) {
-            if (suggestionsPanelLoader.item)
-                suggestionsPanelLoader.item.focusFirst();
-        } else if (root.isAiMode) {
+        if (root.isAiMode) {
             root.focusSearchInput();
         } else if (root.activePanelItem && typeof root.activePanelItem.focusInput === "function") {
             root.activePanelItem.focusInput();
@@ -837,7 +840,14 @@ Item {
     readonly property bool bestMatchActive: Config.options.search.bestMatch?.enable === true
     readonly property bool bestMatchUniformList: Config.options.search.bestMatch?.uniformList !== false
 
-    readonly property var sectionOrder: SearchResultSectionRegistry.activeOrder
+    // "suggested" only ever holds rows while Search is idle (see
+    // LauncherSearch._computeIdleSuggestions) and is otherwise an empty,
+    // harmless bucket — but a config saved before that feature existed may
+    // still lack the id entirely. Guarantee it is present exactly once rather
+    // than relying on every persisted sectionOrder to have been migrated.
+    readonly property var sectionOrder: SearchResultSectionRegistry.activeOrder.indexOf("suggested") !== -1
+        ? SearchResultSectionRegistry.activeOrder
+        : ["suggested"].concat(SearchResultSectionRegistry.activeOrder)
 
     // Category filtering is a view concern: providers still rank one complete
     // result set, while Tab changes which classes the normal Search exposes.
@@ -861,8 +871,10 @@ Item {
     })
     readonly property var activeResultCategory: root.availableResultCategories.find(category => category.id === root.resultCategoryId)
         ?? root.resultCategoryDefinitions[0]
+    // Idle Suggestions is already excluded here without a dedicated check:
+    // searchingText is "" and alwaysListAppsMode is false in that state, so
+    // the length/alwaysListApps condition below never passes.
     readonly property bool showNormalCategoryFilter: !root.isAnySpecialMode
-        && !root.showSuggestionsPanel
         && !root.queryHasAnyPrefix
         && (root.searchingText.trim().length > 0 || root.alwaysListAppsMode)
 
@@ -923,6 +935,10 @@ Item {
 
     function resultSectionId(item): string {
         const key = String(item?.key ?? "");
+        // Idle-only frecency strip (see LauncherSearch._computeIdleSuggestions).
+        // Checked first: it wraps another row's own key, e.g. "suggested:app:x".
+        if (key.startsWith("suggested:"))
+            return "suggested";
         if (item?.isFallback === true)
             return "continue";
         if (item?.isAlias === true)
@@ -1278,7 +1294,7 @@ Item {
         // container's corners — only the hosted panels, which draw to their own
         // edges, actually need the mask.
         layer.enabled: !GlobalStates.searchConnectActive
-            && (root.activePanelUsesHost || root.isAiMode || root.showSuggestionsPanel)
+            && (root.activePanelUsesHost || root.isAiMode)
         layer.effect: OpacityMask {
             maskSource: Rectangle {
                 width: searchWidgetContent.width
@@ -1308,9 +1324,7 @@ Item {
         implicitHeight: {
             let bottomMargin = GlobalStates.searchConnectActive ? 16 : 10;
             let desiredHeight = 0;
-            if (root.showSuggestionsPanel)
-                desiredHeight = (suggestionsPanelLoader.item ? suggestionsPanelLoader.item.implicitHeight : (Config.options.search.baseHeight ?? 500)) + searchBar.height + searchBar.verticalPadding * 2 + bottomMargin;
-            else if (root.activePanel)
+            if (root.activePanel)
                 desiredHeight = (root.activePanelItem?.implicitHeight ?? 520) + (root.isAiMode ? 16 : searchBar.height + searchBar.verticalPadding * 2 + bottomMargin);
             else
                 desiredHeight = gridLayout.implicitHeight;
@@ -1493,23 +1507,8 @@ Item {
                 onNavigateSectionUp: searchKeyRouter.dispatch("sectionPrevious")
                 onNavigateSectionDown: searchKeyRouter.dispatch("sectionNext")
 
-                onNavigateUp: {
-                    if (root.showSuggestionsPanel) {
-                        if (suggestionsPanelLoader.item)
-                            suggestionsPanelLoader.item.navigateUp();
-                    } else {
-                        searchKeyRouter.dispatch("navigateUp");
-                    }
-                }
-
-                onNavigateDown: {
-                    if (root.showSuggestionsPanel) {
-                        if (suggestionsPanelLoader.item)
-                            suggestionsPanelLoader.item.navigateDown();
-                    } else {
-                        searchKeyRouter.dispatch("navigateDown");
-                    }
-                }
+                onNavigateUp: searchKeyRouter.dispatch("navigateUp")
+                onNavigateDown: searchKeyRouter.dispatch("navigateDown")
 
                 onNavigateLeft: {
                     if (root.activePanelItem)
@@ -1525,12 +1524,7 @@ Item {
                         searchKeyRouter.dispatch("navigateRight");
                 }
 
-                onActivate: {
-                    if (root.showSuggestionsPanel && suggestionsPanelLoader.item)
-                        suggestionsPanelLoader.item.activateSelected();
-                    else
-                        searchKeyRouter.dispatch("activateSelected");
-                }
+                onActivate: searchKeyRouter.dispatch("activateSelected")
 
                 onDeleteSelected: {
                     if (root.activePanelItem && typeof root.activePanelItem.deleteSelected === "function")
@@ -1550,9 +1544,7 @@ Item {
                     ? Math.min(registeredPanelHostLoader.item?.implicitHeight ?? 0, root.activePanelHeightBudget)
                     : (root.isAiMode
                         ? (aiPanelLoader.item?.implicitHeight ?? 520) + Appearance.sizes.elevationMargin * 2
-                        : (root.showSuggestionsPanel
-                            ? (suggestionsPanelLoader.item?.implicitHeight ?? (Config.options.search.baseHeight ?? 500))
-                            : appResultsSurface.implicitHeight))
+                        : appResultsSurface.implicitHeight)
                 height: implicitHeight
                 Layout.row: root.overviewPosition == "bottom" ? 0 : 1
 
@@ -2630,27 +2622,6 @@ Item {
                         property: "searchHost"
                         value: root
                         when: aiPanelLoader.status === Loader.Ready
-                    }
-                }
-
-                Loader {
-                    id: suggestionsPanelLoader
-                    active: root.showSuggestionsPanel || opacity > 0.01
-                    visible: opacity > 0.01
-                    anchors.fill: parent
-                    source: "SuggestionsPanel.qml"
-                    opacity: root.showSuggestionsPanel ? 1.0 : 0.0
-
-                    transform: Translate {
-                        y: (1.0 - suggestionsPanelLoader.opacity) * -16
-                    }
-                    Behavior on opacity {
-                        enabled: !root.inNotchMode
-                        NumberAnimation {
-                            duration: Appearance.animation.elementMoveFast.duration
-                            easing.type: Appearance.animation.elementMoveFast.type
-                            easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
-                        }
                     }
                 }
             }

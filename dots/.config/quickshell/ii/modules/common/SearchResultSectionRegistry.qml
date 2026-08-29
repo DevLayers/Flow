@@ -22,6 +22,16 @@ Singleton {
 
     readonly property var sections: [
         {
+            // Idle-only: a short, frecency-ranked strip (favorites, most-used
+            // apps and panels) shown above everything else when Search opens
+            // with an empty query. Never populated for a typed query, so it
+            // is exempt from the user's configurable `sectionOrder` — see
+            // `SearchWidget.sectionOrder`.
+            id: "suggested",
+            title: qsTr("Suggestions"),
+            icon: "auto_awesome"
+        },
+        {
             id: "aliases",
             title: qsTr("Aliases"),
             icon: "label"
