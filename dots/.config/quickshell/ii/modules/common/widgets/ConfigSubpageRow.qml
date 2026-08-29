@@ -37,13 +37,18 @@ RippleButton {
         root.openSubPage();
         if (root.configPage.toString() !== "") {
             var p = root.parent;
+            var searchSection = null;
             while (p) {
                 if (typeof p.activeSubPage !== "undefined") {
                     p.activeSubPage = root.configPage;
                     return;
                 }
+                if (p.searchResult === true && p.navigateToPage !== undefined)
+                    searchSection = p;
                 p = p.parent;
             }
+            if (searchSection)
+                searchSection.navigateToPage(root.configPage.toString());
         }
     }
 

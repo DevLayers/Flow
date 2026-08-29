@@ -255,7 +255,7 @@ Item {
         ContentSection {
             icon: "tune"
             title: Translation.tr("Behavior & Interactions")
-            tooltip: Translation.tr("Configure scroll actions, tooltips, popups and monitor targeting.")
+            tooltip: Translation.tr("Configure scroll actions, bar popups, floating popups, and monitor targeting.")
 
             ColumnLayout {
                 Layout.fillWidth: true
@@ -278,7 +278,7 @@ Item {
 
                 ConfigSwitch {
                     buttonIcon: "tooltip"
-                    text: Translation.tr("Enable tooltips")
+                    text: Translation.tr("Bar popups")
                     checked: Config.options.bar.tooltips.enableTooltips
                     configPage: Qt.resolvedUrl("widgets/BarTooltipsConfig.qml")
                     property bool readyForToggle: false
@@ -292,7 +292,7 @@ Item {
 
                 ConfigSwitch {
                     buttonIcon: "open_in_new"
-                    text: Translation.tr("Enable popups")
+                    text: Translation.tr("Floating popups")
                     checked: Config.options.bar.tooltips.enablePopups
                     configPage: Qt.resolvedUrl("widgets/BarPopupsConfig.qml")
                     property bool readyForToggle: false
