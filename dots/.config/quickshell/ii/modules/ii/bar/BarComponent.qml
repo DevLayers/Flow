@@ -1,3 +1,4 @@
+import qs
 import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
@@ -65,12 +66,21 @@ Item {
     property bool widgetSelfVisible: (modelData && modelData.hasOwnProperty("visible")) ? modelData.visible : true
     property bool highlighted: false
 
-    // Resolved once, at creation: an arrival gets the entry animation, a rebuild
-    // lands silently. See GlobalStates.isNewBarWidget for why every delegate in
-    // a group is recreated when one widget is added or removed.
-    readonly property bool isNewWidget: GlobalStates.isNewBarWidget(modelData ? modelData.id : "")
+    // An arrival gets the entry animation, a rebuild lands silently. See
+    // GlobalStates.isNewBarWidget for why every delegate in a group is recreated
+    // when one widget is added or removed.
+    //
+    // A plain property assigned once, NOT a binding. QML captures dependencies
+    // dynamically, including properties read inside a called function — so as a
+    // binding this re-evaluated when `barWidgetsIntroduced` or
+    // `barLayoutSnapshot` changed, flipped to false a frame later, and stopped
+    // `entryAnimation` mid-flight. That left `wrapper.opacity` frozen near zero
+    // and `entryTranslation` frozen at 15px: invisible, mispositioned widgets
+    // that only came back when something forced a rebuild.
+    property bool isNewWidget: false
 
     Component.onCompleted: {
+        rootItem.isNewWidget = GlobalStates.isNewBarWidget(modelData ? modelData.id : "");
         // Deferred on purpose: every delegate in this same build must still read
         // `false` and animate in, so the bar keeps its entrance at startup.
         if (!GlobalStates.barWidgetsIntroduced)
@@ -84,11 +94,12 @@ Item {
     resources: [
         Translate {
             id: entryTranslation
-            // Only an arrival starts offset. A rebuilt widget would otherwise
-            // sit 15px out of place forever, because the animation that walks
-            // this back to zero never runs for it.
-            x: (rootItem.vertical && rootItem.isNewWidget) ? 15 : 0
-            y: (!rootItem.vertical && rootItem.isNewWidget) ? 15 : 0
+            // Rests at zero. The entry animation declares its own `from: 15`, so
+            // a widget that never animates is simply in place — no binding here
+            // can strand a rebuilt widget 15px off, and nothing outside the
+            // animation can move it.
+            x: 0
+            y: 0
         },
         Translate {
             id: moveTranslation
@@ -102,6 +113,17 @@ Item {
     ParallelAnimation {
         id: entryAnimation
         running: rootItem.isNewWidget
+
+        // Insurance. An entry animation must never be able to leave a widget
+        // invisible or displaced — that is exactly what happened when `running`
+        // flipped mid-flight. Whatever stops this, normally or not, the widget
+        // ends up where it belongs.
+        onStopped: {
+            wrapper.opacity = 1;
+            entryTranslation.x = 0;
+            entryTranslation.y = 0;
+        }
+
         NumberAnimation {
             target: entryTranslation
             property: rootItem.vertical ? "x" : "y"

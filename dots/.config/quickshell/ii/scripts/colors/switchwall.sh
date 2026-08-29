@@ -148,6 +148,15 @@ is_video() {
     [[ "$extension" == "mp4" || "$extension" == "webm" || "$extension" == "mkv" || "$extension" == "avi" || "$extension" == "mov" ]] && return 0 || return 1
 }
 
+# mpvpaper paints the *desktop* background layer. The lockscreen and the
+# light-mode variant are only ever stored paths — they never own that layer. So
+# picking a video for one of them must not take the live desktop over, and
+# picking a static image for one of them must not kill a video the desktop is
+# already playing. Both used to happen.
+is_desktop_target() {
+    [[ -z "$lockscreen_flag" && -z "$lightmode_flag" ]]
+}
+
 kill_existing_mpvpaper() {
     pkill -f -9 mpvpaper || true
 }
@@ -576,7 +585,13 @@ done"
 
             # Set wallpaper path
             if [[ -z "$colors_only_flag" && -z "$noswitch_flag" ]]; then
-                set_wallpaper_path "$imgpath" "${lockscreen_flag:+lockscreen}"
+                if [[ -n "$lightmode_flag" ]]; then
+                    set_wallpaper_path "$imgpath" "lightmode"
+                elif [[ -n "$lockscreen_flag" ]]; then
+                    set_wallpaper_path "$imgpath" "lockscreen"
+                else
+                    set_wallpaper_path "$imgpath" "desktop"
+                fi
             fi
 
             # Set video wallpaper
@@ -584,37 +599,48 @@ done"
             if [[ -f "${imgpath%.*}_1080p.mp4" ]]; then
                 video_path="${imgpath%.*}_1080p.mp4"
             fi
-            monitors=$(hyprctl monitors -j | jq -r '.[] | .name')
-            for monitor in $monitors; do
-                nohup setsid mpvpaper -o "$VIDEO_OPTS input-ipc-server=/tmp/mpvpaper-$monitor.sock" "$monitor" "$video_path" >/dev/null 2>&1 &
-                sleep 0.1
-            done
+            if is_desktop_target; then
+                monitors=$(hyprctl monitors -j | jq -r '.[] | .name')
+                for monitor in $monitors; do
+                    nohup setsid mpvpaper -o "$VIDEO_OPTS input-ipc-server=/tmp/mpvpaper-$monitor.sock" "$monitor" "$video_path" >/dev/null 2>&1 &
+                    sleep 0.1
+                done
+            fi
 
             # Extract first frame for color generation
             thumbnail="$THUMBNAIL_DIR/$(basename "$imgpath").jpg"
             ffmpeg -y -i "$imgpath" -vframes 1 "$thumbnail" 2>/dev/null
 
-            # Set thumbnail path
-            set_thumbnail_path "$thumbnail"
+            # Set thumbnail path. Global, so it belongs to the desktop wallpaper —
+            # a lockscreen or light-mode pick must not repaint the desktop preview.
+            if is_desktop_target; then
+                set_thumbnail_path "$thumbnail"
+            fi
 
             if [ -f "$thumbnail" ]; then
                 matugen_args+=(image "$thumbnail")
                 generate_colors_material_args=(--path "$thumbnail")
-                create_restore_script "$video_path"
+                if is_desktop_target; then
+                    create_restore_script "$video_path"
+                fi
             else
                 echo "Cannot create image to colorgen"
                 remove_restore
                 exit 1
             fi
         else
-            kill_existing_mpvpaper
+            if is_desktop_target; then
+                kill_existing_mpvpaper
+            fi
             matugen_args+=(image "$imgpath")
             generate_colors_material_args=(--path "$imgpath")
             # Update wallpaper path in config
             if [[ -z "$colors_only_flag" && -z "$noswitch_flag" ]]; then
                 set_wallpaper_path "$imgpath" "${lockscreen_flag:+lockscreen}"
             fi
-            remove_restore
+            if is_desktop_target; then
+                remove_restore
+            fi
         fi
     fi
     fi

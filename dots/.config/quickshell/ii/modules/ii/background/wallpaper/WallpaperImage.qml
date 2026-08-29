@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Effects
+import QtMultimedia
 import Quickshell
 import Quickshell.Wayland
 import Quickshell.Hyprland
@@ -452,6 +453,53 @@ Item {
                         lockAnimationActive: wallpaperImageRoot.lockAnimationActive
                     }
 
+    // ── Video lockscreen wallpaper ───────────────────────────────────────
+                    // A video picked for the lockscreen used to be handed to
+                    // mpvpaper, which owns the *desktop* background layer — so it
+                    // replaced the live wallpaper instead of the lock screen.
+                    // switchwall.sh now leaves that layer alone for variant
+                    // targets (see is_desktop_target) and the shell plays the
+                    // file itself, here, only while locked.
+                    Loader {
+                        id: lockscreenVideo
+                        anchors.fill: parent
+                        z: 1
+
+                        readonly property bool isVideoLockscreen: lockscreenWallpaper.isActive
+                            && Wallpapers.isVideoFile(String(wallpaperImageRoot.lockscreenWallpaperPath).toLowerCase())
+                        // Built on lock and torn down on unlock: a decoder has no
+                        // business staying alive behind an unlocked desktop.
+                        active: isVideoLockscreen && GlobalStates.screenLocked
+                        visible: active && opacity > 0
+                        opacity: active ? 1 : 0
+                        Behavior on opacity {
+                            NumberAnimation {
+                                duration: Math.round(750 * Appearance.animMultiplier)
+                                easing.type: Easing.InOutCubic
+                            }
+                        }
+
+                        sourceComponent: Item {
+                            MediaPlayer {
+                                id: lockVideoPlayer
+                                source: CF.FileUtils.trimFileProtocol(wallpaperImageRoot.lockscreenWallpaperPath)
+                                autoPlay: true
+                                loops: MediaPlayer.Infinite
+                                // Muted deliberately: this is wallpaper, and the
+                                // lock screen is the last place that should make
+                                // noise on its own.
+                                audioOutput: null
+                                videoOutput: lockVideoOutput
+                                Component.onCompleted: play()
+                            }
+                            VideoOutput {
+                                id: lockVideoOutput
+                                anchors.fill: parent
+                                fillMode: VideoOutput.PreserveAspectCrop
+                            }
+                        }
+                    }
+
                     TransitionImage {
                         id: lockscreenWallpaper
                         anchors.fill: parent
@@ -469,7 +517,12 @@ Item {
 
                         // GPU: same dynamic sourceSize cap as main wallpaper
                         sourceSize: Config.options.background.scaleLargeWallpapers ? Qt.size(screen.width > 0 ? Math.round(screen.width * preferredWallpaperScale) : 1920, screen.height > 0 ? Math.round(screen.height * preferredWallpaperScale) : 1080) : Qt.size(-1, -1)
-                        imageSource: (isActive && !wallpaperSafetyTriggered) ? wallpaperImageRoot.lockscreenWallpaperPath : ""
+                        // An Image cannot decode a video container; handing it one
+                        // just produced an error and a blank layer. The poster frame
+                        // ffmpeg extracts stands in until the decoder has a picture.
+                        imageSource: (isActive && !wallpaperSafetyTriggered && !lockscreenVideo.isVideoLockscreen)
+                            ? wallpaperImageRoot.lockscreenWallpaperPath
+                            : ""
                         animated: Config.options.background.animateWallpaperChanges
                         transitionShader: Config.options.background.wallpaperAnimation
                         shadersPath: Qt.resolvedUrl("../shaders")
