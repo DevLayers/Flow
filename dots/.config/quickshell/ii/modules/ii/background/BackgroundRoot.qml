@@ -404,12 +404,42 @@ PanelWindow {
         mediaModeLoader.active = true;
     }
 
+    // The media mode surface takes keyboard focus on demand, and it is a
+    // short-lived window: destroying it while it still holds that focus leaves
+    // the compositor routing input at a surface that no longer exists, and every
+    // click on the shell is swallowed until some other focus-taking window (the
+    // dashboard, a popup) resets the seat.
+    //
+    // Before media mode got its own window this could not happen: the surface
+    // was the wallpaper's, it outlived the mode, and its focus was bound to
+    // `mediaModeOpen ? OnDemand : None` — released while the surface was still
+    // alive. The dedicated window has to do that release explicitly.
+    property Timer mediaModeTeardown: Timer {
+        // One frame is enough for the set_keyboard_interactivity(none) commit to
+        // reach the compositor; this is deliberately a little longer.
+        interval: 60
+        repeat: false
+        onTriggered: {
+            if (mediaModeLoader.active)
+                mediaModeLoader.active = false;
+            bgRoot.releaseMediaModeRegistration();
+        }
+    }
+
     function closeMediaMode() {
         MusicVideoService.stopVideo();
-        if (mediaModeLoader.active)
-            mediaModeLoader.active = false;
-        // onActiveChanged normally releases this synchronously. Keep the call
-        // idempotent so teardown also works while a monitor is disappearing.
+        if (!mediaModeLoader.active) {
+            // Idempotent: teardown also has to work while a monitor is
+            // disappearing, when the loader is already gone.
+            bgRoot.releaseMediaModeRegistration();
+            return;
+        }
+        if (mediaModeLoader.item) {
+            mediaModeLoader.item.releasingFocus = true;
+            bgRoot.mediaModeTeardown.restart();
+            return;
+        }
+        mediaModeLoader.active = false;
         bgRoot.releaseMediaModeRegistration();
     }
 
@@ -629,7 +659,13 @@ PanelWindow {
 
                     WlrLayershell.namespace: "quickshell:mediaMode"
                     WlrLayershell.layer: WlrLayer.Overlay
-                    WlrLayershell.keyboardFocus: WlrKeyboardFocus.OnDemand
+                    // Handed back before the window is destroyed — see
+                    // closeMediaMode(). A short-lived layer surface must never
+                    // die holding keyboard focus.
+                    property bool releasingFocus: false
+                    WlrLayershell.keyboardFocus: mediaModeWindow.releasingFocus
+                        ? WlrKeyboardFocus.None
+                        : WlrKeyboardFocus.OnDemand
 
                     anchors {
                         top: true
