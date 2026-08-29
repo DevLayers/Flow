@@ -88,7 +88,7 @@ ShellRoot {
         if (!(Config.options && Config.options.appearance && Config.options.appearance.openrgb && Config.options.appearance.openrgb.applyOnStartup))
             return;
         openRgbStartupApplied = true;
-        openRgbApplyProc.command = ["python", openRgbApplyScript];
+        openRgbApplyProc.command = ["python3", openRgbApplyScript];
         openRgbApplyProc.running = false;
         openRgbApplyProc.running = true;
     }
