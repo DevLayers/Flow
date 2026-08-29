@@ -597,8 +597,30 @@ Item {
 
                         if (item.Layout !== undefined && item.Layout.fillHeight) {
                             item.height = Qt.binding(() => itemLoader.height);
-                        } else if (item.implicitWidth === item.implicitHeight) {
-                            item.height = Qt.binding(() => item.width);
+                        } else if (item.Layout !== undefined) {
+                            // Square-by-design widgets (icon buttons) follow the bar
+                            // width in vertical mode. Two things were wrong with the
+                            // old form, `else if (implicitWidth === implicitHeight)
+                            // item.height = width`:
+                            //
+                            //  • It was evaluated once, at load. A widget that has
+                            //    not measured itself yet reports 0x0 — "square" by
+                            //    that test — and got its height locked to the bar
+                            //    width forever. SysTray is `hasItems ? … : 0` and
+                            //    the keyboard pill is `visible ? … : 0`, so both
+                            //    started there and never recovered.
+                            //  • It wrote `height` on an item inside a layout, so
+                            //    the layout still reserved implicitHeight while the
+                            //    widget rendered at another one. That gap is the
+                            //    overlap: the group packed its children by a height
+                            //    none of them was actually drawn at.
+                            //
+                            // Reactive, and through the layout, so what is reserved
+                            // is what is drawn.
+                            item.Layout.preferredHeight = Qt.binding(() =>
+                                (item.implicitWidth > 0 && item.implicitWidth === item.implicitHeight)
+                                    ? item.width
+                                    : item.implicitHeight);
                         }
                     }
                 }
