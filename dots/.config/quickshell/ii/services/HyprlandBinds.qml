@@ -835,6 +835,14 @@ Singleton {
         const entry = root.catalogueEntry(draft.actionId ?? "");
         if (entry && entry.param !== undefined && String(draft.actionValue ?? "").trim() === "")
             out.push(Translation.tr("Fill in what this action needs."));
+        // Hyprland refuses these pairings ("flags e is mutually exclusive with r and o", "flags c
+        // and g are mutually exclusive") - and does it silently, with no config error: the bind
+        // simply never registers. Saying so here is the only warning anyone gets.
+        const opts = draft.opts ?? {};
+        if (opts.repeating === true && (opts.release === true || opts.long_press === true))
+            out.push(Translation.tr("Repeat while held cannot be combined with firing when the key is let go or on a long press. Hyprland would drop the shortcut."));
+        if (opts.click === true && opts.drag === true)
+            out.push(Translation.tr("A mouse shortcut fires either on the click or while dragging, not both."));
         return out;
     }
 

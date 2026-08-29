@@ -183,6 +183,10 @@ Item {
             HyprOptionNote {
                 notes: {
                     const out = [];
+                    // Why the Save button is off, said where the person is looking. It used to be
+                    // disabled with no word about it.
+                    for (const problem of subPageRoot.problems)
+                        out.push({ "icon": "error", "always": true, "text": problem });
                     for (const other of subPageRoot.occupants)
                         out.push({
                             "icon": "warning",
