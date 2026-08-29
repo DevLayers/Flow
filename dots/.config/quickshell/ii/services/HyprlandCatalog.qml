@@ -391,8 +391,22 @@ Singleton {
         if (kind === "bool") return value === true || value === 1
             ? Translation.tr("On") : Translation.tr("Off");
         if (kind === "color") return root.colorText(value);
+        if (kind === "gradient") return root.gradientText(value);
         if (kind === "vec2") return Array.from(value ?? []).join(", ");
+        // The shapes this page writes, which come back through displayValue() as the managed
+        // value: a four-sided gap table, and anything else the writer builds as an object.
+        if (kind === "gaps" && value !== null && typeof value === "object")
+            return [value.top, value.right, value.bottom, value.left].join(" ");
+        if (value !== null && typeof value === "object") return JSON.stringify(value);
         return String(value);
+    }
+
+    /// `rgba(RRGGBBAA)` / `rgb(RRGGBB)` - the shape the hub writes - as the AARRGGBB word hyprctl
+    /// prints, so the readers below take either. Null when `value` is not that shape.
+    function _writtenColor(value: var): var {
+        const m = String(value ?? "").trim().match(/^rgba?\(([0-9a-fA-F]{6})([0-9a-fA-F]{2})?\)$/);
+        if (!m) return null;
+        return (m[2] ?? "ff") + m[1];
     }
 
     /**
@@ -402,6 +416,8 @@ Singleton {
      * gradient string of AARRGGBB words with an angle on the end, or nothing at all.
      */
     function colorText(value: var): string {
+        const written = root._writtenColor(value);
+        if (written !== null) value = written;
         if (typeof value === "number")
             return `#${(value >>> 0).toString(16).padStart(8, "0").slice(2)}`;
         const first = String(value ?? "").trim().split(/\s+/)[0] ?? "";
@@ -411,6 +427,8 @@ Singleton {
 
     /// `#rrggbb` and an alpha of 0-255 for the swatch and the picker, from either shape above.
     function colorParts(value: var): var {
+        const written = root._writtenColor(value);
+        if (written !== null) value = written;
         if (typeof value === "number") {
             const packed = value >>> 0;
             return ({ "rgb": `#${packed.toString(16).padStart(8, "0").slice(2)}`,
@@ -423,10 +441,21 @@ Singleton {
 
     /// A gradient string as its colours and its angle, so the editor can put it back together.
     function gradientParts(value: var): var {
+        // The shape gradientValue() builds, back from the managed layer.
+        if (value !== null && typeof value === "object" && value.colors !== undefined)
+            return ({ "colors": Array.from(value.colors).map(item => String(item).replace(/^0x/i, "")),
+                "angle": Number(value.angle) || 0 });
         const words = String(value ?? "").trim().split(/\s+/).filter(word => word !== "");
         const colors = words.filter(word => /^[0-9a-fA-F]{8}$/.test(word));
         const angleWord = words.find(word => /deg$/.test(word)) ?? "0deg";
         return ({ "colors": colors, "angle": parseFloat(angleWord) || 0 });
+    }
+
+    /// A gradient as hyprctl prints it, whichever shape it arrived in.
+    function gradientText(value: var): string {
+        const parts = root.gradientParts(value);
+        if (parts.colors.length === 0) return String(value ?? "");
+        return `${parts.colors.join(" ")} ${parts.angle}deg`;
     }
 
     /// The shape Hyprland accepts for a gradient. Never the shape it prints.
