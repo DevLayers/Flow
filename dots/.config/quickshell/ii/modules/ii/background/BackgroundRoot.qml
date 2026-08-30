@@ -37,7 +37,9 @@ PanelWindow {
     readonly property bool isEditMonitor: GlobalStates.editModeMonitor !== "" && GlobalStates.editModeMonitor === bgRoot.editScreenName
     readonly property real editProgress: bgRoot.isEditMonitor ? GlobalStates.editProgress : 0
     readonly property var editViewport: EditModeInsets.viewportFor(bgRoot.editScreenName, bgRoot.width, bgRoot.height)
-    readonly property var editTransform: CF.EditModeLogic.atProgress(bgRoot.editViewport, bgRoot.editProgress, 0)
+    readonly property real editShift: bgRoot.isEditMonitor
+        ? CF.EditModeLogic.drawerTravel(bgRoot.editViewport) * GlobalStates.editDrawerProgress : 0
+    readonly property var editTransform: CF.EditModeLogic.atProgress(bgRoot.editViewport, bgRoot.editProgress, bgRoot.editShift)
     // A scale about the top-left followed by a translation, as one matrix rather than a
     // [Scale, Translate] pair: the order a transform list composes in is exactly the kind of thing
     // that is wrong by a factor of the scale and still looks plausible. What it DRAWS is a scale
@@ -48,7 +50,7 @@ PanelWindow {
         0, bgRoot.editTransform.scale, 0, bgRoot.editTransform.y,
         0, 0, 1, 0,
         0, 0, 0, 1)
-    readonly property var editCardGeometry: CF.EditModeLogic.cardRect(bgRoot.editViewport, bgRoot.editProgress, bgRoot.width, bgRoot.height, 0)
+    readonly property var editCardGeometry: CF.EditModeLogic.cardRect(bgRoot.editViewport, bgRoot.editProgress, bgRoot.width, bgRoot.height, bgRoot.editShift)
     readonly property rect editCard: Qt.rect(bgRoot.editCardGeometry.x, bgRoot.editCardGeometry.y, bgRoot.editCardGeometry.width, bgRoot.editCardGeometry.height)
     // The corner grows with the shrink, so a desktop at rest has no radius applied to it at all.
     readonly property real editCardRadius: Appearance.rounding.verylarge * bgRoot.editProgress
@@ -607,6 +609,15 @@ PanelWindow {
             hasWindowsInActiveWorkspace: bgRoot.hasWindowsInActiveWorkspace
             widgetStateManager: bgRoot.widgetStateManager
             editMatrix: bgRoot.editMatrix
+        }
+
+        // The desktop menu when there is no widget surface to ask for it: with no widget shown
+        // the widgets window is unmapped and a right-click lands here, on the wallpaper.
+        MouseArea {
+            anchors.fill: parent
+            z: 0
+            acceptedButtons: Qt.RightButton
+            onClicked: mouse => GlobalStates.openDesktopMenu(bgRoot.editScreenName, mouse.x, mouse.y)
         }
 
         // Edit Mode's card: the blurred backdrop, corner, shadow and edge around the shrunk

@@ -370,9 +370,51 @@ Singleton {
     property real editWidgetMenuY: 0
     property var editWidgetMenuCanvas: null
 
+    // The drawer - the mode's catalogue - and its own animated scalar, beside
+    // `editProgress` rather than a second animation of it: this one carries
+    // the slide and the desktop's sideways travel, that one the shrink.
+    // `&& editMode` so the exit closes the drawer even if nothing wrote the
+    // flag back, and both scalars run down together on the same tier.
+    property bool editDrawerOpen: false
+    property real editDrawerProgress: root.editMode && root.editDrawerOpen ? 1 : 0
+    Behavior on editDrawerProgress {
+        enabled: !Appearance.reducedMotion
+        animation: Appearance.animation.elementMove.numberAnimation.createObject(root)
+    }
+    // The drawer's reveal in screen coordinates, keyed by screen name and
+    // published by the chrome surface: the widget being carried back into it
+    // is on another layer surface and cannot read the chrome's items.
+    property var editDrawerReveals: ({})
+    // The screen whose drawer a dragged desktop widget is over, "" for none -
+    // what the drawer paints its remove tint from.
+    property string editDrawerDropScreen: ""
+    // The drop itself, answered by the chrome side. A signal, because dropping
+    // the same widget twice is two gestures.
+    signal editWidgetDroppedOnDrawer(string instanceId)
+
+    // The desktop's right-click menu: which screen, where on it. Session
+    // state like the widget menu's; exists in and out of Edit Mode.
+    property bool desktopMenuOpen: false
+    property string desktopMenuScreenName: ""
+    property real desktopMenuX: 0
+    property real desktopMenuY: 0
+
+    function openDesktopMenu(screenName, x, y) {
+        root.closeEditWidgetMenu();
+        root.desktopMenuScreenName = screenName;
+        root.desktopMenuX = x;
+        root.desktopMenuY = y;
+        root.desktopMenuOpen = true;
+    }
+
+    function closeDesktopMenu() {
+        root.desktopMenuOpen = false;
+    }
+
     function openEditWidgetMenu(canvas, instanceId, screenName, x, y) {
         if (!root.editMode)
             return;
+        root.closeDesktopMenu();
         root.editWidgetMenuCanvas = canvas;
         root.editWidgetMenuInstanceId = instanceId;
         root.editWidgetMenuScreenName = screenName;
@@ -465,6 +507,11 @@ Singleton {
 
     function _leaveEditMode() {
         root.closeEditWidgetMenu();
+        root.closeDesktopMenu();
+        // The drawer and its drop hint are the mode's: one left open would
+        // greet the next entry mid-slide.
+        root.editDrawerOpen = false;
+        root.editDrawerDropScreen = "";
         // The lock now owns every monitor's workspace - it parks them itself
         // and restores its own record on unlock - so a restore fired here
         // would fight it. The saved pair waits for the unlock instead.

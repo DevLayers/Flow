@@ -37,7 +37,12 @@ PanelWindow {
     readonly property bool isEditMonitor: GlobalStates.editModeMonitor !== "" && GlobalStates.editModeMonitor === bgWidgetsWindow.editScreenName
     readonly property real editProgress: bgWidgetsWindow.isEditMonitor ? GlobalStates.editProgress : 0
     readonly property var editViewport: EditModeInsets.viewportFor(bgWidgetsWindow.editScreenName, bgWidgetsWindow.width, bgWidgetsWindow.height)
-    readonly property var editTransform: CF.EditModeLogic.atProgress(bgWidgetsWindow.editViewport, bgWidgetsWindow.editProgress, 0)
+    // The desktop's sideways travel while the drawer is open: the shortfall
+    // between the card's free right margin and the drawer's width, on the
+    // drawer's own scalar. Zero when the card already leaves room.
+    readonly property real editShift: bgWidgetsWindow.isEditMonitor
+        ? CF.EditModeLogic.drawerTravel(bgWidgetsWindow.editViewport) * GlobalStates.editDrawerProgress : 0
+    readonly property var editTransform: CF.EditModeLogic.atProgress(bgWidgetsWindow.editViewport, bgWidgetsWindow.editProgress, bgWidgetsWindow.editShift)
     readonly property matrix4x4 editMatrix: Qt.matrix4x4(
         bgWidgetsWindow.editTransform.scale, 0, 0, bgWidgetsWindow.editTransform.x,
         0, bgWidgetsWindow.editTransform.scale, 0, bgWidgetsWindow.editTransform.y,
@@ -426,6 +431,11 @@ PanelWindow {
                     return;
                 const p = widgetCanvas.mapToItem(null, atX, atY);
                 GlobalStates.openEditWidgetMenu(widgetCanvas, instanceId, bgWidgetsWindow.monitor ? bgWidgetsWindow.monitor.name : "", p.x, p.y);
+            }
+            // The desktop's own menu, in and out of the mode; same mapping.
+            onCanvasContextMenuRequested: (atX, atY) => {
+                const p = widgetCanvas.mapToItem(null, atX, atY);
+                GlobalStates.openDesktopMenu(bgWidgetsWindow.editScreenName, p.x, p.y);
             }
 
             anchors {

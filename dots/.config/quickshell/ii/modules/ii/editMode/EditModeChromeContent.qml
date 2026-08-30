@@ -42,6 +42,19 @@ Item {
 
     signal doneRequested()
     signal snapToggleRequested()
+    signal drawerToggleRequested()
+    // The drawer's gestures, relayed: the surface owns the geometry and every write.
+    signal drawerAddRequested(string widgetId, real dropX, real dropY)
+    signal drawerToggleWidgetRequested(string widgetId)
+    signal drawerBarAddRequested(string componentId, string bucket)
+    signal drawerDockToggleRequested(string appId)
+
+    // The drawer's reveal, from the same geometry the card is: its width is
+    // the drawer's on the drawer's scalar, so the panel slides out of the
+    // card's right edge exactly as fast as the desktop makes room for it.
+    property rect drawer: Qt.rect(root.width, 0, 0, 0)
+    readonly property alias drawerItem: drawerReveal
+    property alias drawerScreenName: drawerPanel.screenName
 
     // Published for the surface's input mask: the only pixels of a
     // screen-sized layer surface that may take a click.
@@ -87,8 +100,8 @@ Item {
             Layout.alignment: Qt.AlignVCenter
             iconText: "widgets"
             text: Translation.tr("Add widgets")
-            enabled: false
-            opacity: 0.5
+            toggled: GlobalStates.editDrawerOpen
+            onClicked: root.drawerToggleRequested()
         }
 
         // Edge snapping, drawn as state. It reads and toggles the key Settings
@@ -124,6 +137,29 @@ Item {
             colRipple: Appearance.colors.colPrimaryActive
             colText: Appearance.colors.colOnPrimary
             onClicked: root.doneRequested()
+        }
+    }
+
+    // The reveal: a clip the width of the drawer's animated scalar, with the
+    // full-width panel anchored to its left edge, so the panel slides in from
+    // the card's right edge and its contents never reflow.
+    Item {
+        id: drawerReveal
+        x: root.drawer.x
+        y: root.drawer.y
+        width: root.drawer.width
+        height: root.drawer.height
+        clip: true
+        visible: width > 0
+
+        EditModeDrawer {
+            id: drawerPanel
+            anchors.fill: parent
+            ghostParent: root
+            onAddRequested: (widgetId, dropX, dropY) => root.drawerAddRequested(widgetId, dropX, dropY)
+            onToggleRequested: widgetId => root.drawerToggleWidgetRequested(widgetId)
+            onBarAddRequested: (componentId, bucket) => root.drawerBarAddRequested(componentId, bucket)
+            onDockToggleRequested: appId => root.drawerDockToggleRequested(appId)
         }
     }
 }

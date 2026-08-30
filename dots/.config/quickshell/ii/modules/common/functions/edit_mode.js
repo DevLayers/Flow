@@ -58,8 +58,12 @@ function resolveEscape(state) {
     // opens over the widget it belongs to and everything else waits behind it
     // until a click lands somewhere else - so it is dismissed before anything
     // under it is touched.
-    if (s.menuOpen)
+    if (s.menuOpen || s.desktopMenuOpen)
         return "closeMenu";
+    // The drawer is the next transient: it slides over the card's edge and
+    // is closed before the card's own state is touched.
+    if (s.drawerOpen)
+        return "closeDrawer";
     if (s.gestureInFlight)
         return "cancelGesture";
     if ((s.selectionCount || 0) > 0)

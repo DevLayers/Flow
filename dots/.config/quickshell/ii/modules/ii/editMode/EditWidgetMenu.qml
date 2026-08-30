@@ -95,7 +95,8 @@ Item {
             }
         }
 
-        MenuRow {
+        EditMenuRow {
+            cardPadding: root.padding
             symbol: root.pinned ? "keep_off" : "keep"
             label: root.pinned ? Translation.tr("Unpin position") : Translation.tr("Pin position")
             enabled: root.instance !== null
@@ -148,7 +149,8 @@ Item {
             color: Appearance.colors.colOutlineVariant
         }
 
-        MenuRow {
+        EditMenuRow {
+            cardPadding: root.padding
             symbol: "delete"
             label: Translation.tr("Remove from desktop")
             enabled: root.instance !== null
@@ -157,40 +159,6 @@ Item {
                 const widgetId = root.instance.widgetId;
                 root.dismissRequested();
                 Config.removeWidgetFromDesktop(widgetId);
-            }
-        }
-    }
-
-    component MenuRow: RippleButton {
-        id: row
-        property string symbol: ""
-        property string label: ""
-        property color colText: Appearance.m3colors.m3onSurface
-
-        Layout.fillWidth: true
-        implicitHeight: 34
-        buttonRadius: Math.max(0, Appearance.rounding.windowRounding - root.padding)
-        colBackground: "transparent"
-        colBackgroundHover: Appearance.colors.colLayer1Hover
-        colRipple: Appearance.colors.colLayer1Active
-
-        contentItem: RowLayout {
-            anchors.fill: parent
-            anchors.leftMargin: 8
-            anchors.rightMargin: 8
-            spacing: 8
-
-            MaterialSymbol {
-                text: row.symbol
-                iconSize: Appearance.font.pixelSize.larger
-                color: row.enabled ? row.colText : Appearance.m3colors.m3outline
-            }
-            StyledText {
-                Layout.fillWidth: true
-                text: row.label
-                font.pixelSize: Appearance.font.pixelSize.small
-                color: row.enabled ? row.colText : Appearance.m3colors.m3outline
-                elide: Text.ElideRight
             }
         }
     }

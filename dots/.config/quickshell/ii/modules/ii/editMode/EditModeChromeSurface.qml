@@ -65,7 +65,9 @@ PanelWindow {
     // across the window boundary, because every input is available here.
     readonly property var viewport: EditModeInsets.viewportFor(root.screenName, root.width, root.height)
     readonly property real progress: GlobalStates.editProgress
-    readonly property var cardGeometry: EditModeLogic.cardRect(root.viewport, root.progress, root.width, root.height, 0)
+    readonly property real editShift: EditModeLogic.drawerTravel(root.viewport) * GlobalStates.editDrawerProgress
+    readonly property var cardGeometry: EditModeLogic.cardRect(root.viewport, root.progress, root.width, root.height, root.editShift)
+    readonly property var drawerGeometry: EditModeLogic.drawerRect(root.viewport, root.progress, GlobalStates.editDrawerProgress, root.width, root.height)
     readonly property var areaGeometry: EditModeLogic.areaRect(root.viewport, root.progress, root.width, root.height)
 
     // Whether the one widget menu belongs to this screen.
@@ -80,6 +82,97 @@ PanelWindow {
         Region {
             item: menuCloser
         }
+        // A closed drawer is a zero-width item and contributes nothing.
+        Region {
+            item: chrome.drawerItem
+        }
+    }
+
+    // The drawer's reveal, handed to the surface that owns the desktop: a
+    // widget dragged back into the drawer is removed, and the widget deciding
+    // that is on another layer surface. Removed with the surface, so the map
+    // always reads "the screens whose drawer exists".
+    readonly property rect drawerReveal: chrome.drawer
+    onDrawerRevealChanged: root.publishDrawerReveal(root.drawerReveal)
+    Component.onCompleted: root.publishDrawerReveal(root.drawerReveal)
+    Component.onDestruction: root.publishDrawerReveal(null)
+    function publishDrawerReveal(reveal) {
+        if (root.screenName === "")
+            return;
+        const published = Object.assign({}, GlobalStates.editDrawerReveals);
+        if (reveal === null)
+            delete published[root.screenName];
+        else
+            published[root.screenName] = { "x": reveal.x, "y": reveal.y, "width": reveal.width, "height": reveal.height };
+        GlobalStates.editDrawerReveals = published;
+    }
+
+    // A desktop widget let go over the drawer leaves the desktop. Answered
+    // here and not on the widget: every store the mode writes is written from
+    // the chrome, and there is one chrome (decision D4), so one answer.
+    Connections {
+        target: GlobalStates
+        function onEditWidgetDroppedOnDrawer(instanceId) {
+            const entry = (Config.options.background.activeWidgets ?? []).find(e => e && e.id === instanceId);
+            if (entry)
+                Config.removeWidgetFromDesktop(entry.widgetId);
+        }
+    }
+
+    // A drawer row dropped on the card: the screen point becomes a canvas
+    // point through the inverse of the desktop's transform, snapped to the
+    // canvas's grid and kept inside it. A release back over the drawer, or
+    // outside the card, is the gesture being abandoned.
+    function addWidgetAt(widgetId, dropX, dropY) {
+        if (EditModeLogic.pointInDrawerReveal(chrome.drawer, dropX, dropY))
+            return;
+        const card = root.cardGeometry;
+        if (dropX < card.x || dropX > card.x + card.width || dropY < card.y || dropY > card.y + card.height)
+            return;
+        const p = EditModeLogic.canvasPointFromScreen(root.viewport, root.progress, root.editShift, dropX, dropY);
+        const placed = EditModeLogic.dropPosition({
+            "gridSize": 10,
+            "canvasX": p.x,
+            "canvasY": p.y,
+            "screenWidth": root.width,
+            "screenHeight": root.height
+        });
+        Config.addWidgetToDesktop(widgetId, placed.x, placed.y, root.screenName);
+    }
+
+    function toggleWidget(widgetId) {
+        const present = (Config.options.background.activeWidgets ?? []).some(e => e && e.widgetId === widgetId);
+        if (present)
+            Config.removeWidgetFromDesktop(widgetId);
+        else
+            Config.addWidgetToDesktop(widgetId, undefined, undefined, root.screenName);
+    }
+
+    // The bar's layout is not history-aware on its own; the pair is recorded
+    // here around the one write.
+    function addBarComponent(componentId, bucket) {
+        const layouts = Config.options.bar.layouts;
+        if (!layouts || !(bucket in layouts))
+            return;
+        const before = EditModeLogic.listCopy(layouts[bucket] ?? []);
+        if (before.some(e => e && e.id === componentId))
+            return;
+        const after = before.concat([{ "id": componentId, "centered": false, "visible": true }]);
+        layouts[bucket] = after;
+        GlobalStates.editHistoryPush({
+            "undo": () => { Config.options.bar.layouts[bucket] = before; },
+            "redo": () => { Config.options.bar.layouts[bucket] = after; }
+        });
+    }
+
+    function toggleDockPin(appId) {
+        const before = EditModeLogic.listCopy(Config.options.dock.pinnedApps ?? []);
+        TaskbarApps.togglePin(appId);
+        const after = EditModeLogic.listCopy(Config.options.dock.pinnedApps ?? []);
+        GlobalStates.editHistoryPush({
+            "undo": () => { Config.options.dock.pinnedApps = before; },
+            "redo": () => { Config.options.dock.pinnedApps = after; }
+        });
     }
 
     Item {
@@ -137,7 +230,15 @@ PanelWindow {
         // lost gate is not a lost chrome.
         opacity: Math.max(0, Math.min(1, root.progress))
 
+        drawer: Qt.rect(root.drawerGeometry.x, root.drawerGeometry.y, root.drawerGeometry.width, root.drawerGeometry.height)
+        drawerScreenName: root.screenName
+
         onDoneRequested: GlobalStates.editMode = false
+        onDrawerToggleRequested: GlobalStates.editDrawerOpen = !GlobalStates.editDrawerOpen
+        onDrawerAddRequested: (widgetId, dropX, dropY) => root.addWidgetAt(widgetId, dropX, dropY)
+        onDrawerToggleWidgetRequested: widgetId => root.toggleWidget(widgetId)
+        onDrawerBarAddRequested: (componentId, bucket) => root.addBarComponent(componentId, bucket)
+        onDrawerDockToggleRequested: appId => root.toggleDockPin(appId)
         // A preference, not a layout edit: no history entry, same as the
         // Settings toggle that writes the same key.
         onSnapToggleRequested: Config.options.background.widgets.enableSnap = !Config.options.background.widgets.enableSnap

@@ -707,6 +707,10 @@ AbstractWidget {
         _rawDragX = WidgetDragMath.clamp(_dragOriginX + deltaX, Math.max(dragMinimumX(), groupDragMinX), Math.min(dragMaximumX(), groupDragMaxX));
         _rawDragY = WidgetDragMath.clamp(_dragOriginY + deltaY, Math.max(dragMinimumY(), groupDragMinY), Math.min(dragMaximumY(), groupDragMaxY));
         setCtrlBypass(Boolean(mouse.modifiers & Qt.ControlModifier));
+        // The drawer's remove tint follows the pointer, not the widget: the
+        // widget is clamped to the canvas while the pointer goes over the panel.
+        if (editModeActive)
+            GlobalStates.editDrawerDropScreen = root.pointOverDrawer(mouse) ? monitorName : "";
         root.x = WidgetDragMath.clamp(applyGridAndSnapX(_rawDragX, _rawDragY), groupDragMinX, groupDragMaxX);
         root.y = WidgetDragMath.clamp(applyGridAndSnapY(_rawDragY, _rawDragX), groupDragMinY, groupDragMaxY);
     }
@@ -1202,7 +1206,26 @@ AbstractWidget {
     // Whether this release is a drop somewhere that removes the widget instead
     // of placing it. Nothing answers yes yet; Edit Mode's drawer will.
     function releaseRemovesWidget(mouse) {
-        return false;
+        GlobalStates.editDrawerDropScreen = "";
+        if (!editModeActive || widgetInstance === null)
+            return false;
+        if (!root.pointOverDrawer(mouse))
+            return false;
+        GlobalStates.editWidgetDroppedOnDrawer(widgetInstance.id);
+        return true;
+    }
+
+    // Whether a pointer event, in this widget's coordinates, is over the
+    // drawer's published reveal on this widget's screen. The window's
+    // coordinate space is the screen's; the reveal is published in it.
+    function pointOverDrawer(mouse) {
+        if (!editModeActive || monitorName === "")
+            return false;
+        const reveal = GlobalStates.editDrawerReveals[monitorName];
+        if (!reveal)
+            return false;
+        const p = root.mapToItem(null, mouse.x, mouse.y);
+        return EditModeLogic.pointInDrawerReveal(reveal, p.x, p.y);
     }
 
     // The one store write for a placement, shared by the drag's release, the

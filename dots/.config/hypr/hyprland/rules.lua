@@ -169,6 +169,9 @@ hl.layer_rule({ match = { namespace = "quickshell:overviewWindowTransition" }, i
 -- editMode: a screen-sized chrome whose only opaque pixels are its toolbar; blur those and nothing else
 hl.layer_rule({ match = { namespace = "quickshell:editMode" }, no_anim = true})
 hl.layer_rule({ match = { namespace = "quickshell:editMode" }, ignore_alpha = 1})
+-- desktopMenu: the desktop's right-click menu, a card on a transparent screen-sized surface
+hl.layer_rule({ match = { namespace = "quickshell:desktopMenu" }, no_anim = true})
+hl.layer_rule({ match = { namespace = "quickshell:desktopMenu" }, ignore_alpha = 1})
 
 hl.layer_rule({ match = { namespace = "quickshell:osk" }, animation = "slide bottom"})
 hl.layer_rule({ match = { namespace = "quickshell:polkit" }, no_anim = true})

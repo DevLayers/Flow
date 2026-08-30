@@ -38,6 +38,9 @@ MouseArea {
     // nothing about what a widget is, and the surface owning the canvas
     // decides what a menu about it looks like. Canvas coordinates.
     signal contextMenuRequested(string instanceId, real atX, real atY)
+    // A right-click that landed on no widget: the desktop's own menu.
+    signal canvasContextMenuRequested(real atX, real atY)
+    acceptedButtons: Qt.LeftButton | Qt.RightButton
 
     // The desktop's layer surface only takes keys while it is OnDemand; the
     // owning window reads this to arm it. A live selection needs the arrows
@@ -111,12 +114,18 @@ MouseArea {
     Keys.onEscapePressed: event => {
         const action = EditModeLogic.resolveEscape({
             "menuOpen": GlobalStates.editWidgetMenuOpen && GlobalStates.editWidgetMenuCanvas === root,
+            "desktopMenuOpen": GlobalStates.desktopMenuOpen,
+            "drawerOpen": root.editMode && GlobalStates.editDrawerOpen,
             "gestureInFlight": root.draggingWidget() !== null,
             "selectionCount": root.selectedWidgets.length,
             "tab": EditModeLogic.desktopTab
         });
-        if (action === "closeMenu")
+        if (action === "closeMenu") {
             GlobalStates.closeEditWidgetMenu();
+            GlobalStates.closeDesktopMenu();
+        }
+        else if (action === "closeDrawer")
+            GlobalStates.editDrawerOpen = false;
         else if (action === "cancelGesture")
             root.cancelActiveDrag();
         else if (action === "clearSelection")
@@ -318,6 +327,10 @@ MouseArea {
     // replaces the selection with whatever the band covered, so a plain click
     // - a zero-size band over nothing - is the click-away deselect.
     onPressed: mouse => {
+        if (mouse.button === Qt.RightButton) {
+            root.canvasContextMenuRequested(mouse.x, mouse.y);
+            return;
+        }
         if (!root.selectionEnabled || mouse.button !== Qt.LeftButton)
             return;
         // The mode subtracts the global lock rather than writing it: the
