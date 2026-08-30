@@ -400,10 +400,14 @@ Singleton {
     property string desktopMenuScreenName: ""
     property real desktopMenuX: 0
     property real desktopMenuY: 0
+    // Whether the wallpaper row is offered: the bar asks for the menu too, and
+    // a bar is not a place to pick a wallpaper from.
+    property bool desktopMenuWallpaper: true
 
-    function openDesktopMenu(screenName, x, y) {
+    function openDesktopMenu(screenName, x, y, wallpaper = true) {
         root.closeEditWidgetMenu();
         root.closeEditBarMenu();
+        root.desktopMenuWallpaper = wallpaper;
         root.desktopMenuScreenName = screenName;
         root.desktopMenuX = x;
         root.desktopMenuY = y;

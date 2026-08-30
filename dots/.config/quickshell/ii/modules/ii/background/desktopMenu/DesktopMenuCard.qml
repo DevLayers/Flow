@@ -16,6 +16,8 @@ Item {
 
     signal dismissRequested()
 
+    property bool showWallpaper: true
+
     readonly property real padding: 6
     implicitWidth: 236
     implicitHeight: card.implicitHeight
@@ -49,6 +51,7 @@ Item {
             spacing: 2
 
             EditMenuRow {
+                visible: root.showWallpaper
                 cardPadding: root.padding
                 symbol: "wallpaper"
                 label: Translation.tr("Wallpaper & style")

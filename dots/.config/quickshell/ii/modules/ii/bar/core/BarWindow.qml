@@ -228,6 +228,17 @@ Scope {
         MouseArea {
             id: hoverRegion
             hoverEnabled: true
+            // A right-click on the bar itself (no widget under it) offers the
+            // desktop's menu, minus the wallpaper row. The menu's surface is the
+            // whole screen, so the point is lifted from the bar window to it.
+            acceptedButtons: Qt.LeftButton | Qt.RightButton
+            onClicked: mouse => {
+                if (mouse.button !== Qt.RightButton)
+                    return;
+                const p = hoverRegion.mapToItem(null, mouse.x, mouse.y);
+                const offsetY = Config.options.bar.bottom ? root.screen.height - barRoot.height : 0;
+                GlobalStates.openDesktopMenu(root.screen.name, p.x, p.y + offsetY, false);
+            }
             visible: barRoot.shellSeated
             opacity: root.lockUsesFade ? 1.0 - root.lockTransitionProgress : 1.0
             transform: Translate {
