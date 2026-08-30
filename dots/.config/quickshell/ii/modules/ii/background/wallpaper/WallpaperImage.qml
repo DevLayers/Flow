@@ -186,7 +186,7 @@ Item {
             ? Qt.size(screen.width > 0 ? Math.round(screen.width / 8) : 240, screen.height > 0 ? Math.round(screen.height / 8) : 135)
             : (Config.options.background.scaleLargeWallpapers
                 ? Qt.size(screen.width > 0 ? Math.round(screen.width * preferredWallpaperScale) : 1920, screen.height > 0 ? Math.round(screen.height * preferredWallpaperScale) : 1080)
-                : wallpaperImageRoot.decodeSizeFor(screen.width, screen.height))
+                : Qt.size(-1, -1))
         lockAnimationActive: wallpaperImageRoot.lockAnimationActive
     }
 
@@ -434,20 +434,20 @@ Item {
 
                         visible: opacity > 0
                         opacity: (wallpaper.status === Image.Ready && !Config.options.background.useWallpaperEngine && (!wallpaperIsVideo || (windowBlur && windowBlur.shouldBlur))) ? 1 : 0
-                        // GPU: cap sourceSize to screen resolution with dynamic zoom headroom — loading > needed res wastes VRAM with no visual gain.
+                        // When scaleLargeWallpapers is false (default, like upstream end-4), loads at full native resolution with no downscaling limit.
+                        // When enabled, caps sourceSize to screen resolution * preferred scale to save VRAM.
                         sourceSize: Config.options.background.scaleLargeWallpapers
                             ? Qt.size(screen.width > 0 ? Math.round(screen.width * preferredWallpaperScale) : 1920, screen.height > 0 ? Math.round(screen.height * preferredWallpaperScale) : 1080)
-                            : wallpaperImageRoot.decodeSizeFor(wallpaperPlanes.wallpaperW, wallpaperPlanes.wallpaperH)
+                            : Qt.size(-1, -1)
 
                         imageSource: wallpaperSafetyTriggered ? "" : wallpaperPath
                         animated: Config.options.background.animateWallpaperChanges
                         transitionShader: Config.options.background.wallpaperAnimation
                         shadersPath: Qt.resolvedUrl("../shaders")
                         fillMode: Image.PreserveAspectCrop
-                        // GPU: mipmap:false — mip-chain generation on GPU is wasteful for a full-screen image.
-                        // The image is displayed at near-native size; mipmaps provide no quality benefit here.
-                        mipmap: false
-                        antialiasing: false
+                        mipmap: true
+                        antialiasing: true
+                        smooth: true
                         lockAnimationActive: wallpaperImageRoot.lockAnimationActive
                     }
 

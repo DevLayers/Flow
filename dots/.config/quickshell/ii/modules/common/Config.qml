@@ -2747,7 +2747,7 @@ Singleton {
                     property bool lockWidgetPositions: false
                 }
                 property list<var> activeWidgets: []
-                property bool scaleLargeWallpapers: true
+                property bool scaleLargeWallpapers: false
                 property bool animateWallpaperChanges: true
                 property string wallpaperAnimation: ""
                 property bool zoomOutEnabled: true  // master toggle for zoom-out animations
@@ -2861,6 +2861,7 @@ Singleton {
                     property string bluetooth: "expressive"
                     property string keyboard: "expressive"
                     property string sports: "expressive"
+                    property string portWatcher: "expressive"
                 }
 
                 property JsonObject activeWindow: JsonObject {
@@ -2993,6 +2994,31 @@ Singleton {
                     property int cpuWarningThreshold: 90
                     property bool expressivePopup: true
                     property bool showDocker: true
+                }
+
+                property JsonObject portWatcher: JsonObject {
+                    property bool enabled: true
+                    property bool autoRefresh: true
+                    property int refreshInterval: 5000
+                    property bool showTcp: true
+                    property bool showUdp: true
+                    property bool showLoopback: true
+                    // Ports without an owning user process (system daemons, other
+                    // users) are noise for the widget's purpose, so they are off.
+                    property bool showSystem: false
+                    property bool exposedOnly: false
+                    property bool notifyNewExposed: false
+                    property bool hideWhenEmpty: false
+                    property int minPort: 1
+                    // Stop below the kernel's ephemeral range (32768+). Those are
+                    // an app's transient IPC sockets churning, never a port
+                    // anybody chose to serve on.
+                    property int maxPort: 32767
+                    // Comma separated ports or ranges, e.g. "3000, 5173, 8000-8999".
+                    property string watchPorts: ""
+                    property string ignorePorts: ""
+                    property string ignoreProcesses: ""
+                    property string sortMode: "port" // port | process | activity
                 }
 
                 property JsonObject sports: JsonObject {
@@ -3151,6 +3177,11 @@ Singleton {
                             {
                                 "centered": false,
                                 "id": "system_tray",
+                                "visible": true
+                            },
+                            {
+                                "centered": false,
+                                "id": "port_watcher",
                                 "visible": true
                             },
                             {

@@ -98,6 +98,14 @@ Singleton {
             configPage: "SystemMonitorConfig.qml"
         },
         {
+            id: "port_watcher",
+            icon: "lan",
+            title: "Port Watcher",
+            styleConfigKey: "portWatcher",
+            styleOptions: defaultStyleOptions,
+            configPage: "PortWatcherConfig.qml"
+        },
+        {
             id: "clock",
             icon: "nest_clock_farsight_analog",
             title: "Clock",

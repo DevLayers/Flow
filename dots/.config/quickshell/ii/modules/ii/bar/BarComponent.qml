@@ -29,6 +29,7 @@ import qs.modules.ii.bar.widgets.policies
 import qs.modules.ii.bar.widgets.timer
 import qs.modules.ii.bar.widgets.indicators
 import qs.modules.ii.bar.widgets.dockToPanel
+import qs.modules.ii.bar.widgets.portWatcher
 
 import qs.modules.ii.verticalBar as Vertical
 
@@ -519,6 +520,8 @@ Item {
             return true;
         if (modelData.id === "mode_indicator")
             return true;
+        if (modelData.id === "port_watcher" && Config.options.bar.styles.portWatcher === "expressive")
+            return true;
         return false;
     }
 
@@ -722,6 +725,10 @@ Item {
             return screenshareIndicatorComp;
         case "dock_to_panel":
             return dockToPanelComp;
+        case "port_watcher":
+            if (isExp)
+                return portWatcherCompExpressive;
+            return portWatcherComp;
         default:
             return null;
         }
@@ -942,6 +949,18 @@ Item {
     Component {
         id: dockToPanelComp
         DockToPanel {
+            vertical: rootItem.vertical
+        }
+    }
+    Component {
+        id: portWatcherComp
+        PortWatcherWidget {
+            vertical: rootItem.vertical
+        }
+    }
+    Component {
+        id: portWatcherCompExpressive
+        ExpressivePortWatcher {
             vertical: rootItem.vertical
         }
     }

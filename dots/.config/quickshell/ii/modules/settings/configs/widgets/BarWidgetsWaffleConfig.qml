@@ -236,6 +236,15 @@ ContentPage {
             }
 
             ServiceCard {
+                cardIcon: "lan"
+                cardShape: "Circle"
+                cardHue: 140
+                title: Translation.tr("Port Watcher")
+                description: Translation.tr("Listening ports, live connections, exposure filters, and process actions")
+                onOpenCard: root.openComponentPage("port_watcher")
+            }
+
+            ServiceCard {
                 cardIcon: "battery_android_6"
                 cardShape: "Circle"
                 cardHue: 140

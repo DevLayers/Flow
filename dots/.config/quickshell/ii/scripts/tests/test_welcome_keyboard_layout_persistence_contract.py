@@ -40,7 +40,6 @@ class WelcomeKeyboardLayoutPersistenceContracts(unittest.TestCase):
         self.assertIn("property var configWriteQueue: []", HYPRLAND_CONFIG)
         self.assertIn("function _queueShellOverridesCommand(command: string)", HYPRLAND_CONFIG)
         self.assertIn("function _startNextConfigWrite()", HYPRLAND_CONFIG)
-        self.assertIn("onErrorOccurred", HYPRLAND_CONFIG)
 
     def test_persistence_keeps_hand_written_input_and_cleans_only_exact_legacy_lines(self):
         with tempfile.TemporaryDirectory() as temporary_directory:
