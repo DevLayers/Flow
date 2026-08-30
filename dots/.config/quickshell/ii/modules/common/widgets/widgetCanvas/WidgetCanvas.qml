@@ -1,5 +1,7 @@
 import QtQuick
+import qs
 import qs.modules.common
+import qs.modules.common.functions
 
 MouseArea {
     id: root
@@ -11,6 +13,435 @@ MouseArea {
     property bool gridOverlayEnabled: false
     property int alignmentGridStep: 10
     onAlignmentGridStepChanged: dotGrid.requestPaint()
+
+    // Handed in by the surface that owns this canvas - the desktop's, and only
+    // the desktop's. The overlay reuses this component and has its own
+    // dismissal, so it must not follow the mode.
+    property bool editMode: false
+
+    // ── Selection ────────────────────────────────────────────────────────────
+    // Marquee multi-select. Opt-in per canvas: the overlay's canvas closes
+    // itself on a plain click, so a marquee defaulting on would turn every
+    // dismiss-click into a selection gesture. The desktop widgets window is
+    // the one canvas that opts in.
+    //
+    // The selection is session state on this canvas - it does not survive a
+    // reload, cannot leak across monitors (each window owns its canvas), and
+    // is never persisted anywhere.
+    property bool selectionEnabled: false
+    property var selectedWidgets: []
+    property bool marqueeActive: false
+    property real marqueeAnchorX: 0
+    property real marqueeAnchorY: 0
+
+    // A widget's right-click, announced rather than handled: the canvas knows
+    // nothing about what a widget is, and the surface owning the canvas
+    // decides what a menu about it looks like. Canvas coordinates.
+    signal contextMenuRequested(string instanceId, real atX, real atY)
+
+    // The desktop's layer surface only takes keys while it is OnDemand; the
+    // owning window reads this to arm it. A live selection needs the arrows
+    // and Escape, the mode needs its keys throughout.
+    readonly property bool keyboardFocusHeld: root.selectedWidgets.length > 0 || root.editMode
+    onKeyboardFocusHeldChanged: {
+        if (root.keyboardFocusHeld)
+            root.forceActiveFocus();
+    }
+    focus: root.selectionEnabled
+
+    // The global lock clears the selection unless the mode suppresses it: two
+    // widgets still haloed under a lock would look live while doing nothing.
+    readonly property bool positionsLocked: Config.options.background.widgets.lockWidgetPositions ?? false
+    onPositionsLockedChanged: {
+        if (root.positionsLocked && !root.editMode)
+            root.clearSelection();
+    }
+
+    // Leaving the mode mid-drag cancels the gesture - it cannot commit, the
+    // mode ending is not the user letting go. The selection goes with it: a
+    // halo surviving the mode is a marquee with no visible way to clear it.
+    onEditModeChanged: {
+        if (root.editMode)
+            return;
+        root.cancelActiveDrag();
+        root.clearSelection();
+    }
+
+    // The lock screen borrows this surface as its backdrop; a selection halo
+    // has no business there, and a drag cannot outlive the desktop it was on.
+    Connections {
+        target: GlobalStates
+        function onScreenLockedChanged() {
+            if (!GlobalStates.screenLocked)
+                return;
+            root.cancelActiveDrag();
+            root.clearSelection();
+        }
+    }
+
+    // ── Keys ─────────────────────────────────────────────────────────────────
+    // The arrows are not gated on the mode: selecting a widget is what takes
+    // this surface's keyboard focus, in the mode and out of it, so a
+    // selection the user can make is a selection they can move. Outside the
+    // mode the move still commits and simply records no history entry, which
+    // is the existing grain: a drag outside the mode is unrecorded too.
+    Keys.onPressed: event => {
+        const nudge = WidgetNudge.direction(event.key, root.arrowKeys);
+        if (!nudge || root.selectedWidgets.length === 0)
+            return;
+        root.nudgeSelection(nudge.dx, nudge.dy);
+        event.accepted = true;
+    }
+    // Escape is overloaded: it cancels a drag in flight and clears a
+    // selection, and the mode may take it for its own exit only once neither
+    // applies. EditModeLogic.resolveEscape owns that precedence.
+    Keys.onEscapePressed: event => {
+        const action = EditModeLogic.resolveEscape({
+            "menuOpen": false,
+            "gestureInFlight": root.draggingWidget() !== null,
+            "selectionCount": root.selectedWidgets.length,
+            "tab": EditModeLogic.desktopTab
+        });
+        if (action === "cancelGesture")
+            root.cancelActiveDrag();
+        else if (action === "clearSelection")
+            root.clearSelection();
+        else if (action === "exit" && root.editMode)
+            GlobalStates.editMode = false;
+        else
+            return;
+        event.accepted = true;
+    }
+    // The four keys, named once. The module takes them as an argument rather
+    // than reaching for Qt itself, because a `.pragma library` has no engine
+    // context.
+    readonly property var arrowKeys: ({
+        "left": Qt.Key_Left,
+        "right": Qt.Key_Right,
+        "up": Qt.Key_Up,
+        "down": Qt.Key_Down
+    })
+
+    // ── Arrow-key nudge ──────────────────────────────────────────────────────
+    // One press moves the selection one lattice cell, rigidly: the delta is
+    // decided by the first selected widget and shrunk to what every member's
+    // own clamp allows, so a cluster stops at the first wall instead of
+    // deforming against it. The first press of a run also puts an off-lattice
+    // widget back on the lattice (WidgetNudge.step).
+    //
+    // The run is committed once, a beat after its last press, rather than per
+    // press: auto-repeat delivers a press every ~30 ms, and a config write
+    // each would both fill the undo stack (one Ctrl+Z per repeat) and run
+    // into the config file's own reload, which clobbers writes made within
+    // ~250 ms of each other. The widgets move immediately; only the store
+    // waits. A key repeat has no release to hang the commit on, which is why
+    // it is a timer and not a release handler.
+    property var _nudgeRun: null
+    Timer {
+        id: nudgeCommit
+        interval: 400
+        repeat: false
+        onTriggered: root.flushNudge()
+    }
+
+    function nudgeSelection(dirX, dirY) {
+        const lattice = Math.max(1, root.alignmentGridStep);
+        if (root._nudgeRun === null) {
+            const members = [];
+            for (const widget of root.selectedWidgets) {
+                if (!widget || !widget.draggable || !widget.nudgeTo)
+                    continue;
+                members.push({
+                    "widget": widget,
+                    "x": widget.targetX,
+                    "y": widget.targetY
+                });
+            }
+            if (members.length === 0)
+                return;
+            root._nudgeRun = {
+                "members": members
+            };
+        }
+        const members = root._nudgeRun.members;
+        if (members.length === 0)
+            return;
+        const leader = members[0];
+        // Where the leader would land: a whole cell along, snapped back onto
+        // the lattice. Every member then travels by that difference, so the
+        // cluster keeps its shape.
+        const wantX = dirX === 0 ? leader.x : WidgetNudge.step(leader.x, dirX * lattice, lattice, 0);
+        const wantY = dirY === 0 ? leader.y : WidgetNudge.step(leader.y, dirY * lattice, lattice, 0);
+        // Each member's own bounds, asked of its own clamp rather than
+        // recomputed here: the widgets differ in size.
+        const bounded = WidgetNudge.groupDelta(members.map(m => ({
+            "x": m.x,
+            "y": m.y,
+            "minX": m.widget.dragMinimumX(),
+            "maxX": m.widget.dragMaximumX(),
+            "minY": m.widget.dragMinimumY(),
+            "maxY": m.widget.dragMaximumY()
+        })), wantX - leader.x, wantY - leader.y);
+        nudgeCommit.restart();
+        if (bounded.dx === 0 && bounded.dy === 0)
+            return;
+        for (const m of members) {
+            m.x += bounded.dx;
+            m.y += bounded.dy;
+            m.widget.nudgeTo(m.x, m.y);
+        }
+    }
+
+    // Commit the run: every member's new position in one history entry, so a
+    // held key is one Ctrl+Z. Also called when something else needs the store
+    // current - a drag starting, the selection changing.
+    function flushNudge() {
+        nudgeCommit.stop();
+        const run = root._nudgeRun;
+        root._nudgeRun = null;
+        if (run === null)
+            return;
+        GlobalStates.editHistoryBeginBatch();
+        for (const m of run.members) {
+            if (m.widget && m.widget.commitPlacement)
+                m.widget.commitPlacement(m.x, m.y);
+        }
+        GlobalStates.editHistoryEndBatch();
+    }
+
+    // ── Selection set ────────────────────────────────────────────────────────
+    // Widgets are found by walking the subtree rather than kept in a registry:
+    // each one sits inside its own FadeLoader, and a registry filled from
+    // Component.onCompleted would depend on the loader having parented the
+    // widget under the canvas by then.
+    function widgetsUnder(item, found) {
+        const children = item.children;
+        for (let i = 0; i < children.length; i++) {
+            const child = children[i];
+            if (child.isCanvasWidget === true)
+                found.push(child);
+            else
+                root.widgetsUnder(child, found);
+        }
+        return found;
+    }
+
+    // The widget's drawn box in canvas coordinates: its Item scale is applied
+    // around its centre, so the visual bounds differ from x/y/width/height by
+    // the offsets AbstractBackgroundWidget publishes.
+    function widgetVisualRect(widget) {
+        const pos = widget.parent.mapToItem(root, widget.x, widget.y);
+        return Qt.rect(pos.x + (widget.visualLeftOffset ?? 0), pos.y + (widget.visualTopOffset ?? 0), widget.visualWidth ?? widget.width, widget.visualHeight ?? widget.height);
+    }
+
+    // `draggable` is the selection filter on purpose: it already folds in
+    // everything that must exclude a widget from a group move - the global
+    // lock, a pin, a preview, a non-free placement strategy. Filtering on
+    // anything narrower re-opens one of those.
+    function selectWidgetsInRect(rect) {
+        const picked = [];
+        for (const widget of root.widgetsUnder(root, [])) {
+            if (!widget.draggable || !widget.visible)
+                continue;
+            const box = root.widgetVisualRect(widget);
+            if (box.x < rect.x + rect.width && box.x + box.width > rect.x && box.y < rect.y + rect.height && box.y + box.height > rect.y)
+                picked.push(widget);
+        }
+        root.applySelection(picked);
+    }
+
+    function applySelection(widgets) {
+        root.flushNudge();
+        for (const widget of root.selectedWidgets) {
+            if (widget && widgets.indexOf(widget) === -1)
+                widget.selected = false;
+        }
+        for (const widget of widgets)
+            widget.selected = true;
+        root.selectedWidgets = widgets;
+    }
+
+    function clearSelection() {
+        if (root.selectedWidgets.length === 0)
+            return;
+        root.applySelection([]);
+    }
+
+    // A widget destroyed while selected or mid-drag never reaches its own
+    // release, so the canvas drops it here (the widget calls this from
+    // Component.onDestruction).
+    function widgetRemoved(widget) {
+        if (widget.isDragging)
+            root.draggingActive = false;
+        const idx = root.selectedWidgets.indexOf(widget);
+        if (idx !== -1) {
+            const next = root.selectedWidgets.slice();
+            next.splice(idx, 1);
+            root.selectedWidgets = next;
+        }
+        if (root._nudgeRun !== null)
+            root._nudgeRun.members = root._nudgeRun.members.filter(m => m.widget !== widget);
+        const group = root.groupDrag;
+        if (group && (group.leader === widget || group.followers.some(entry => entry.widget === widget)))
+            root.groupDrag = null;
+    }
+
+    // A press that starts on a widget is that widget's drag and never reaches
+    // this handler. A press on empty canvas anchors the marquee; releasing it
+    // replaces the selection with whatever the band covered, so a plain click
+    // - a zero-size band over nothing - is the click-away deselect.
+    onPressed: mouse => {
+        if (!root.selectionEnabled || mouse.button !== Qt.LeftButton)
+            return;
+        // The mode subtracts the global lock rather than writing it: the
+        // stored preference is untouched and the desktop is locked again on
+        // the way out.
+        if (root.positionsLocked && !root.editMode)
+            return;
+        root.marqueeAnchorX = mouse.x;
+        root.marqueeAnchorY = mouse.y;
+        root.marqueeActive = true;
+    }
+    onReleased: {
+        if (!root.marqueeActive)
+            return;
+        root.marqueeActive = false;
+        root.selectWidgetsInRect(Qt.rect(marqueeRect.x, marqueeRect.y, marqueeRect.width, marqueeRect.height));
+    }
+    onCanceled: root.marqueeActive = false
+
+    // ── Group drag ───────────────────────────────────────────────────────────
+    // Dragging any selected widget (the leader) moves the whole selection by
+    // one delta. The leader reports its press and release; followers are moved
+    // here by the leader's travel and committed here, through the same store
+    // write a release runs - a follower never gets a release event.
+    property var groupDrag: null
+
+    function widgetDragStarted(widget) {
+        root.flushNudge();
+        // Escape has to reach this surface while the pointer is down.
+        root.forceActiveFocus();
+        if (root.selectedWidgets.indexOf(widget) === -1) {
+            // Grabbing a widget outside the selection is a click-away.
+            root.clearSelection();
+            return;
+        }
+        // Re-filtered: a member may have been pinned or locked since it was
+        // selected. It keeps its halo, it just does not move.
+        const members = root.selectedWidgets.filter(member => member && member.draggable);
+        let deltaMinX = -Infinity;
+        let deltaMaxX = Infinity;
+        let deltaMinY = -Infinity;
+        let deltaMaxY = Infinity;
+        const followers = [];
+        for (const member of members) {
+            // Each member's own clamp, in its own frame: the bounds are how
+            // far it may travel, and the group may travel no further than its
+            // tightest member.
+            deltaMinX = Math.max(deltaMinX, member.dragMinimumX() - member.x);
+            deltaMaxX = Math.min(deltaMaxX, member.dragMaximumX() - member.x);
+            deltaMinY = Math.max(deltaMinY, member.dragMinimumY() - member.y);
+            deltaMaxY = Math.min(deltaMaxY, member.dragMaximumY() - member.y);
+            if (member !== widget) {
+                member.groupDragging = true;
+                followers.push({
+                    "widget": member,
+                    "startX": member.x,
+                    "startY": member.y
+                });
+            }
+        }
+        widget.groupDragMinX = widget.x + deltaMinX;
+        widget.groupDragMaxX = widget.x + deltaMaxX;
+        widget.groupDragMinY = widget.y + deltaMinY;
+        widget.groupDragMaxY = widget.y + deltaMaxY;
+        root.groupDrag = {
+            "leader": widget,
+            "startX": widget.x,
+            "startY": widget.y,
+            "followers": followers
+        };
+    }
+
+    function syncGroupFollowers() {
+        const group = root.groupDrag;
+        if (group === null)
+            return;
+        const deltaX = group.leader.x - group.startX;
+        const deltaY = group.leader.y - group.startY;
+        for (const entry of group.followers) {
+            entry.widget.x = entry.startX + deltaX;
+            entry.widget.y = entry.startY + deltaY;
+        }
+    }
+
+    Connections {
+        target: root.groupDrag ? root.groupDrag.leader : null
+        function onXChanged() {
+            root.syncGroupFollowers();
+        }
+        function onYChanged() {
+            root.syncGroupFollowers();
+        }
+    }
+
+    // Called by the leader after it has landed and before it commits itself.
+    function widgetDragEnded(widget) {
+        const group = root.groupDrag;
+        if (group && group.leader === widget)
+            root.groupDrag = null;
+        widget.groupDragMinX = -Infinity;
+        widget.groupDragMaxX = Infinity;
+        widget.groupDragMinY = -Infinity;
+        widget.groupDragMaxY = Infinity;
+        if (!group || group.leader !== widget)
+            return;
+        // One gesture, one undo entry: every follower's commit below and the
+        // leader's own - which runs after this returns, later in the same
+        // release - collect into one batch, closed a turn later so the
+        // leader's push cannot miss it. Without this the leader's entry sits
+        // on top and the first Ctrl+Z would move the leader alone.
+        GlobalStates.editHistoryBeginBatch();
+        Qt.callLater(() => GlobalStates.editHistoryEndBatch());
+        for (const entry of group.followers) {
+            entry.widget.groupDragging = false;
+            if (entry.widget.commitPlacement)
+                entry.widget.commitPlacement(entry.widget.x, entry.widget.y);
+        }
+    }
+
+    // The cancel half: followers go back where the press found them, the
+    // leader's bounds are handed back, and nothing is written.
+    function widgetDragCancelled(widget) {
+        const group = root.groupDrag;
+        if (group && group.leader === widget)
+            root.groupDrag = null;
+        widget.groupDragMinX = -Infinity;
+        widget.groupDragMaxX = Infinity;
+        widget.groupDragMinY = -Infinity;
+        widget.groupDragMaxY = Infinity;
+        if (!group || group.leader !== widget)
+            return;
+        for (const entry of group.followers) {
+            entry.widget.groupDragging = false;
+            entry.widget.x = entry.startX;
+            entry.widget.y = entry.startY;
+        }
+    }
+
+    function draggingWidget() {
+        for (const widget of root.widgetsUnder(root, [])) {
+            if (widget.isDragging)
+                return widget;
+        }
+        return null;
+    }
+
+    function cancelActiveDrag() {
+        const widget = root.draggingWidget();
+        if (widget && widget.cancelDrag)
+            widget.cancelDrag();
+    }
 
     Canvas {
         id: dotGrid
@@ -53,6 +484,23 @@ MouseArea {
         Behavior on opacity {
             animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
         }
+    }
+
+    // The rubber band. Same family as the region selector's target frame, but
+    // an in-place interaction on the canvas, not a modal overlay. mouseX/Y
+    // track the pointer for the whole press.
+    Rectangle {
+        id: marqueeRect
+        visible: root.marqueeActive
+        z: 10
+        x: Math.min(root.marqueeAnchorX, root.mouseX)
+        y: Math.min(root.marqueeAnchorY, root.mouseY)
+        width: Math.abs(root.mouseX - root.marqueeAnchorX)
+        height: Math.abs(root.mouseY - root.marqueeAnchorY)
+        color: Qt.alpha(Appearance.colors.colPrimary, 0.08)
+        border.color: Appearance.colors.colPrimary
+        border.width: 1.5
+        radius: Appearance.rounding.unsharpenmore
     }
 
     // Snap guides. They used to be toggled by `visible`, which made them blink

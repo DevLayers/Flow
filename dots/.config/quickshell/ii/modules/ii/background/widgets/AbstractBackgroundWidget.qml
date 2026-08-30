@@ -21,6 +21,17 @@ AbstractWidget {
     // Every persisted write carries it so the per-monitor fork rule in
     // WidgetPlacement applies (see Config.updateWidgetPosition).
     readonly property string monitorName: widgetInstance !== null ? (widgetInstance.monitorName ?? "") : ""
+    // Per-instance pin: the widget stays put whatever the global lock says.
+    // The global lock itself is suppressed while Edit Mode is on - the stored
+    // preference is untouched and the desktop is locked again on the way out.
+    // The mode is read off the owning canvas rather than from a global, so a
+    // preview or an overlay canvas never follows it.
+    readonly property bool pinned: widgetInstance !== null && widgetInstance.pinned === true
+    readonly property bool editModeActive: {
+        const canvas = findCanvas(root.parent);
+        return canvas !== null && canvas.editMode === true;
+    }
+    readonly property bool interactionLocked: pinned || (_positionsLocked && !editModeActive)
     property bool isPreview: false
     property string styleOverride: widgetInstance ? (WidgetsRegistry.getStyleOverride(widgetInstance.widgetId) || "") : ""
 
@@ -243,6 +254,32 @@ AbstractWidget {
     property real _dragOriginY: 0
     property real _rawDragX: 0
     property real _rawDragY: 0
+
+    // ── Canvas selection / group drag (WidgetCanvas) ─────────────────────────
+    // The canvas owns the selection set and writes `selected`; the widget only
+    // renders it. `groupDragging` is true on every non-leader member while a
+    // group drag is in flight - a follower is not dragging itself, so without
+    // this second gate its position Behaviors would animate every step and the
+    // cluster would swim behind the pointer. The group bounds are set by the
+    // canvas on the leader so the whole selection stops when its first member
+    // reaches an edge; ±Infinity keeps a single-widget drag what it was.
+    property bool selected: false
+    property bool groupDragging: false
+    property real groupDragMinX: -Infinity
+    property real groupDragMaxX: Infinity
+    property real groupDragMinY: -Infinity
+    property real groupDragMaxY: Infinity
+    // Found once and kept: a widget destroyed mid-drag or while selected has
+    // to tell the canvas, and by then walking its parent chain is unsafe.
+    readonly property var ownerCanvas: findCanvas(root.parent)
+    Component.onDestruction: {
+        const canvas = root.ownerCanvas;
+        if (!canvas || !canvas.widgetRemoved)
+            return;
+        try {
+            canvas.widgetRemoved(root);
+        } catch (e) {}
+    }
 
     // ── Snap hysteresis state ─────────────────────────────────────────────────
     // This is a Schmitt trigger: acquire close to a guide, release farther away.
@@ -532,14 +569,36 @@ AbstractWidget {
     }
 
     // Single commit point for both the grip release and the double-click reset.
+    // The size and the position it re-centres go into one history entry, so
+    // an undo puts the widget back at its old size AND its old spot.
     function commitResizeScale(factor) {
-        const target = WidgetDragMath.clamp(factor, 0.5, 2);
+        GlobalStates.editHistoryBeginBatch();
+        _commitResizeScale(WidgetDragMath.clamp(factor, 0.5, 2));
+        GlobalStates.editHistoryEndBatch();
+    }
+
+    function _commitResizeScale(target) {
         if (_usesWidgetSizeKey) {
             if (_scaleSection === null || _scaleSection.widgetSize === undefined)
                 return;
             const widthBefore = width;
             const heightBefore = height;
-            _scaleSection.widgetSize = Math.round(target * 100);
+            // This path writes the widget's own config section rather than
+            // its activeWidgets entry, so it records its own pair.
+            const section = _scaleSection;
+            const sizeBefore = section.widgetSize;
+            const sizeAfter = Math.round(target * 100);
+            section.widgetSize = sizeAfter;
+            if (sizeAfter !== sizeBefore) {
+                GlobalStates.editHistoryPush({
+                    "undo": () => {
+                        section.widgetSize = sizeBefore;
+                    },
+                    "redo": () => {
+                        section.widgetSize = sizeAfter;
+                    }
+                });
+            }
             // Keep the centre where the user left it while the box changes.
             x = WidgetDragMath.clamp(x - (width - widthBefore) / 2, dragMinimumX(), dragMaximumX());
             y = WidgetDragMath.clamp(y - (height - heightBefore) / 2, dragMinimumY(), dragMaximumY());
@@ -551,14 +610,7 @@ AbstractWidget {
             x = WidgetDragMath.clamp(x, dragMinimumX(), dragMaximumX());
             y = WidgetDragMath.clamp(y, dragMinimumY(), dragMaximumY());
         }
-        if (!isPreview) {
-            if (widgetInstance !== null)
-                Config.updateWidgetPosition(widgetInstance.id, x, y, monitorName);
-            else if (configEntry) {
-                configEntry.x = x;
-                configEntry.y = y;
-            }
-        }
+        commitPlacement(x, y);
     }
 
     function resetScaleFromHandle() {
@@ -586,7 +638,7 @@ AbstractWidget {
     }
 
     function beginPointerGesture(mouse) {
-        if (!draggable)
+        if (!draggable || mouse.button !== Qt.LeftButton)
             return;
 
         const canvas = findCanvas(root.parent);
@@ -618,6 +670,12 @@ AbstractWidget {
         _gridAnchorY = root.y;
         _lastGridX = WidgetDragMath.clamp(Math.round(root.x / _gridStep) * _gridStep, dragMinimumX(), gridMaximumX());
         _lastGridY = WidgetDragMath.clamp(Math.round(root.y / _gridStep) * _gridStep, dragMinimumY(), gridMaximumY());
+
+        // Reported from the press, not from the threshold crossing: nothing
+        // has moved yet, so the follower offsets and clamp bounds the canvas
+        // captures cannot bake a first-step jump into the cluster.
+        if (canvas.widgetDragStarted)
+            canvas.widgetDragStarted(root);
     }
 
     function updatePointerGesture(mouse) {
@@ -639,11 +697,13 @@ AbstractWidget {
             _dragMovementActive = true;
         }
 
-        _rawDragX = WidgetDragMath.clamp(_dragOriginX + deltaX, dragMinimumX(), dragMaximumX());
-        _rawDragY = WidgetDragMath.clamp(_dragOriginY + deltaY, dragMinimumY(), dragMaximumY());
+        // The group bounds are ±Infinity outside a group drag; inside one they
+        // stop the leader where the first member of the selection hits an edge.
+        _rawDragX = WidgetDragMath.clamp(_dragOriginX + deltaX, Math.max(dragMinimumX(), groupDragMinX), Math.min(dragMaximumX(), groupDragMaxX));
+        _rawDragY = WidgetDragMath.clamp(_dragOriginY + deltaY, Math.max(dragMinimumY(), groupDragMinY), Math.min(dragMaximumY(), groupDragMaxY));
         setCtrlBypass(Boolean(mouse.modifiers & Qt.ControlModifier));
-        root.x = applyGridAndSnapX(_rawDragX, _rawDragY);
-        root.y = applyGridAndSnapY(_rawDragY, _rawDragX);
+        root.x = WidgetDragMath.clamp(applyGridAndSnapX(_rawDragX, _rawDragY), groupDragMinX, groupDragMaxX);
+        root.y = WidgetDragMath.clamp(applyGridAndSnapY(_rawDragY, _rawDragX), groupDragMinY, groupDragMaxY);
     }
 
     onPressed: mouse => beginPointerGesture(mouse)
@@ -766,12 +826,15 @@ AbstractWidget {
             const myCenterX = rawX + root.width / 2;
             const myCenterY = rawY + root.height / 2;
 
+            const followerIds = _groupFollowerIds();
             for (let i = 0; i < widgetListModel.count; i++) {
                 const widget = widgetListModel.get(i);
                 if (widgetInstance && widget.instanceId === widgetInstance.id)
                     continue;
 
                 const widgetId = widget.instanceId || widget.id;
+                if (followerIds.indexOf(widgetId) !== -1)
+                    continue;
                 const other = placements[widgetId] ?? { "x": widget.widgetX, "y": widget.widgetY, "scale": widget.scale ?? 1.0 };
                 let otherWidth = root.width;
                 let otherHeight = root.height;
@@ -830,6 +893,23 @@ AbstractWidget {
                     "guide": otherVisualLeft,
                     "distance": Math.abs(rawX - tRightToLeft)
                 });
+
+                // 5./6. One lattice cell of air between the two, which is what
+                // "next to" usually means; the flush candidates above stay for
+                // widgets meant to touch. Ten pixels apart, the nearer wins.
+                const gapX = _gridStep;
+                const tLeftToRightGap = otherVisualRight + gapX - root.visualLeftOffset;
+                candidates.push({
+                    "target": tLeftToRightGap,
+                    "guide": otherVisualRight + gapX,
+                    "distance": Math.abs(rawX - tLeftToRightGap)
+                });
+                const tRightToLeftGap = otherVisualLeft - gapX - root.visualRightOffset;
+                candidates.push({
+                    "target": tRightToLeftGap,
+                    "guide": otherVisualLeft - gapX,
+                    "distance": Math.abs(rawX - tRightToLeftGap)
+                });
             }
         }
 
@@ -853,12 +933,15 @@ AbstractWidget {
             const myCenterX = rawX + root.width / 2;
             const myCenterY = rawY + root.height / 2;
 
+            const followerIds = _groupFollowerIds();
             for (let i = 0; i < widgetListModel.count; i++) {
                 const widget = widgetListModel.get(i);
                 if (widgetInstance && widget.instanceId === widgetInstance.id)
                     continue;
 
                 const widgetId = widget.instanceId || widget.id;
+                if (followerIds.indexOf(widgetId) !== -1)
+                    continue;
                 const other = placements[widgetId] ?? { "x": widget.widgetX, "y": widget.widgetY, "scale": widget.scale ?? 1.0 };
                 let otherWidth = root.width;
                 let otherHeight = root.height;
@@ -916,6 +999,21 @@ AbstractWidget {
                     "target": tBottomToTop,
                     "guide": otherVisualTop,
                     "distance": Math.abs(rawY - tBottomToTop)
+                });
+
+                // 5./6. One lattice cell of air, as in snapCandidateX.
+                const gapY = _gridStep;
+                const tTopToBottomGap = otherVisualBottom + gapY - root.visualTopOffset;
+                candidates.push({
+                    "target": tTopToBottomGap,
+                    "guide": otherVisualBottom + gapY,
+                    "distance": Math.abs(rawY - tTopToBottomGap)
+                });
+                const tBottomToTopGap = otherVisualTop - gapY - root.visualBottomOffset;
+                candidates.push({
+                    "target": tBottomToTopGap,
+                    "guide": otherVisualTop - gapY,
+                    "distance": Math.abs(rawY - tBottomToTopGap)
                 });
             }
         }
@@ -1002,13 +1100,20 @@ AbstractWidget {
         return targetYVal;
     }
 
-    draggable: !isPreview && !(Config.options.background.widgets.lockWidgetPositions ?? false) && (placementStrategy === "free" || placementStrategy === "draggable")
+    draggable: !isPreview && !interactionLocked && (placementStrategy === "free" || placementStrategy === "draggable")
     drag.target: undefined
     drag.threshold: 4
     preventStealing: true
     hoverEnabled: true
-    animateXPos: entryDone && !isDragging && !isDraggingOrSettling && (visibleWhenLocked || !GlobalStates.screenLocked)
-    animateYPos: entryDone && !isDragging && !isDraggingOrSettling && (visibleWhenLocked || !GlobalStates.screenLocked)
+    // Right-click is announced to the canvas (requestContextMenu); the press
+    // itself never starts a drag, beginPointerGesture ignores it.
+    acceptedButtons: (allowMiddleClick ? Qt.MiddleButton : 0) | Qt.LeftButton | Qt.RightButton
+    onClicked: mouse => {
+        if (mouse.button === Qt.RightButton)
+            requestContextMenu(mouse.x, mouse.y);
+    }
+    animateXPos: entryDone && !isDragging && !isDraggingOrSettling && !groupDragging && (visibleWhenLocked || !GlobalStates.screenLocked)
+    animateYPos: entryDone && !isDragging && !isDraggingOrSettling && !groupDragging && (visibleWhenLocked || !GlobalStates.screenLocked)
 
     onReleased: mouse => {
         setCtrlBypass(Boolean(mouse.modifiers & Qt.ControlModifier));
@@ -1016,30 +1121,33 @@ AbstractWidget {
             isDraggingOrSettling = false;
             return;
         }
-        if (isPreview || !_dragMovementActive) {
+        const canvas = findCanvas(root.parent);
+        if (isPreview || !_dragMovementActive || releaseRemovesWidget(mouse)) {
+            // A press that never became a drag still told the canvas it
+            // started: hand the group bounds back without a commit. A drop
+            // that removes the widget commits nothing either.
+            if (canvas && canvas.widgetDragCancelled)
+                canvas.widgetDragCancelled(root);
             _pointerGestureReady = false;
             _dragMovementActive = false;
             isDraggingOrSettling = false;
             return;
         }
 
-        const finalX = applyGridAndSnapX(_rawDragX, _rawDragY);
-        const finalY = applyGridAndSnapY(_rawDragY, _rawDragX);
+        const finalX = WidgetDragMath.clamp(applyGridAndSnapX(_rawDragX, _rawDragY), groupDragMinX, groupDragMaxX);
+        const finalY = WidgetDragMath.clamp(applyGridAndSnapY(_rawDragY, _rawDragX), groupDragMinY, groupDragMaxY);
         root.x = finalX;
         root.y = finalY;
 
-        const canvas = findCanvas(root.parent);
         if (canvas) {
             canvas.snapLineX = -1;
             canvas.snapLineY = -1;
+            // Followers are committed by the canvas from here, inside one
+            // history batch with this widget's own commit below.
+            if (canvas.widgetDragEnded)
+                canvas.widgetDragEnded(root);
         }
-
-        if (widgetInstance !== null) {
-            Config.updateWidgetPosition(widgetInstance.id, finalX, finalY, monitorName);
-        } else if (configEntry) {
-            configEntry.x = finalX;
-            configEntry.y = finalY;
-        }
+        commitPlacement(finalX, finalY);
 
         _pointerGestureReady = false;
         _dragMovementActive = false;
@@ -1047,6 +1155,9 @@ AbstractWidget {
     }
 
     onCanceled: {
+        const canvas = findCanvas(root.parent);
+        if (canvas && canvas.widgetDragCancelled)
+            canvas.widgetDragCancelled(root);
         if (_pointerGestureReady && _dragMovementActive) {
             root.x = _dragOriginX;
             root.y = _dragOriginY;
@@ -1054,6 +1165,87 @@ AbstractWidget {
         _pointerGestureReady = false;
         _dragMovementActive = false;
         isDraggingOrSettling = false;
+    }
+
+    // ── Cancel / canvas hooks ────────────────────────────────────────────────
+    // Put the widget back where the press found it and commit nothing. Called
+    // when something ends the gesture that is not the user finishing it -
+    // Escape while dragging, or Edit Mode ending mid-drag. The pointer is
+    // still grabbed, so a release is still coming; it finds no gesture and
+    // commits nothing, which is the point: what it would write is wherever
+    // the restore animation happened to be at that moment.
+    function cancelDrag() {
+        if (!_pointerGestureReady)
+            return;
+        const moved = _dragMovementActive;
+        _pointerGestureReady = false;
+        _dragMovementActive = false;
+        const canvas = findCanvas(root.parent);
+        if (canvas) {
+            canvas.snapLineX = -1;
+            canvas.snapLineY = -1;
+            if (canvas.widgetDragCancelled)
+                canvas.widgetDragCancelled(root);
+        }
+        isDraggingOrSettling = false;
+        if (moved) {
+            root.x = _dragOriginX;
+            root.y = _dragOriginY;
+        }
+    }
+
+    // Whether this release is a drop somewhere that removes the widget instead
+    // of placing it. Nothing answers yes yet; Edit Mode's drawer will.
+    function releaseRemovesWidget(mouse) {
+        return false;
+    }
+
+    // The one store write for a placement, shared by the drag's release, the
+    // resize commit, a keyboard nudge and a group follower, so the ways of
+    // moving a widget cannot disagree about what gets persisted or what an
+    // undo reverses.
+    function commitPlacement(newX, newY) {
+        if (isPreview)
+            return;
+        if (widgetInstance !== null)
+            Config.updateWidgetPosition(widgetInstance.id, newX, newY, monitorName);
+        else if (configEntry) {
+            configEntry.x = newX;
+            configEntry.y = newY;
+        }
+    }
+
+    // A keyboard step: drawn now, through the position Behavior; the canvas
+    // commits the whole run once it ends (WidgetCanvas.nudgeSelection).
+    function nudgeTo(newX, newY) {
+        settleTimer.stop();
+        staggerTimer.stop();
+        _pendingPosition = false;
+        root.x = newX;
+        root.y = newY;
+    }
+
+    // Right-click, announced rather than handled: only the surface owning the
+    // canvas knows what a menu about this widget looks like. Nothing listens
+    // yet; Edit Mode's widget menu will. Canvas coordinates.
+    function requestContextMenu(localX, localY) {
+        if (isPreview || widgetInstance === null)
+            return;
+        const canvas = findCanvas(root.parent);
+        if (!canvas || !canvas.contextMenuRequested)
+            return;
+        const point = root.mapToItem(canvas, localX, localY);
+        canvas.contextMenuRequested(widgetInstance.id, point.x, point.y);
+    }
+
+    // Instance ids of the widgets riding this one in a group drag: they move
+    // with it, so they are not snap targets for it.
+    function _groupFollowerIds() {
+        const canvas = findCanvas(root.parent);
+        const group = canvas ? (canvas.groupDrag ?? null) : null;
+        if (!group || group.leader !== root)
+            return [];
+        return group.followers.map(entry => entry.widget.widgetInstance ? entry.widget.widgetInstance.id : "");
     }
 
     property bool needsColText: false
@@ -1122,6 +1314,26 @@ AbstractWidget {
                 root.calculatedX = parsedContent.center_x * root.wallpaperScale - root.width / 2;
                 root.calculatedY  = parsedContent.center_y * root.wallpaperScale - root.height / 2;
             }
+        }
+    }
+
+    // ── Selection halo ───────────────────────────────────────────────────────
+    // Selected-but-not-dragging feedback (WidgetCanvas marquee), distinct from
+    // the drag lift. Lives on the widget so it rides a group move with no
+    // coordinate mapping.
+    Rectangle {
+        id: selectionHalo
+        z: 97
+        visible: opacity > 0.001
+        opacity: root.selected ? 1 : 0
+        anchors.fill: parent
+        anchors.margins: -8
+        radius: Appearance.rounding.large
+        color: Qt.alpha(Appearance.colors.colPrimary, 0.08)
+        border.color: Appearance.colors.colPrimary
+        border.width: 2
+        Behavior on opacity {
+            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(selectionHalo)
         }
     }
 

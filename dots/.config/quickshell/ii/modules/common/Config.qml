@@ -3,6 +3,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import qs
 import qs.services
 import qs.modules.common.functions
 import "../ii/sidebarDashboard/quickToggles/androidStyle/QuickToggleCatalog.js" as QuickToggleCatalog
@@ -451,12 +452,79 @@ Singleton {
         return "hide";
     }
 
-    function setWidgetLockBehavior(widgetId, newLockBehavior) {
+    // ── Desktop widget writers ───────────────────────────────────────────────
+    // Every writer below records an {undo, redo} pair with GlobalStates while
+    // Edit Mode is on (a no-op otherwise), as whole-entry snapshots: replaying
+    // one puts the entry back exactly as it was, which covers a position, a
+    // scale, a lock rule, a pin and a per-monitor fork in one shape, and a
+    // removed widget comes back at its old index with its old placement. The
+    // replay helpers write the list directly, so an undo never records itself.
+    function _widgetEntryClone(entry) {
+        return entry ? JSON.parse(JSON.stringify(entry)) : null;
+    }
+
+    function _widgetEntryIndex(list, instanceId) {
+        for (let i = 0; i < list.length; i++) {
+            if (list[i].id === instanceId)
+                return i;
+        }
+        return -1;
+    }
+
+    function _replaceWidgetEntry(instanceId, snapshot, index) {
         let cloned = JSON.parse(JSON.stringify(root.options.background.activeWidgets || []));
-        for (let i = 0; i < cloned.length; i++) {
-            if (cloned[i].widgetId === widgetId) {
-                cloned[i].lockBehavior = newLockBehavior;
-                root.options.background.activeWidgets = cloned;
+        const at = root._widgetEntryIndex(cloned, instanceId);
+        if (at !== -1) {
+            cloned[at] = root._widgetEntryClone(snapshot);
+        } else {
+            const insertAt = Math.max(0, Math.min(index ?? cloned.length, cloned.length));
+            cloned.splice(insertAt, 0, root._widgetEntryClone(snapshot));
+        }
+        root.options.background.activeWidgets = cloned;
+    }
+
+    function _removeWidgetEntry(instanceId) {
+        let cloned = JSON.parse(JSON.stringify(root.options.background.activeWidgets || []));
+        const at = root._widgetEntryIndex(cloned, instanceId);
+        if (at === -1)
+            return;
+        cloned.splice(at, 1);
+        root.options.background.activeWidgets = cloned;
+    }
+
+    // `before`/`after` are entry snapshots, null on the side where the entry
+    // does not exist (an add has no before, a removal no after).
+    function _recordWidgetEdit(instanceId, before, after, index) {
+        if (!GlobalStates.editMode)
+            return;
+        if (JSON.stringify(before) === JSON.stringify(after))
+            return;
+        const restore = snapshot => snapshot === null
+            ? (() => root._removeWidgetEntry(instanceId))
+            : (() => root._replaceWidgetEntry(instanceId, snapshot, index));
+        GlobalStates.editHistoryPush({
+            "undo": restore(before),
+            "redo": restore(after)
+        });
+    }
+
+    // Edit one entry in place, recording the change.
+    function _editWidgetEntry(instanceId, mutate) {
+        let cloned = JSON.parse(JSON.stringify(root.options.background.activeWidgets || []));
+        const at = root._widgetEntryIndex(cloned, instanceId);
+        if (at === -1)
+            return;
+        const before = root._widgetEntryClone(cloned[at]);
+        mutate(cloned[at]);
+        root.options.background.activeWidgets = cloned;
+        root._recordWidgetEdit(instanceId, before, root._widgetEntryClone(cloned[at]), at);
+    }
+
+    function setWidgetLockBehavior(widgetId, newLockBehavior) {
+        let list = root.options.background.activeWidgets || [];
+        for (let i = 0; i < list.length; i++) {
+            if (list[i].widgetId === widgetId) {
+                root.updateWidgetLockBehavior(list[i].id, newLockBehavior);
                 return;
             }
         }
@@ -496,15 +564,17 @@ Singleton {
         }
 
         let instanceId = "widget_" + widgetId + "_" + Date.now();
-        cloned.push({
+        const entry = {
             "id": instanceId,
             "widgetId": widgetId,
             "x": startX,
             "y": startY,
             "placementStrategy": "free",
             "lockBehavior": "hide"
-        });
+        };
+        cloned.push(entry);
         root.options.background.activeWidgets = cloned;
+        root._recordWidgetEdit(instanceId, null, root._widgetEntryClone(entry), cloned.length - 1);
     }
 
     function removeWidgetFromDesktop(widgetId) {
@@ -517,8 +587,10 @@ Singleton {
             }
         }
         if (indexToRemove !== -1) {
+            const before = root._widgetEntryClone(cloned[indexToRemove]);
             cloned.splice(indexToRemove, 1);
             root.options.background.activeWidgets = cloned;
+            root._recordWidgetEdit(before.id, before, null, indexToRemove);
         }
     }
 
@@ -526,48 +598,28 @@ Singleton {
     // the values it currently shows; without one it lands in the legacy x/y
     // that every monitor without a fork follows (see WidgetPlacement).
     function updateWidgetPosition(instanceId, newX, newY, monitorName) {
-        let cloned = JSON.parse(JSON.stringify(root.options.background.activeWidgets || []));
-        let found = false;
-        for (let i = 0; i < cloned.length; i++) {
-            if (cloned[i].id === instanceId) {
-                WidgetPlacement.setPosition(cloned[i], monitorName, newX, newY);
-                found = true;
-                break;
-            }
-        }
-        if (found) {
-            root.options.background.activeWidgets = cloned;
-        }
+        root._editWidgetEntry(instanceId, entry => WidgetPlacement.setPosition(entry, monitorName, newX, newY));
     }
 
     function updateWidgetLockBehavior(instanceId, newLockBehavior) {
-        let cloned = JSON.parse(JSON.stringify(root.options.background.activeWidgets || []));
-        let found = false;
-        for (let i = 0; i < cloned.length; i++) {
-            if (cloned[i].id === instanceId) {
-                cloned[i].lockBehavior = newLockBehavior;
-                found = true;
-                break;
-            }
-        }
-        if (found) {
-            root.options.background.activeWidgets = cloned;
-        }
+        root._editWidgetEntry(instanceId, entry => {
+            entry.lockBehavior = newLockBehavior;
+        });
     }
 
     function updateWidgetScale(instanceId, newScale, monitorName) {
-        let cloned = JSON.parse(JSON.stringify(root.options.background.activeWidgets || []));
-        let found = false;
-        for (let i = 0; i < cloned.length; i++) {
-            if (cloned[i].id === instanceId) {
-                WidgetPlacement.setScale(cloned[i], monitorName, newScale);
-                found = true;
-                break;
-            }
-        }
-        if (found) {
-            root.options.background.activeWidgets = cloned;
-        }
+        root._editWidgetEntry(instanceId, entry => WidgetPlacement.setScale(entry, monitorName, newScale));
+    }
+
+    // A pinned widget ignores drags and the resize grip whatever the global
+    // lock says. Stored only when set, so untouched entries stay as they were.
+    function updateWidgetPinned(instanceId, pinned) {
+        root._editWidgetEntry(instanceId, entry => {
+            if (pinned)
+                entry.pinned = true;
+            else
+                delete entry.pinned;
+        });
     }
 
     function migrateRoundingConfig() {

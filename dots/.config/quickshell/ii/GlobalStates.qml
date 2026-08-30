@@ -1,6 +1,7 @@
 pragma Singleton
 pragma ComponentBehavior: Bound
 import qs.modules.common
+import qs.modules.common.functions
 import qs.services
 import QtQuick
 import Quickshell
@@ -342,6 +343,123 @@ Singleton {
     property int settingsNavigationRequest: 0
     property string activeLeftSidebarMonitor: ""
     property string activeRightSidebarMonitor: ""
+
+    // ── Edit Mode ────────────────────────────────────────────────────────────
+    // `editMode` is the switch the mode shell flips; nothing turns it on yet.
+    // The history below is inert outside the mode: entries are only recorded
+    // while it is on and dropped when it ends, so an edit made on the plain
+    // desktop is exactly as unrecorded as it always was.
+    property bool editMode: false
+
+    // Undo and redo, as two stacks of {undo, redo} closures. Closures rather
+    // than diffs: each commit site knows how to reverse and replay its own
+    // store write, and no one serialiser covers every store the mode edits.
+    // The stacks are reassigned, never mutated in place - a `property var`
+    // only notifies on reassignment, so an in-place push would leave every
+    // observer of `editCanUndo` reading a depth that never moves.
+    property var editUndoStack: []
+    property var editRedoStack: []
+    readonly property bool editCanUndo: editUndoStack.length > 0
+    readonly property bool editCanRedo: editRedoStack.length > 0
+
+    // While a batch is open, pushes collect; closing it folds them into ONE
+    // entry, so a gesture that commits several writes (a group drag, a burst
+    // of arrow keys, a resize with its re-centre) is one Ctrl+Z. Undo replays
+    // a batch backwards and redo forwards: three arrow steps on one widget
+    // push "back to 36", "back to 48", "back to 60", and reversing them in
+    // push order would leave the widget at 60.
+    property var _editHistoryBatch: null
+    property bool _editHistoryReplaying: false
+
+    function editHistoryBeginBatch() {
+        if (root._editHistoryBatch === null)
+            root._editHistoryBatch = [];
+    }
+
+    function editHistoryEndBatch() {
+        const entries = root._editHistoryBatch;
+        root._editHistoryBatch = null;
+        if (entries === null || entries.length === 0)
+            return;
+        if (entries.length === 1) {
+            root._editHistoryCommit(entries[0]);
+            return;
+        }
+        root._editHistoryCommit({
+            "undo": () => {
+                for (let i = entries.length - 1; i >= 0; i--)
+                    entries[i].undo();
+            },
+            "redo": () => {
+                for (let i = 0; i < entries.length; i++)
+                    entries[i].redo();
+            }
+        });
+    }
+
+    // entry: {undo: function, redo: function}. Recorded only while the mode
+    // is on, and never while a replay runs - an undo that re-recorded the
+    // write it reverses would never converge.
+    function editHistoryPush(entry) {
+        if (!root.editMode || root._editHistoryReplaying)
+            return;
+        if (!entry || typeof entry.undo !== "function" || typeof entry.redo !== "function")
+            return;
+        if (root._editHistoryBatch !== null) {
+            root._editHistoryBatch.push(entry);
+            return;
+        }
+        root._editHistoryCommit(entry);
+    }
+
+    // A new edit invalidates the redo stack: what it held was a future the
+    // user has now diverged from.
+    function _editHistoryCommit(entry) {
+        root.editUndoStack = EditModeLogic.undoPush(root.editUndoStack, entry);
+        root.editRedoStack = [];
+    }
+
+    function editUndo() {
+        if (root._editHistoryBatch !== null)
+            root.editHistoryEndBatch();
+        const popped = EditModeLogic.undoPop(root.editUndoStack);
+        root.editUndoStack = popped.stack;
+        if (popped.entry === null)
+            return;
+        root._editHistoryReplay(popped.entry.undo);
+        root.editRedoStack = EditModeLogic.undoPush(root.editRedoStack, popped.entry);
+    }
+
+    function editRedo() {
+        const popped = EditModeLogic.undoPop(root.editRedoStack);
+        root.editRedoStack = popped.stack;
+        if (popped.entry === null)
+            return;
+        root._editHistoryReplay(popped.entry.redo);
+        root.editUndoStack = EditModeLogic.undoPush(root.editUndoStack, popped.entry);
+    }
+
+    function _editHistoryReplay(fn) {
+        root._editHistoryReplaying = true;
+        try {
+            fn();
+        } finally {
+            root._editHistoryReplaying = false;
+        }
+    }
+
+    function editHistoryClear() {
+        root._editHistoryBatch = null;
+        root.editUndoStack = [];
+        root.editRedoStack = [];
+    }
+
+    // Done means "stop": the history is about this session of the mode, and a
+    // stack surviving it would let the next entry undo edits made outside it.
+    onEditModeChanged: {
+        if (!root.editMode)
+            root.editHistoryClear();
+    }
 
     function isScreenAllowedForBar(screen) {
         if (!screen)

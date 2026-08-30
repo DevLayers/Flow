@@ -36,6 +36,8 @@ Item {
         const list = Config.options.background.activeWidgets;
         return WidgetPlacement.resolveIn(list, delegateRoot.instanceId, delegateRoot.monitorName);
     }
+    // The entry itself, for the flags that are not placement (pinned).
+    readonly property var configEntry: WidgetPlacement.findEntry(Config.options.background.activeWidgets, delegateRoot.instanceId)
     required property real wallpaperScale
     required property bool wallpaperSafetyTriggered
     required property bool lockAnimationActive
@@ -1268,7 +1270,8 @@ Item {
                     "scale": delegateRoot.placement.scale,
                     "monitorName": delegateRoot.monitorName,
                     "placementStrategy": delegateRoot.placementStrategy,
-                    "lockBehavior": delegateRoot.lockBehavior
+                    "lockBehavior": delegateRoot.lockBehavior,
+                    "pinned": delegateRoot.configEntry ? delegateRoot.configEntry.pinned === true : false
                 };
             }
             when: widgetLoader.status == Loader.Ready

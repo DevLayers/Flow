@@ -36,7 +36,9 @@ PanelWindow {
     // makes the Ctrl-to-bypass-snap drag gesture undetectable. While a widget
     // drag is active we take OnDemand focus so real modifier events flow in;
     // dropping it on release hands focus back to the previously focused app.
-    WlrLayershell.keyboardFocus: widgetCanvas.draggingActive ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
+    // A marquee selection and Edit Mode hold it the same way: the arrows,
+    // Escape and the mode's own keys arrive on this surface and nowhere else.
+    WlrLayershell.keyboardFocus: (widgetCanvas.draggingActive || widgetCanvas.keyboardFocusHeld) ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
     color: "transparent"
 
     anchors {
@@ -92,6 +94,10 @@ PanelWindow {
     // WidgetDelegate's FadeLoader uses - and for the whole lock/unlock sequence so lock-only widgets
     // fade in and out exactly as before. Setups with an always-visible widget never unmap.
     readonly property bool anyWidgetShown: {
+        // Edit Mode needs the surface up even over an empty desktop: the
+        // marquee, and later the drop targets, live on it.
+        if (GlobalStates.editMode)
+            return true;
         if (!hasWidgets)
             return false;
         void widgetStateManager.syncVersion; // re-evaluate when the model's roles are rewritten
@@ -386,6 +392,14 @@ PanelWindow {
             antialiasing: true
             smooth: true
             gridOverlayEnabled: Config.options.background.widgets.enableGrid ?? false
+            // The desktop is the one canvas that opts into marquee selection;
+            // the mode is handed in so this canvas, and not the overlay's,
+            // follows it.
+            selectionEnabled: true
+            editMode: GlobalStates.editMode
+            // TEMP (stage 2): nothing consumes the signal yet - the widget
+            // menu does in stage 4. Logged so a right-click can be verified.
+            onContextMenuRequested: (instanceId, atX, atY) => console.log("[WidgetCanvas] context menu requested for " + instanceId + " at " + Math.round(atX) + "," + Math.round(atY))
 
             anchors {
                 left: parent.left
