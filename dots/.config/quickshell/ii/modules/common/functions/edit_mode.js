@@ -548,3 +548,36 @@ function dropPosition(input) {
         y: Math.max(0, Math.min(screenHeight - Math.max(height, grid), y))
     };
 }
+
+// ── Widget size stepper ─────────────────────────────────────────────────────
+// The menu's Size row walks these detents (factors) rather than the grip's
+// continuous range: a stepper wants values you can name. The range is the
+// grip's own (50-200 %), so the two never disagree about what is allowed.
+var SIZE_STEPS = [0.5, 0.75, 1, 1.25, 1.5, 2];
+
+// The next detent from `current` in `direction` (-1 / +1); null at either end.
+// An off-detent value (the grip is continuous) first snaps to the nearest one,
+// then steps, so a 1.66 widget reads 150 % and "+" makes it 200 %.
+function steppedScale(current, direction) {
+    var steps = SIZE_STEPS;
+    var nearest = 0;
+    for (var i = 1; i < steps.length; i++) {
+        if (Math.abs(steps[i] - current) < Math.abs(steps[nearest] - current))
+            nearest = i;
+    }
+    var next = nearest + (direction < 0 ? -1 : 1);
+    if (next < 0 || next >= steps.length)
+        return null;
+    return steps[next];
+}
+
+// The detent a continuous factor reads as, for the row's label.
+function nearestSizeStep(current) {
+    var steps = SIZE_STEPS;
+    var nearest = steps[0];
+    for (var i = 1; i < steps.length; i++) {
+        if (Math.abs(steps[i] - current) < Math.abs(nearest - current))
+            nearest = steps[i];
+    }
+    return nearest;
+}

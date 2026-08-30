@@ -407,7 +407,12 @@ AbstractWidget {
     // activeWidgets entry and applied as a visual Item scale around the centre.
     readonly property bool _positionsLocked: Config.options.background.widgets.lockWidgetPositions ?? false
     readonly property var _scaleSection: Config.options.background.widgets[configEntryName] ?? null
-    readonly property bool _scaleHandleAvailable: !isPreview && draggable && !_positionsLocked && widgetInstance !== null
+    readonly property bool _scaleHandleAvailable: !isPreview && draggable && !interactionLocked && widgetInstance !== null
+    // The factor the widget is persisted at, whichever path stores it - what
+    // the menu's Size row reads and steps from.
+    readonly property real committedScaleFactor: _usesWidgetSizeKey
+        ? ((_scaleSection !== null && _scaleSection.widgetSize > 0) ? _scaleSection.widgetSize / 100 : 1.0)
+        : _persistedInstanceScale
     // Path selection is consumer-based, not declaration-based: sections like
     // clock_nothing declare `widgetSize` while their layout ignores it, and
     // writing it there changes nothing (the widget "snaps back"). Only widgets
@@ -1368,7 +1373,9 @@ AbstractWidget {
     Item {
         id: resizeHandle
         visible: opacity > 0.001
-        opacity: root._scaleHandleAvailable && !root.isDragging && (root.containsMouse || resizeDragArea.dragging) ? 1 : 0
+        // Shown on hover, and throughout the mode: a grip you have to find
+        // by hovering is not an affordance in a layout editor.
+        opacity: root._scaleHandleAvailable && !root.isDragging && (root.containsMouse || resizeDragArea.dragging || root.editModeActive) ? 1 : 0
         // Grow into place instead of only fading: at this size a pure opacity
         // ramp reads as a glitch rather than as something arriving.
         scale: opacity > 0.5 ? 1 : 0.7

@@ -1,0 +1,216 @@
+import QtQuick
+import QtQuick.Layouts
+import qs
+import qs.services
+import qs.modules.common
+import qs.modules.common.widgets
+import qs.modules.common.functions
+import qs.modules.ii.background.widgets
+
+/**
+ * The per-widget menu of Edit Mode: name, Pin, Size stepper, Remove. It acts on
+ * the widget item the canvas resolves from the instance id, so every write goes
+ * down the widget's own persisted paths (both scale paths, the per-monitor fork,
+ * the history pair) and nothing here duplicates them. The card is inert once
+ * the widget is gone: rows disable rather than the menu vanishing under the
+ * pointer.
+ */
+Item {
+    id: root
+
+    property var canvas: null
+    property string instanceId: ""
+    signal dismissRequested()
+
+    readonly property var widget: (canvas && canvas.widgetById) ? canvas.widgetById(instanceId) : null
+    readonly property var instance: widget ? widget.widgetInstance : null
+    readonly property var metadata: instance ? WidgetsRegistry.getWidgetMetadata(instance.widgetId) : null
+    readonly property bool pinned: widget ? widget.pinned : false
+    readonly property real scaleFactor: widget ? widget.committedScaleFactor : 1
+    readonly property real scaleStep: EditModeLogic.nearestSizeStep(scaleFactor)
+    readonly property bool canGrow: widget !== null && EditModeLogic.steppedScale(scaleFactor, 1) !== null
+    readonly property bool canShrink: widget !== null && EditModeLogic.steppedScale(scaleFactor, -1) !== null
+    readonly property int padding: 6
+
+    implicitWidth: 236
+    implicitHeight: column.implicitHeight + padding * 2
+    width: implicitWidth
+    height: implicitHeight
+
+    function stepSize(direction) {
+        if (!root.widget || !root.widget.commitResizeScale)
+            return;
+        const next = EditModeLogic.steppedScale(root.scaleFactor, direction);
+        if (next === null)
+            return;
+        root.widget.commitResizeScale(next);
+    }
+
+    StyledRectangularShadow {
+        target: card
+    }
+
+    // A click on the card's own padding is a click ON the menu, never a
+    // click away from it: swallowed here, under the rows.
+    MouseArea {
+        anchors.fill: parent
+        acceptedButtons: Qt.AllButtons
+    }
+
+    Rectangle {
+        id: card
+        anchors.fill: parent
+        radius: Appearance.rounding.windowRounding
+        color: Appearance.m3colors.m3surfaceContainer
+        border.width: 1
+        border.color: Appearance.colors.colLayer0Border
+    }
+
+    ColumnLayout {
+        id: column
+        anchors.fill: parent
+        anchors.margins: root.padding
+        spacing: 2
+
+        RowLayout {
+            Layout.fillWidth: true
+            Layout.leftMargin: 8
+            Layout.rightMargin: 8
+            Layout.topMargin: 4
+            Layout.bottomMargin: 4
+            spacing: 8
+
+            MaterialSymbol {
+                text: root.metadata ? (root.metadata.icon || "widgets") : "widgets"
+                iconSize: Appearance.font.pixelSize.larger
+                color: Appearance.colors.colOnSurfaceVariant
+            }
+            StyledText {
+                Layout.fillWidth: true
+                text: root.metadata ? root.metadata.name : Translation.tr("Widget")
+                font.pixelSize: Appearance.font.pixelSize.small
+                font.weight: Font.Medium
+                color: Appearance.colors.colOnSurfaceVariant
+                elide: Text.ElideRight
+            }
+        }
+
+        MenuRow {
+            symbol: root.pinned ? "keep_off" : "keep"
+            label: root.pinned ? Translation.tr("Unpin position") : Translation.tr("Pin position")
+            enabled: root.instance !== null
+            onClicked: {
+                Config.updateWidgetPinned(root.instanceId, !root.pinned);
+            }
+        }
+
+        RowLayout {
+            Layout.fillWidth: true
+            Layout.leftMargin: 8
+            Layout.rightMargin: 4
+            spacing: 4
+
+            MaterialSymbol {
+                text: "aspect_ratio"
+                iconSize: Appearance.font.pixelSize.larger
+                color: Appearance.m3colors.m3onSurface
+            }
+            StyledText {
+                Layout.fillWidth: true
+                text: Translation.tr("Size")
+                font.pixelSize: Appearance.font.pixelSize.small
+                color: Appearance.m3colors.m3onSurface
+            }
+            StepButton {
+                symbol: "remove"
+                enabled: root.canShrink
+                onClicked: root.stepSize(-1)
+            }
+            StyledText {
+                Layout.preferredWidth: 44
+                horizontalAlignment: Text.AlignHCenter
+                text: Math.round(root.scaleStep * 100) + "%"
+                font.pixelSize: Appearance.font.pixelSize.small
+                color: Appearance.m3colors.m3onSurface
+            }
+            StepButton {
+                symbol: "add"
+                enabled: root.canGrow
+                onClicked: root.stepSize(1)
+            }
+        }
+
+        Rectangle {
+            Layout.fillWidth: true
+            Layout.topMargin: 2
+            Layout.bottomMargin: 2
+            height: 1
+            color: Appearance.colors.colOutlineVariant
+        }
+
+        MenuRow {
+            symbol: "delete"
+            label: Translation.tr("Remove from desktop")
+            enabled: root.instance !== null
+            colText: Appearance.m3colors.m3error
+            onClicked: {
+                const widgetId = root.instance.widgetId;
+                root.dismissRequested();
+                Config.removeWidgetFromDesktop(widgetId);
+            }
+        }
+    }
+
+    component MenuRow: RippleButton {
+        id: row
+        property string symbol: ""
+        property string label: ""
+        property color colText: Appearance.m3colors.m3onSurface
+
+        Layout.fillWidth: true
+        implicitHeight: 34
+        buttonRadius: Math.max(0, Appearance.rounding.windowRounding - root.padding)
+        colBackground: "transparent"
+        colBackgroundHover: Appearance.colors.colLayer1Hover
+        colRipple: Appearance.colors.colLayer1Active
+
+        contentItem: RowLayout {
+            anchors.fill: parent
+            anchors.leftMargin: 8
+            anchors.rightMargin: 8
+            spacing: 8
+
+            MaterialSymbol {
+                text: row.symbol
+                iconSize: Appearance.font.pixelSize.larger
+                color: row.enabled ? row.colText : Appearance.m3colors.m3outline
+            }
+            StyledText {
+                Layout.fillWidth: true
+                text: row.label
+                font.pixelSize: Appearance.font.pixelSize.small
+                color: row.enabled ? row.colText : Appearance.m3colors.m3outline
+                elide: Text.ElideRight
+            }
+        }
+    }
+
+    component StepButton: RippleButton {
+        id: step
+        property string symbol: ""
+
+        implicitWidth: 30
+        implicitHeight: 30
+        buttonRadius: Appearance.rounding.full
+        colBackground: "transparent"
+        colBackgroundHover: Appearance.colors.colLayer1Hover
+        colRipple: Appearance.colors.colLayer1Active
+
+        contentItem: MaterialSymbol {
+            anchors.centerIn: parent
+            text: step.symbol
+            iconSize: Appearance.font.pixelSize.larger
+            color: step.enabled ? Appearance.m3colors.m3onSurface : Appearance.m3colors.m3outline
+        }
+    }
+}

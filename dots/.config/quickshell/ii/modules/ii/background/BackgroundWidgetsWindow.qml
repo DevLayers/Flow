@@ -418,9 +418,15 @@ PanelWindow {
             // follows it.
             selectionEnabled: true
             editMode: GlobalStates.editMode
-            // TEMP (stage 2): nothing consumes the signal yet - the widget
-            // menu does in stage 4. Logged so a right-click can be verified.
-            onContextMenuRequested: (instanceId, atX, atY) => console.log("[WidgetCanvas] context menu requested for " + instanceId + " at " + Math.round(atX) + "," + Math.round(atY))
+            // The widget menu, drawn by this screen's edit chrome. The point
+            // is mapped through the canvas's transform chain (the mode's
+            // shrink included), so it lands where the pointer is on screen.
+            onContextMenuRequested: (instanceId, atX, atY) => {
+                if (!GlobalStates.editMode)
+                    return;
+                const p = widgetCanvas.mapToItem(null, atX, atY);
+                GlobalStates.openEditWidgetMenu(widgetCanvas, instanceId, bgWidgetsWindow.monitor ? bgWidgetsWindow.monitor.name : "", p.x, p.y);
+            }
 
             anchors {
                 left: parent.left

@@ -68,8 +68,62 @@ PanelWindow {
     readonly property var cardGeometry: EditModeLogic.cardRect(root.viewport, root.progress, root.width, root.height, 0)
     readonly property var areaGeometry: EditModeLogic.areaRect(root.viewport, root.progress, root.width, root.height)
 
+    // Whether the one widget menu belongs to this screen.
+    readonly property bool menuOpenHere: GlobalStates.editWidgetMenuOpen && GlobalStates.editWidgetMenuScreenName === root.screenName
+
+    // The toolbar, plus - while a menu is open - the whole screen: a click
+    // anywhere that is not the menu dismisses it before it reaches the desktop.
+    // The closer's region is zero-sized when there is no menu, so the desktop
+    // gets every other click.
     mask: Region {
         item: chrome.toolbarItem
+        Region {
+            item: menuCloser
+        }
+    }
+
+    Item {
+        id: menuCloser
+        width: root.menuOpenHere ? root.width : 0
+        height: root.menuOpenHere ? root.height : 0
+    }
+
+    Loader {
+        id: menuLoader
+        anchors.fill: parent
+        active: root.menuOpenHere
+        z: 10
+        sourceComponent: Item {
+            MouseArea {
+                anchors.fill: parent
+                acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
+                onPressed: GlobalStates.closeEditWidgetMenu()
+            }
+            EditWidgetMenu {
+                id: menuCard
+                x: Math.min(Math.max(GlobalStates.editWidgetMenuX, 8), root.width - width - 8)
+                y: Math.min(Math.max(GlobalStates.editWidgetMenuY, 8), root.height - height - 8)
+                canvas: GlobalStates.editWidgetMenuCanvas
+                instanceId: GlobalStates.editWidgetMenuInstanceId
+                onDismissRequested: GlobalStates.closeEditWidgetMenu()
+                // From the corner the pointer is at: the card belongs to a point.
+                transformOrigin: Item.TopLeft
+                scale: 0.85
+                opacity: 0
+                Component.onCompleted: {
+                    scale = 1.0;
+                    opacity = 1.0;
+                }
+                Behavior on scale {
+                    enabled: !Appearance.reducedMotion
+                    animation: Appearance.animation.elementMoveEnter.numberAnimation.createObject(menuCard)
+                }
+                Behavior on opacity {
+                    enabled: !Appearance.reducedMotion
+                    animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(menuCard)
+                }
+            }
+        }
     }
 
     EditModeChromeContent {

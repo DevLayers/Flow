@@ -358,6 +358,34 @@ Singleton {
     // desktop that shrank is the one that grows back; the next entry re-points
     // it.
     property string editModeMonitor: ""
+    // The per-widget menu, one at a time shell-wide. It is drawn by the edit
+    // chrome of the screen it was summoned on (the canvas sits on Bottom, under
+    // the bar and dock, so a menu drawn there could be covered) and acts on
+    // the widget through the canvas that announced the right-click, which is
+    // the one that knows the widget by its instance id. Screen coordinates.
+    property bool editWidgetMenuOpen: false
+    property string editWidgetMenuInstanceId: ""
+    property string editWidgetMenuScreenName: ""
+    property real editWidgetMenuX: 0
+    property real editWidgetMenuY: 0
+    property var editWidgetMenuCanvas: null
+
+    function openEditWidgetMenu(canvas, instanceId, screenName, x, y) {
+        if (!root.editMode)
+            return;
+        root.editWidgetMenuCanvas = canvas;
+        root.editWidgetMenuInstanceId = instanceId;
+        root.editWidgetMenuScreenName = screenName;
+        root.editWidgetMenuX = x;
+        root.editWidgetMenuY = y;
+        root.editWidgetMenuOpen = true;
+    }
+
+    function closeEditWidgetMenu() {
+        root.editWidgetMenuOpen = false;
+        root.editWidgetMenuCanvas = null;
+        root.editWidgetMenuInstanceId = "";
+    }
 
     // The entry and the exit as ONE animated scalar. The desktop lives on two
     // layer surfaces (the wallpaper and the widgets, two scene graphs) and the
@@ -436,6 +464,7 @@ Singleton {
     }
 
     function _leaveEditMode() {
+        root.closeEditWidgetMenu();
         // The lock now owns every monitor's workspace - it parks them itself
         // and restores its own record on unlock - so a restore fired here
         // would fight it. The saved pair waits for the unlock instead.

@@ -80,4 +80,14 @@ Singleton {
     function dropPosition(...args) {
         return EditMode.dropPosition(...args)
     }
+
+    readonly property var sizeSteps: EditMode.SIZE_STEPS
+
+    function steppedScale(...args) {
+        return EditMode.steppedScale(...args)
+    }
+
+    function nearestSizeStep(...args) {
+        return EditMode.nearestSizeStep(...args)
+    }
 }

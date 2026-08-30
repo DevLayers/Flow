@@ -86,6 +86,19 @@ MouseArea {
     // mode the move still commits and simply records no history entry, which
     // is the existing grain: a drag outside the mode is unrecorded too.
     Keys.onPressed: event => {
+        // Ctrl+Z / Ctrl+Shift+Z, by keysym so AZERTY's physical Z works.
+        // Auto-repeat is dropped: every step is a config write, and a held
+        // key would queue writes faster than the file's own reload settles.
+        if (root.editMode && event.key === Qt.Key_Z && (event.modifiers & Qt.ControlModifier)) {
+            event.accepted = true;
+            if (event.isAutoRepeat)
+                return;
+            if (event.modifiers & Qt.ShiftModifier)
+                GlobalStates.editRedo();
+            else
+                GlobalStates.editUndo();
+            return;
+        }
         const nudge = WidgetNudge.direction(event.key, root.arrowKeys);
         if (!nudge || root.selectedWidgets.length === 0)
             return;
@@ -97,12 +110,14 @@ MouseArea {
     // applies. EditModeLogic.resolveEscape owns that precedence.
     Keys.onEscapePressed: event => {
         const action = EditModeLogic.resolveEscape({
-            "menuOpen": false,
+            "menuOpen": GlobalStates.editWidgetMenuOpen && GlobalStates.editWidgetMenuCanvas === root,
             "gestureInFlight": root.draggingWidget() !== null,
             "selectionCount": root.selectedWidgets.length,
             "tab": EditModeLogic.desktopTab
         });
-        if (action === "cancelGesture")
+        if (action === "closeMenu")
+            GlobalStates.closeEditWidgetMenu();
+        else if (action === "cancelGesture")
             root.cancelActiveDrag();
         else if (action === "clearSelection")
             root.clearSelection();
@@ -214,6 +229,18 @@ MouseArea {
     // each one sits inside its own FadeLoader, and a registry filled from
     // Component.onCompleted would depend on the loader having parented the
     // widget under the canvas by then.
+    // The widget item behind an instance id, for the menu that acts on it;
+    // null once the widget is gone.
+    function widgetById(instanceId) {
+        const all = root.widgetsUnder(root, []);
+        for (let i = 0; i < all.length; i++) {
+            const inst = all[i].widgetInstance;
+            if (inst && inst.id === instanceId)
+                return all[i];
+        }
+        return null;
+    }
+
     function widgetsUnder(item, found) {
         const children = item.children;
         for (let i = 0; i < children.length; i++) {
@@ -447,8 +474,11 @@ MouseArea {
         id: dotGrid
         anchors.fill: parent
         z: -1
-        visible: root.draggingActive && root.gridOverlayEnabled && opacity > 0.001
-        opacity: root.draggingActive && root.gridOverlayEnabled ? 0.55 : 0
+        // The lattice shows for a drag, and throughout the mode: in the mode
+        // the desktop is being laid out, and the grid is what it is laid out on.
+        readonly property bool wanted: (root.draggingActive || root.editMode) && root.gridOverlayEnabled
+        visible: wanted && opacity > 0.001
+        opacity: wanted ? 0.55 : 0
 
         readonly property real dotSize: 1.5
         readonly property color dotColor: Appearance.colors.colPrimary
