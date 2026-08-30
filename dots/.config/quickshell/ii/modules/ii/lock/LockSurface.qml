@@ -13,6 +13,8 @@ import qs.modules.ii.bar as Bar
 import qs.modules.ii.bar.widgets.tray
 import Quickshell
 import Quickshell.Services.SystemTray
+import qs.modules.ii.editMode
+import "../../common/functions/lock_islands.js" as LockIslands
 
 MouseArea {
     id: root
@@ -25,6 +27,53 @@ MouseArea {
     property bool active: false
     property bool showInputField: active || context.currentText.length > 0
     readonly property bool requirePasswordToPower: Config.options.lock.security.requirePasswordToPower
+
+    // ── Island order ─────────────────────────────────────────────────────────
+    // The islands' children stay declared in their default order; the stored
+    // lists reorder them by reparenting, which a RowLayout reads as a new
+    // child order. Ids are lock_islands.js's vocabulary.
+    readonly property var islandItems: ({
+        "main": { "fingerprint": fingerprintLoader, "password": passwordBox, "confirm": confirmButton },
+        "left": { "battery": batteryButton, "capsLock": capsLockPill, "alarm": nextAlarmButton,
+            "weather": weatherButton, "keyboardLayout": layoutSwitcherButton, "keepAwake": keepAwakeButton,
+            "mode": modeButton },
+        "right": { "sleep": sleepButton, "power": powerButton, "reboot": rebootButton }
+    })
+    readonly property var islandToolbars: ({ "main": mainIsland, "left": leftIsland, "right": rightIsland })
+    readonly property var mainOrder: LockIslands.orderedItems(Config.options.lock.islands.main, LockIslands.MAIN_DEFAULT)
+    readonly property var leftOrder: LockIslands.orderedItems(Config.options.lock.islands.left, LockIslands.LEFT_DEFAULT)
+    readonly property var rightOrder: LockIslands.orderedItems(Config.options.lock.islands.right, LockIslands.RIGHT_DEFAULT)
+    readonly property bool editingIslands: !root.interactive && GlobalStates.editLockPreview
+
+    function islandOrder(island) {
+        if (island === "main") return root.mainOrder;
+        if (island === "left") return root.leftOrder;
+        return root.rightOrder;
+    }
+
+    function applyIslandOrder(island) {
+        const items = root.islandItems[island];
+        const order = root.islandOrder(island);
+        const wanted = order.map(id => items[id]).filter(Boolean);
+        if (wanted.length === 0)
+            return;
+        const siblings = wanted[0].parent.children;
+        const mapped = [];
+        for (let i = 0; i < siblings.length; i++)
+            if (wanted.indexOf(siblings[i]) !== -1)
+                mapped.push(siblings[i]);
+        if (mapped.every((it, i) => it === wanted[i]))
+            return;
+        for (const item of wanted) {
+            const parent = item.parent;
+            item.parent = null;
+            item.parent = parent;
+        }
+    }
+
+    onMainOrderChanged: root.applyIslandOrder("main")
+    onLeftOrderChanged: root.applyIslandOrder("left")
+    onRightOrderChanged: root.applyIslandOrder("right")
 
     // Force focus on entry
     function forceFieldFocus() {
@@ -71,6 +120,9 @@ MouseArea {
 
     // Init
     Component.onCompleted: {
+        root.applyIslandOrder("main");
+        root.applyIslandOrder("left");
+        root.applyIslandOrder("right");
         forceFieldFocus();
         toolbarScale = 1;
         toolbarOpacity = 1;
@@ -501,6 +553,7 @@ MouseArea {
 
         // Fingerprint
         Loader {
+            id: fingerprintLoader
             Layout.rightMargin: 2
             Layout.fillHeight: true
             Layout.preferredWidth: height
@@ -1386,5 +1439,13 @@ MouseArea {
             layoutDialog.close();
             lockContextMenu.close();
         }
+    }
+
+    // Edit Mode's reorder affordances, only over the Lockscreen tab's preview.
+    Loader {
+        active: root.editingIslands
+        anchors.fill: parent
+        z: 50
+        sourceComponent: LockIslandEditController { surface: root }
     }
 }

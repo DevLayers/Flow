@@ -494,6 +494,26 @@ Singleton {
 
     // `before`/`after` are entry snapshots, null on the side where the entry
     // does not exist (an add has no before, a removal no after).
+    // One lock island's stored order, written as one history entry. The
+    // closures reach only this singleton, never the preview overlay that asked -
+    // the Lockscreen tab tears that down and the stack outlives it.
+    function setLockIslandOrder(island, list) {
+        const islands = root.options.lock.islands;
+        const before = EditModeLogic.listCopy(island === "main" ? islands.main
+            : island === "left" ? islands.left : islands.right);
+        const after = EditModeLogic.listCopy(list);
+        const write = l => {
+            if (island === "main") islands.main = l;
+            else if (island === "left") islands.left = l;
+            else islands.right = l;
+        };
+        write(after);
+        GlobalStates.editHistoryPush({
+            "undo": () => write(before),
+            "redo": () => write(after)
+        });
+    }
+
     function _recordWidgetEdit(instanceId, before, after, index) {
         if (!GlobalStates.editMode)
             return;
@@ -3727,6 +3747,12 @@ Singleton {
                 property bool rippleEffect: true
                 property bool nowPlaying: true
                 property bool sports: true
+                // The islands' draw order; see lock_islands.js for the defaults these must match.
+                property JsonObject islands: JsonObject {
+                    property list<string> main: ["fingerprint", "password", "confirm"]
+                    property list<string> left: ["battery", "capsLock", "alarm", "weather", "keyboardLayout", "keepAwake", "mode"]
+                    property list<string> right: ["sleep", "power", "reboot"]
+                }
                 property bool showAlarm: true
                 property bool showWeather: true
                 property JsonObject zoomAnimation: JsonObject {
