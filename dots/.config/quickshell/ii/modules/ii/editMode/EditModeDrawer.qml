@@ -138,7 +138,6 @@ Item {
             }
 
             ButtonGroup {
-                Layout.fillWidth: true
                 Layout.leftMargin: 6
                 Layout.rightMargin: 6
 
@@ -189,7 +188,9 @@ Item {
             }
 
             // ── Widgets ──────────────────────────────────────────────────────
-            ListView {
+            StyledListView {
+                popin: false
+                animateAppearance: false
                 id: widgetList
                 visible: root.section === "widgets"
                 Layout.fillWidth: true
@@ -271,7 +272,9 @@ Item {
 
             // Lock screen section: the islands' switches, then the way back to
             // the desktop's layout on this monitor.
-            ListView {
+            StyledListView {
+                popin: false
+                animateAppearance: false
                 id: lockList
                 visible: root.section === "lock"
                 Layout.fillWidth: true
@@ -327,7 +330,6 @@ Item {
             // ── Bar ──────────────────────────────────────────────────────────
             ButtonGroup {
                 visible: root.section === "bar"
-                Layout.fillWidth: true
                 Layout.leftMargin: 6
                 Layout.rightMargin: 6
 
@@ -350,7 +352,9 @@ Item {
                 }
             }
 
-            ListView {
+            StyledListView {
+                popin: false
+                animateAppearance: false
                 id: barList
                 visible: root.section === "bar"
                 Layout.fillWidth: true
@@ -369,7 +373,9 @@ Item {
             }
 
             // ── Dock ─────────────────────────────────────────────────────────
-            ListView {
+            StyledListView {
+                popin: false
+                animateAppearance: false
                 id: appList
                 visible: root.section === "dock"
                 Layout.fillWidth: true
