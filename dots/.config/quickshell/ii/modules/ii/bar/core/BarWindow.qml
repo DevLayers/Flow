@@ -133,8 +133,35 @@ Scope {
         readonly property bool shellSeated: shellHide < 0.999
         readonly property bool shellFullySeated: shellHide < 0.001
 
+        // ── Hover delay trigger ───────────────────────────────────────────────
+        property bool hoverTriggered: false
+        readonly property int hoverDelay: Config?.options.bar.autoHide.hoverDelay ?? 0
+
+        Timer {
+            id: hoverOpenTimer
+            interval: barRoot.hoverDelay
+            repeat: false
+            onTriggered: barRoot.hoverTriggered = true
+        }
+
+        Connections {
+            target: hoverRegion
+            function onContainsMouseChanged() {
+                if (hoverRegion.containsMouse) {
+                    if (barRoot.hoverDelay <= 0 || barRoot.hiddenAmount < 1 || barRoot.superShow || GlobalStates.sidebarLeftOpen || GlobalStates.sidebarRightOpen) {
+                        barRoot.hoverTriggered = true;
+                    } else {
+                        hoverOpenTimer.restart();
+                    }
+                } else {
+                    hoverOpenTimer.stop();
+                    barRoot.hoverTriggered = false;
+                }
+            }
+        }
+
         property bool superShow: false
-        property bool mustShow: hoverRegion.containsMouse || superShow || GlobalStates.sidebarLeftOpen || GlobalStates.sidebarRightOpen
+        property bool mustShow: hoverTriggered || superShow || GlobalStates.sidebarLeftOpen || GlobalStates.sidebarRightOpen
         property real hiddenAmount: (Config?.options.bar.autoHide.enable && !mustShow) ? Appearance.sizes.barHeight : 0
         Behavior on hiddenAmount {
             animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(barRoot)

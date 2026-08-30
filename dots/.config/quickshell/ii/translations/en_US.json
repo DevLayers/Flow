@@ -4008,5 +4008,20 @@
     "Bar popup close delay (ms)": "Bar popup close delay (ms)",
     "Floating popup services": "Floating popup services",
     "Enable floating popups": "Enable floating popups",
-    "Generic Linux": "Generic Linux"
+    "Generic Linux": "Generic Linux",
+    "Sensitivity & trigger": "Sensitivity & trigger",
+    "Instant": "Instant",
+    "Hold": "Hold",
+    "Wide edge": "Wide edge",
+    "Cautious": "Cautious",
+    "Reveals immediately on edge touch (6px edge, 0ms delay)": "Reveals immediately on edge touch (6px edge, 0ms delay)",
+    "Requires holding pointer on edge for 250ms (16px edge, 250ms delay)": "Requires holding pointer on edge for 250ms (16px edge, 250ms delay)",
+    "Large 32px trigger area for easy multi-monitor activation (32px edge, 0ms delay)": "Large 32px trigger area for easy multi-monitor activation (32px edge, 0ms delay)",
+    "Wide 32px area requiring a 250ms hold, ideal for multi-monitor setups (32px edge, 250ms delay)": "Wide 32px area requiring a 250ms hold, ideal for multi-monitor setups (32px edge, 250ms delay)",
+    "Trigger area width (px)": "Trigger area width (px)",
+    "Width of the interactive edge zone that detects the pointer": "Width of the interactive edge zone that detects the pointer",
+    "Hold delay (ms)": "Hold delay (ms)",
+    "Delay in milliseconds the pointer must stay on the edge before the bar reveals": "Delay in milliseconds the pointer must stay on the edge before the bar reveals",
+    "Reveal with Super key": "Reveal with Super key",
+    "Temporarily reveals the bar while holding the Super/Windows key": "Temporarily reveals the bar while holding the Super/Windows key"
 }

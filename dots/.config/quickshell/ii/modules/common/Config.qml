@@ -2872,7 +2872,9 @@ Singleton {
 
                 property JsonObject autoHide: JsonObject {
                     property bool enable: false
+                    property string mode: "instant" // "instant" | "dwell" | "wide" | "cautious"
                     property int hoverRegionWidth: 2
+                    property int hoverDelay: 0
                     property bool pushWindows: false
                     property JsonObject showWhenPressingSuper: JsonObject {
                         property bool enable: true
@@ -3019,6 +3021,23 @@ Singleton {
                     property string ignorePorts: ""
                     property string ignoreProcesses: ""
                     property string sortMode: "port" // port | process | activity
+                }
+
+                property JsonObject privacyPill: JsonObject {
+                    property bool enabled: true
+                    property bool watchCamera: true
+                    property bool watchMicrophone: true
+                    property bool watchScreen: true
+                    // GeoClue keeps its client latched while anything holds a
+                    // position source — including this shell's own weather GPS —
+                    // so watching it would pin the pill on. Opt-in.
+                    property bool watchLocation: false
+                    property int pollInterval: 1200
+                    // How long the pill stays expanded before collapsing to the dot.
+                    property int expandDuration: 4000
+                    property bool collapseToDot: true
+                    property bool showAppNames: true
+                    property string ignoreApps: ""
                 }
 
                 property JsonObject sports: JsonObject {
@@ -3177,6 +3196,11 @@ Singleton {
                             {
                                 "centered": false,
                                 "id": "system_tray",
+                                "visible": true
+                            },
+                            {
+                                "centered": false,
+                                "id": "privacy_pill",
                                 "visible": true
                             },
                             {

@@ -4008,5 +4008,20 @@
     "Bar popup close delay (ms)": "Atraso para fechar pop-ups da barra (ms)",
     "Floating popup services": "Serviços de pop-ups flutuantes",
     "Enable floating popups": "Ativar pop-ups flutuantes",
-    "Generic Linux": "Linux Genérico"
+    "Generic Linux": "Linux Genérico",
+    "Sensitivity & trigger": "Sensibilidade e ativação",
+    "Instant": "Instantâneo",
+    "Hold": "Manter cursor",
+    "Wide edge": "Borda ampla",
+    "Cautious": "Cauteloso",
+    "Reveals immediately on edge touch (6px edge, 0ms delay)": "Revela imediatamente ao tocar a borda (borda de 6px, 0ms de delay)",
+    "Requires holding pointer on edge for 250ms (16px edge, 250ms delay)": "Requer manter o cursor na borda por 250ms (borda de 16px, 250ms de delay)",
+    "Large 32px trigger area for easy multi-monitor activation (32px edge, 0ms delay)": "Área ampla de 32px para fácil ativação em múltiplos monitores (borda de 32px, 0ms de delay)",
+    "Wide 32px area requiring a 250ms hold, ideal for multi-monitor setups (32px edge, 250ms delay)": "Área ampla de 32px com espera de 250ms, ideal para múltiplos monitores (borda de 32px, 250ms de delay)",
+    "Trigger area width (px)": "Largura da área de ativação (px)",
+    "Width of the interactive edge zone that detects the pointer": "Largura da zona interativa na borda que detecta o cursor",
+    "Hold delay (ms)": "Atraso de retenção (ms)",
+    "Delay in milliseconds the pointer must stay on the edge before the bar reveals": "Tempo em milissegundos que o cursor deve permanecer na borda antes de revelar a barra",
+    "Reveal with Super key": "Revelar com a tecla Super",
+    "Temporarily reveals the bar while holding the Super/Windows key": "Revela temporariamente a barra ao segurar a tecla Super/Windows"
 }

@@ -344,8 +344,35 @@ PanelWindow {
                     }
                 }
 
+                // ── Hover delay trigger ───────────────────────────────────────
+                property bool hoverTriggered: false
+                readonly property int hoverDelay: Config?.options.bar.autoHide.hoverDelay ?? 0
+
+                Timer {
+                    id: hoverOpenTimer
+                    interval: hBarItem.hoverDelay
+                    repeat: false
+                    onTriggered: hBarItem.hoverTriggered = true
+                }
+
+                Connections {
+                    target: hoverRegion
+                    function onContainsMouseChanged() {
+                        if (hoverRegion.containsMouse) {
+                            if (hBarItem.hoverDelay <= 0 || (Config?.options.bar.autoHide.enable && !hBarItem.mustShow) === false || hBarItem.superShow || topPanel.leftSidebarOpenOnMonitor || topPanel.rightSidebarOpenOnMonitor) {
+                                hBarItem.hoverTriggered = true;
+                            } else {
+                                hoverOpenTimer.restart();
+                            }
+                        } else {
+                            hoverOpenTimer.stop();
+                            hBarItem.hoverTriggered = false;
+                        }
+                    }
+                }
+
                 property bool superShow: false
-                property bool mustShow: hoverRegion.containsMouse || superShow || topPanel.leftSidebarOpenOnMonitor || topPanel.rightSidebarOpenOnMonitor
+                property bool mustShow: hoverTriggered || superShow || topPanel.leftSidebarOpenOnMonitor || topPanel.rightSidebarOpenOnMonitor
 
                 MouseArea {
                     id: hoverRegion
@@ -541,8 +568,35 @@ PanelWindow {
                     }
                 }
 
+                // ── Hover delay trigger ───────────────────────────────────────
+                property bool hoverTriggered: false
+                readonly property int hoverDelay: Config?.options.bar.autoHide.hoverDelay ?? 0
+
+                Timer {
+                    id: hoverOpenTimer
+                    interval: vBarItem.hoverDelay
+                    repeat: false
+                    onTriggered: vBarItem.hoverTriggered = true
+                }
+
+                Connections {
+                    target: hoverRegion
+                    function onContainsMouseChanged() {
+                        if (hoverRegion.containsMouse) {
+                            if (vBarItem.hoverDelay <= 0 || (Config?.options.bar.autoHide.enable && !vBarItem.mustShow) === false || vBarItem.superShow || topPanel.leftSidebarOpenOnMonitor || topPanel.rightSidebarOpenOnMonitor) {
+                                vBarItem.hoverTriggered = true;
+                            } else {
+                                hoverOpenTimer.restart();
+                            }
+                        } else {
+                            hoverOpenTimer.stop();
+                            vBarItem.hoverTriggered = false;
+                        }
+                    }
+                }
+
                 property bool superShow: false
-                property bool mustShow: hoverRegion.containsMouse || superShow || topPanel.leftSidebarOpenOnMonitor || topPanel.rightSidebarOpenOnMonitor
+                property bool mustShow: hoverTriggered || superShow || topPanel.leftSidebarOpenOnMonitor || topPanel.rightSidebarOpenOnMonitor
 
                 MouseArea {
                     id: hoverRegion
