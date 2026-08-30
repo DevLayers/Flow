@@ -164,7 +164,9 @@ Singleton {
     // Shared transition clock for the bar and wrapped-frame visuals. Their
     // PanelWindows stay mapped while this runs; each layer chooses fade or
     // slide based on whether the wrapped frame is active.
-    property real lockBarTransitionProgress: screenLocked ? 1.0 : 0.0
+    // Also driven by Edit Mode's Lockscreen tab, so the bar leaves the way
+    // it does on a real lock instead of being torn down per tab switch.
+    property real lockBarTransitionProgress: lockLookActive ? 1.0 : 0.0
     Behavior on lockBarTransitionProgress {
         // Use the non-overshooting effects curve for opacity. Spatial curves
         // overshoot and make a fade look like an abrupt blink.

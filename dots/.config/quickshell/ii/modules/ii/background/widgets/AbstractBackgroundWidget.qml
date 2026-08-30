@@ -47,7 +47,10 @@ AbstractWidget {
     property string placementStrategy: isPreview ? "free" : (widgetInstance !== null ? (widgetInstance.placementStrategy || "free") : (configEntry ? configEntry.placementStrategy : "free"))
     property string lockBehavior: widgetInstance ? (widgetInstance.lockBehavior || "hide") : "hide"
     property bool visibleWhenLocked: lockBehavior === "keep" || lockBehavior === "center" || lockBehavior === "lockOnly"
-    property bool forceCenter: (GlobalStates.lockScreenCentered || GlobalStates.workspaceRestoreInProgress) && lockBehavior === "center"
+    // The lock layout: the real lock once its wallpaper has centred, or Edit
+    // Mode's Lockscreen tab, which previews it without a lock session.
+    readonly property bool lockLayoutActive: GlobalStates.lockScreenCentered || GlobalStates.editLockPreview
+    property bool forceCenter: (lockLayoutActive || GlobalStates.workspaceRestoreInProgress) && lockBehavior === "center"
 
     function getCenteredWidgetsList() {
         if (!widgetListModel) return [];
@@ -611,7 +614,7 @@ AbstractWidget {
             if (isPreview || widgetInstance === null)
                 return;
             const rounded = Math.round(target * 100) / 100;
-            Config.updateWidgetScale(widgetInstance.id, rounded, monitorName);
+            Config.updateWidgetScale(widgetInstance.id, rounded, monitorName, GlobalStates.lockLookActive);
             x = WidgetDragMath.clamp(x, dragMinimumX(), dragMaximumX());
             y = WidgetDragMath.clamp(y, dragMinimumY(), dragMaximumY());
         }
@@ -745,8 +748,8 @@ AbstractWidget {
 
     visible: opacity > 0
     readonly property real lockOpacity: {
-        if (lockBehavior === "lockOnly") return GlobalStates.lockScreenCentered ? 1 : 0;
-        if (GlobalStates.lockScreenCentered && !visibleWhenLocked) return 0;
+        if (lockBehavior === "lockOnly") return lockLayoutActive ? 1 : 0;
+        if (lockLayoutActive && !visibleWhenLocked) return 0;
         return 1;
     }
     opacity: lockOpacity * lifecycleOpacity
@@ -1235,8 +1238,10 @@ AbstractWidget {
     function commitPlacement(newX, newY) {
         if (isPreview)
             return;
+        // Written to the surface being shown: the lock fork on the Lockscreen
+        // tab, the desktop's placement otherwise.
         if (widgetInstance !== null)
-            Config.updateWidgetPosition(widgetInstance.id, newX, newY, monitorName);
+            Config.updateWidgetPosition(widgetInstance.id, newX, newY, monitorName, GlobalStates.lockLookActive);
         else if (configEntry) {
             configEntry.x = newX;
             configEntry.y = newY;
@@ -1280,17 +1285,17 @@ AbstractWidget {
     property color dominantColor: Appearance.colors.colPrimary
     property bool dominantColorIsDark: dominantColor.hslLightness < 0.5
     property color colText: {
-        const onNormalBackground = (GlobalStates.lockScreenCentered && Config.options.lock.blur.enable)
+        const onNormalBackground = (lockLayoutActive && Config.options.lock.blur.enable)
         const adaptiveColor = ColorUtils.colorWithLightness(Appearance.colors.colPrimary, (dominantColorIsDark ? 0.8 : 0.12))
         return onNormalBackground ? Appearance.colors.colOnLayer0 : adaptiveColor;
     }
     property color colTextSecondary: {
-        const onNormalBackground = (GlobalStates.lockScreenCentered && Config.options.lock.blur.enable)
+        const onNormalBackground = (lockLayoutActive && Config.options.lock.blur.enable)
         const adaptiveColor = ColorUtils.colorWithLightness(Appearance.colors.colSecondary, (dominantColorIsDark ? 0.8 : 0.12))
         return onNormalBackground ? Appearance.colors.colOnLayer0 : adaptiveColor;
     }
     property color colTextTertiary: {
-        const onNormalBackground = (GlobalStates.lockScreenCentered && Config.options.lock.blur.enable)
+        const onNormalBackground = (lockLayoutActive && Config.options.lock.blur.enable)
         const adaptiveColor = ColorUtils.colorWithLightness(Appearance.colors.colTertiary, (dominantColorIsDark ? 0.8 : 0.12))
         return onNormalBackground ? Appearance.colors.colOnLayer0 : adaptiveColor;
     }

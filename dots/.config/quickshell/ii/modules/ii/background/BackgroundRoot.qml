@@ -271,13 +271,13 @@ PanelWindow {
 
     readonly property bool verticalParallax: !videoEffectsDisabled && ((Config.options.background.parallax.autoVertical && wallpaperHeight > wallpaperWidth) || Config.options.background.parallax.vertical)
     // Colors
-    property bool shouldBlur: (GlobalStates.screenLocked && Config.options.lock.blur.enable)
+    property bool shouldBlur: (GlobalStates.lockLookActive && Config.options.lock.blur.enable)
     property color dominantColor: Appearance.colors.colPrimary // Default, to be changed
     property bool dominantColorIsDark: dominantColor.hslLightness < 0.5
     property color colText: {
         if (wallpaperSafetyTriggered)
             return CF.ColorUtils.mix(Appearance.colors.colOnLayer0, Appearance.colors.colPrimary, 0.75);
-        return (GlobalStates.screenLocked && shouldBlur) ? Appearance.colors.colOnLayer0 : CF.ColorUtils.colorWithLightness(Appearance.colors.colPrimary, (dominantColorIsDark ? 0.8 : 0.12));
+        return (GlobalStates.lockLookActive && shouldBlur) ? Appearance.colors.colOnLayer0 : CF.ColorUtils.colorWithLightness(Appearance.colors.colPrimary, (dominantColorIsDark ? 0.8 : 0.12));
     }
     // Video Wallpaper Parallax via mpv IPC
     readonly property real videoPanX: (0.5 - parallax.effectiveValueX) * 0.08

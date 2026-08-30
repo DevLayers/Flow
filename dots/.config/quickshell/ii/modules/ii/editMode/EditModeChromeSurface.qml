@@ -162,12 +162,27 @@ PanelWindow {
             "screenWidth": root.width,
             "screenHeight": root.height
         });
-        Config.addWidgetToDesktop(widgetId, placed.x, placed.y, root.screenName);
+        Config.addWidgetToDesktop(widgetId, placed.x, placed.y, root.screenName, GlobalStates.editLockPreview ? "lockOnly" : "hide");
     }
 
+    // On the Lockscreen tab a widget already on the desktop is shown or hidden
+    // there (lock behaviour hide <-> keep); one that is not becomes a
+    // lock-only instance, absent from the desktop.
     function toggleWidget(widgetId) {
-        const present = (Config.options.background.activeWidgets ?? []).some(e => e && e.widgetId === widgetId);
-        if (present)
+        const entry = (Config.options.background.activeWidgets ?? []).find(e => e && e.widgetId === widgetId) ?? null;
+        if (GlobalStates.editLockPreview) {
+            if (entry === null) {
+                Config.addWidgetToDesktop(widgetId, undefined, undefined, root.screenName, "lockOnly");
+                return;
+            }
+            const behavior = entry.lockBehavior || "hide";
+            if (behavior === "lockOnly")
+                Config.removeWidgetFromDesktop(widgetId);
+            else
+                Config.updateWidgetLockBehavior(entry.id, behavior === "hide" ? "keep" : "hide");
+            return;
+        }
+        if (entry !== null)
             Config.removeWidgetFromDesktop(widgetId);
         else
             Config.addWidgetToDesktop(widgetId, undefined, undefined, root.screenName);
@@ -298,6 +313,11 @@ PanelWindow {
         drawerScreenName: root.screenName
 
         onDoneRequested: GlobalStates.editMode = false
+        onTabRequested: tab => {
+            GlobalStates.editWidgetMenuOpen = false;
+            GlobalStates.editTab = tab;
+        }
+        onDrawerLockLayoutResetRequested: Config.clearWidgetLockPositions(root.screenName)
         onDrawerToggleRequested: GlobalStates.editDrawerOpen = !GlobalStates.editDrawerOpen
         onDrawerAddRequested: (widgetId, dropX, dropY) => root.addWidgetAt(widgetId, dropX, dropY)
         onDrawerToggleWidgetRequested: widgetId => root.toggleWidget(widgetId)

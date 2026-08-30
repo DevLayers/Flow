@@ -18,6 +18,8 @@ import qs.modules.ii.background.lockscreen
 import qs.modules.ii.background.parallax
 import qs.modules.ii.background.overview
 import qs.modules.ii.background.blur
+import qs.modules.ii.lock
+import qs.modules.common.panels.lock
 import qs.modules.ii.editMode
 
 PanelWindow {
@@ -410,6 +412,24 @@ PanelWindow {
             : 1.0
         Behavior on scale {
             animation: Appearance.animation.elementMoveEnter.numberAnimation.createObject(transformContainer)
+        }
+
+        // Edit Mode's Lockscreen tab: the lock's islands drawn over the widgets,
+        // inside the same shrunk desktop, on the monitor being edited. The
+        // context handed in is the plain preview object whose unlock paths are
+        // empty by contract - never the real LockContext, which builds PAM
+        // contexts the moment it exists. Nothing in here takes input: the
+        // surface is inert, so clicks reach the widgets underneath.
+        Loader {
+            id: lockPreview
+            anchors.fill: parent
+            z: 5
+            active: GlobalStates.editLockPreview && bgWidgetsWindow.isTargetMonitor
+                && GlobalStates.editModeMonitor === (bgWidgetsWindow.screen ? bgWidgetsWindow.screen.name : "")
+            sourceComponent: LockSurface {
+                interactive: false
+                context: LockPreviewContext {}
+            }
         }
 
         WidgetCanvas {

@@ -26,6 +26,19 @@ Item {
     readonly property var instance: widget ? widget.widgetInstance : null
     readonly property var metadata: instance ? WidgetsRegistry.getWidgetMetadata(instance.widgetId) : null
     readonly property bool pinned: widget ? widget.pinned : false
+    readonly property string lockBehavior: widget ? (widget.lockBehavior || "hide") : "hide"
+    readonly property bool lockOnly: lockBehavior === "lockOnly"
+    // hide -> keep -> center -> hide; a lock-only instance has no desktop
+    // to hide on, so it only alternates keep <-> center.
+    function nextLockBehavior() {
+        if (root.lockOnly)
+            return "lockOnly";
+        return root.lockBehavior === "hide" ? "keep" : root.lockBehavior === "keep" ? "center" : "hide";
+    }
+    readonly property string lockLabel: root.lockOnly ? Translation.tr("Lock screen only")
+        : root.lockBehavior === "keep" ? Translation.tr("On lock screen: shown")
+        : root.lockBehavior === "center" ? Translation.tr("On lock screen: centered")
+        : Translation.tr("On lock screen: hidden")
     readonly property real scaleFactor: widget ? widget.committedScaleFactor : 1
     readonly property real scaleStep: EditModeLogic.nearestSizeStep(scaleFactor)
     readonly property bool canGrow: widget !== null && EditModeLogic.steppedScale(scaleFactor, 1) !== null
@@ -151,14 +164,28 @@ Item {
 
         EditMenuRow {
             cardPadding: root.padding
+            symbol: root.lockBehavior === "hide" ? "lock_open" : root.lockBehavior === "center" ? "center_focus_strong" : "lock"
+            label: root.lockLabel
+            enabled: root.instance !== null && !root.lockOnly
+            onClicked: Config.updateWidgetLockBehavior(root.instanceId, root.nextLockBehavior())
+        }
+
+        // On the Lockscreen tab a desktop widget is hidden from the lock, not
+        // removed from the desktop; a lock-only one is removed outright.
+        EditMenuRow {
+            cardPadding: root.padding
             symbol: "delete"
-            label: Translation.tr("Remove from desktop")
-            enabled: root.instance !== null
+            label: GlobalStates.editLockPreview && !root.lockOnly
+                ? Translation.tr("Hide on lock screen") : Translation.tr("Remove from desktop")
+            enabled: root.instance !== null && !(GlobalStates.editLockPreview && root.lockBehavior === "hide")
             colText: Appearance.m3colors.m3error
             onClicked: {
                 const widgetId = root.instance.widgetId;
                 root.dismissRequested();
-                Config.removeWidgetFromDesktop(widgetId);
+                if (GlobalStates.editLockPreview && !root.lockOnly)
+                    Config.updateWidgetLockBehavior(root.instanceId, "hide");
+                else
+                    Config.removeWidgetFromDesktop(widgetId);
             }
         }
     }

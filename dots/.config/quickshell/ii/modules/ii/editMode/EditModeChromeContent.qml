@@ -4,6 +4,7 @@ import qs
 import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
+import qs.modules.common.functions
 
 /**
  * Edit Mode's chrome: the toolbar above the shrunk desktop.
@@ -41,6 +42,7 @@ Item {
     property real bandFraction: 0.5
 
     signal doneRequested()
+    signal tabRequested(string tab)
     signal snapToggleRequested()
     signal drawerToggleRequested()
     // The drawer's gestures, relayed: the surface owns the geometry and every write.
@@ -48,6 +50,7 @@ Item {
     signal drawerToggleWidgetRequested(string widgetId)
     signal drawerBarAddRequested(string componentId, string bucket)
     signal drawerDockToggleRequested(string appId)
+    signal drawerLockLayoutResetRequested()
 
     // The drawer's reveal, from the same geometry the card is: its width is
     // the drawer's on the drawer's scalar, so the panel slides out of the
@@ -80,6 +83,23 @@ Item {
             font.pixelSize: Appearance.font.pixelSize.small
             font.weight: Font.Medium
             color: Appearance.colors.colOnSurfaceVariant
+        }
+
+        // Desktop | Lockscreen. Indices are the tab list's own order; the
+        // names come back through EditModeLogic so this bar and the state
+        // agree on one spelling.
+        ToolbarTabBar {
+            id: tabBar
+            Layout.alignment: Qt.AlignVCenter
+            Layout.leftMargin: 4
+            implicitHeight: Appearance.sizes.toolbarHeight - 12
+            tabButtonList: [
+                { "name": Translation.tr("Desktop"), "icon": "desktop_windows" },
+                { "name": Translation.tr("Lock screen"), "icon": "lock" }
+            ]
+            requestOnly: true
+            currentIndex: EditModeLogic.tabIndex(GlobalStates.editTab)
+            onIndexSelected: index => root.tabRequested(EditModeLogic.tabAt(index))
         }
 
         Rectangle {
@@ -157,6 +177,7 @@ Item {
             anchors.fill: parent
             ghostParent: root
             onAddRequested: (widgetId, dropX, dropY) => root.drawerAddRequested(widgetId, dropX, dropY)
+            onLockLayoutResetRequested: root.drawerLockLayoutResetRequested()
             onToggleRequested: widgetId => root.drawerToggleWidgetRequested(widgetId)
             onBarAddRequested: (componentId, bucket) => root.drawerBarAddRequested(componentId, bucket)
             onDockToggleRequested: appId => root.drawerDockToggleRequested(appId)

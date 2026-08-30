@@ -6,6 +6,7 @@ import qs
 import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
+import qs.modules.common.functions
 import qs.modules.ii.background.widgets
 
 /**
@@ -33,6 +34,7 @@ Item {
     signal toggleRequested(string widgetId)
     signal barAddRequested(string componentId, string bucket)
     signal dockToggleRequested(string appId)
+    signal lockLayoutResetRequested()
 
     property string section: "widgets"
     property string barBucket: "right"
@@ -55,6 +57,35 @@ Item {
 
     function widgetOnDesktop(widgetId) {
         return root.activeWidgets.some(entry => entry && entry.widgetId === widgetId);
+    }
+
+    // On the Lockscreen tab a row is "checked" when the widget shows on the
+    // lock: any behaviour but hide.
+    function widgetOnLock(widgetId) {
+        return root.activeWidgets.some(entry => entry && entry.widgetId === widgetId
+            && (entry.lockBehavior || "hide") !== "hide");
+    }
+
+    readonly property bool lockTab: GlobalStates.editLockPreview
+    onLockTabChanged: {
+        if (root.lockTab ? (root.section === "bar" || root.section === "dock") : root.section === "lock")
+            root.section = "widgets";
+    }
+    readonly property bool anyLockFork: root.activeWidgets.some(entry =>
+        WidgetPlacement.fork(entry, root.screenName, true) !== null)
+
+    // The lock's own switches, written straight to config: preferences, not
+    // layout edits, so no history entry - same as their Settings toggles.
+    readonly property var lockSwitches: [
+        { "key": "nowPlaying", "group": "lock", "symbol": "music_note", "title": Translation.tr("Now playing") },
+        { "key": "sports", "group": "lock", "symbol": "sports_soccer", "title": Translation.tr("Sports") },
+        { "key": "showAlarm", "group": "lock", "symbol": "alarm", "title": Translation.tr("Next alarm") },
+        { "key": "showWeather", "group": "lock", "symbol": "partly_cloudy_day", "title": Translation.tr("Weather") },
+        { "key": "showLockedText", "group": "lock", "symbol": "lock", "title": Translation.tr("\"Locked\" text") },
+        { "key": "showIndicator", "group": "fingerprint", "symbol": "fingerprint", "title": Translation.tr("Fingerprint indicator") }
+    ]
+    function lockSwitchTarget(entry) {
+        return entry.group === "fingerprint" ? Config.options.lock.security.fingerprint : Config.options.lock;
     }
 
     Rectangle {
@@ -118,15 +149,24 @@ Item {
                     onClicked: root.section = "widgets"
                 }
                 SelectionGroupButton {
+                    visible: !root.lockTab
                     buttonText: Translation.tr("Bar")
                     toggled: root.section === "bar"
                     onClicked: root.section = "bar"
                 }
                 SelectionGroupButton {
+                    visible: !root.lockTab
                     rightmost: true
                     buttonText: Translation.tr("Dock")
                     toggled: root.section === "dock"
                     onClicked: root.section = "dock"
+                }
+                SelectionGroupButton {
+                    visible: root.lockTab
+                    rightmost: true
+                    buttonText: Translation.tr("Lock screen")
+                    toggled: root.section === "lock"
+                    onClicked: root.section = "lock"
                 }
             }
 
@@ -135,7 +175,11 @@ Item {
                 Layout.leftMargin: 6
                 Layout.rightMargin: 6
                 text: root.section === "widgets"
-                    ? Translation.tr("Drag a widget onto the desktop to place it, or click to add or remove it. Drag a desktop widget here to remove it.")
+                    ? (root.lockTab
+                        ? Translation.tr("Click a desktop widget to show or hide it on the lock screen. A widget that is not on the desktop is added to the lock screen only.")
+                        : Translation.tr("Drag a widget onto the desktop to place it, or click to add or remove it. Drag a desktop widget here to remove it."))
+                    : root.section === "lock"
+                        ? Translation.tr("What the lock screen shows besides your widgets.")
                     : root.section === "bar"
                         ? Translation.tr("Click a widget to add it to the picked bar section.")
                         : Translation.tr("Click an app to pin or unpin it on the dock.")
@@ -220,7 +264,62 @@ Item {
                         symbol: entry.modelData.icon ?? "widgets"
                         title: entry.modelData.name ?? entry.modelData.widgetId
                         subtitle: entry.modelData.description ?? ""
-                        checked: entry.onDesktop
+                        checked: root.lockTab ? root.widgetOnLock(entry.modelData.widgetId) : entry.onDesktop
+                    }
+                }
+            }
+
+            // Lock screen section: the islands' switches, then the way back to
+            // the desktop's layout on this monitor.
+            ListView {
+                id: lockList
+                visible: root.section === "lock"
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                clip: true
+                spacing: 2
+                model: root.section === "lock" ? root.lockSwitches : []
+
+                delegate: CatalogueButton {
+                    id: lockRow
+                    required property var modelData
+                    readonly property var target: root.lockSwitchTarget(lockRow.modelData)
+                    width: lockList.width
+                    rowSymbol: lockRow.modelData.symbol
+                    rowTitle: lockRow.modelData.title
+                    rowChecked: lockRow.target[lockRow.modelData.key] ?? true
+                    onClicked: lockRow.target[lockRow.modelData.key] = !lockRow.rowChecked
+                }
+
+                footer: Item {
+                    width: lockList.width
+                    height: resetButton.implicitHeight + 12
+                    RippleButton {
+                        id: resetButton
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        anchors.bottom: parent.bottom
+                        enabled: root.anyLockFork
+                        implicitHeight: 40
+                        buttonRadius: Appearance.rounding.full
+                        colBackground: Appearance.colors.colSecondaryContainer
+                        colBackgroundHover: Appearance.colors.colSecondaryContainerHover
+                        colRipple: Appearance.colors.colSecondaryContainerActive
+                        onClicked: root.lockLayoutResetRequested()
+                        contentItem: RowLayout {
+                            spacing: 6
+                            MaterialSymbol {
+                                Layout.leftMargin: 12
+                                text: "reset_wrench"
+                                iconSize: Appearance.font.pixelSize.larger
+                                color: resetButton.enabled ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colOutline
+                            }
+                            StyledText {
+                                Layout.rightMargin: 12
+                                text: Translation.tr("Use desktop layout")
+                                font.pixelSize: Appearance.font.pixelSize.small
+                                color: resetButton.enabled ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colOutline
+                            }
+                        }
                     }
                 }
             }

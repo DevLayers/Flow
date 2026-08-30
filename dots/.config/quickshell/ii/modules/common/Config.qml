@@ -533,7 +533,7 @@ Singleton {
     // Collision placement reads what `monitorName` shows (see WidgetPlacement);
     // the new entry itself is written as legacy x/y so every monitor starts it
     // from the same spot.
-    function addWidgetToDesktop(widgetId, defaultX, defaultY, monitorName) {
+    function addWidgetToDesktop(widgetId, defaultX, defaultY, monitorName, lockBehavior = "hide") {
         let cloned = JSON.parse(JSON.stringify(root.options.background.activeWidgets || []));
         for (let i = 0; i < cloned.length; i++) {
             if (cloned[i].widgetId === widgetId)
@@ -570,7 +570,7 @@ Singleton {
             "x": startX,
             "y": startY,
             "placementStrategy": "free",
-            "lockBehavior": "hide"
+            "lockBehavior": lockBehavior
         };
         cloned.push(entry);
         root.options.background.activeWidgets = cloned;
@@ -597,8 +597,23 @@ Singleton {
     // With a monitor name the write lands in that monitor's fork, created from
     // the values it currently shows; without one it lands in the legacy x/y
     // that every monitor without a fork follows (see WidgetPlacement).
-    function updateWidgetPosition(instanceId, newX, newY, monitorName) {
-        root._editWidgetEntry(instanceId, entry => WidgetPlacement.setPosition(entry, monitorName, newX, newY));
+    function updateWidgetPosition(instanceId, newX, newY, monitorName, lock = false) {
+        root._editWidgetEntry(instanceId, entry => WidgetPlacement.setPosition(entry, monitorName, newX, newY, lock));
+    }
+
+    // "Use desktop layout": every entry's lock fork on `monitorName` goes, as
+    // one history entry, so the lock screen follows the desktop there again.
+    function clearWidgetLockPositions(monitorName) {
+        if (!monitorName)
+            return;
+        const list = root.options.background.activeWidgets || [];
+        const ids = list.filter(e => WidgetPlacement.fork(e, monitorName, true) !== null).map(e => e.id);
+        if (ids.length === 0)
+            return;
+        GlobalStates.editHistoryBeginBatch();
+        for (const id of ids)
+            root._editWidgetEntry(id, entry => WidgetPlacement.clearFork(entry, monitorName, true));
+        GlobalStates.editHistoryEndBatch();
     }
 
     function updateWidgetLockBehavior(instanceId, newLockBehavior) {
@@ -607,8 +622,8 @@ Singleton {
         });
     }
 
-    function updateWidgetScale(instanceId, newScale, monitorName) {
-        root._editWidgetEntry(instanceId, entry => WidgetPlacement.setScale(entry, monitorName, newScale));
+    function updateWidgetScale(instanceId, newScale, monitorName, lock = false) {
+        root._editWidgetEntry(instanceId, entry => WidgetPlacement.setScale(entry, monitorName, newScale, lock));
     }
 
     // A pinned widget ignores drags and the resize grip whatever the global

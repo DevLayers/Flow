@@ -396,7 +396,7 @@ Item {
                 id: wallpaperContent
                 // GPU: only enable offscreen layer when effects that need it are actually active.
                 // Disabling this offscreen layer when idle saves ~70% GPU usage on 4K monitors.
-                layer.enabled: wallpaperImageRoot.lockAnimationActive || GlobalStates.screenLocked || wallpaperImageRoot.wallpaperClipRadius > 0
+                layer.enabled: wallpaperImageRoot.lockAnimationActive || GlobalStates.lockLookActive || wallpaperImageRoot.wallpaperClipRadius > 0
                 width: wallpaperPlanes.wallpaperW
                 height: wallpaperPlanes.wallpaperH
 
@@ -479,7 +479,7 @@ Item {
                             && Wallpapers.isVideoFile(String(wallpaperImageRoot.lockscreenWallpaperPath).toLowerCase())
                         // Built on lock and torn down on unlock: a decoder has no
                         // business staying alive behind an unlocked desktop.
-                        active: isVideoLockscreen && GlobalStates.screenLocked
+                        active: isVideoLockscreen && GlobalStates.lockLookActive
                         visible: active && opacity > 0
                         opacity: active ? 1 : 0
                         Behavior on opacity {
@@ -516,7 +516,7 @@ Item {
 
                         readonly property bool isActive: wallpaperImageRoot.useSeparateLockscreenWallpaper && wallpaperImageRoot.lockscreenWallpaperPath !== "" && wallpaperImageRoot.lockscreenWallpaperPath !== wallpaperImageRoot.wallpaperPath
                         visible: isActive && opacity > 0
-                        opacity: (isActive && GlobalStates.screenLocked) ? 1.0 : 0.0
+                        opacity: (isActive && GlobalStates.lockLookActive) ? 1.0 : 0.0
 
                         Behavior on opacity {
                             NumberAnimation {
