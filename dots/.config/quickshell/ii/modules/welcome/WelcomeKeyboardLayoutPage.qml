@@ -1,6 +1,5 @@
 import QtQuick
 import QtQuick.Layouts
-import Quickshell
 import qs.modules.common
 import qs.modules.common.widgets
 import qs.services
@@ -50,6 +49,9 @@ Item {
     property bool manualEntry: false
     property bool statusIsError: false
     property string statusText: ""
+    property bool persistencePending: false
+    readonly property bool navigationLocked: root.persistencePending
+    signal advanceRequested()
 
     readonly property string desiredLayoutValue: root.manualEntry
         ? root.normalizeValue(manualLayoutField.text, false)
@@ -86,6 +88,9 @@ Item {
     }
 
     function applyKeyboardLayout(): bool {
+        if (root.persistencePending)
+            return false;
+
         const layoutValue = root.desiredLayoutValue;
         const variantValue = root.desiredVariantValue;
         if (layoutValue.length === 0) {
@@ -101,17 +106,14 @@ Item {
             return false;
         }
 
-        Quickshell.execDetached(["hyprctl", "keyword", "input:kb_layout", layoutValue]);
-        Quickshell.execDetached(["hyprctl", "keyword", "input:kb_variant", variantValue]);
-        HyprlandConfig.setMany({
-            "input:kb_layout": layoutValue,
-            "input:kb_variant": variantValue
-        }, {});
+        if (!HyprlandConfig.persistWelcomeKeyboardLayout(layoutValue, variantValue))
+            return false;
 
+        root.persistencePending = true;
         root.statusIsError = false;
-        root.statusText = Translation.tr("Keyboard layout saved to Hyprland.");
+        root.statusText = Translation.tr("Applying and saving keyboard layout…");
         feedbackTimer.restart();
-        return true;
+        return false;
     }
 
     function prepareNext(): bool {
@@ -243,6 +245,23 @@ Item {
             }
         }
 
+    }
+
+    Connections {
+        target: HyprlandConfig
+        function onWelcomeKeyboardLayoutPersisted(success, message) {
+            if (!root.persistencePending)
+                return;
+
+            root.persistencePending = false;
+            root.statusIsError = !success;
+            root.statusText = success
+                ? Translation.tr("Keyboard layout saved to Hyprland.")
+                : Translation.tr("Could not save keyboard layout. %1").arg(message || Translation.tr("Try again."));
+            feedbackTimer.restart();
+            if (success)
+                root.advanceRequested();
+        }
     }
 
     Connections {
