@@ -121,9 +121,6 @@ Singleton {
         onExited: (exitCode, exitStatus) => {
             root._finishConfigWrite(exitCode === 0, configWriterErrors.text.trim());
         }
-        onErrorOccurred: error => {
-            root._finishConfigWrite(false, "Could not start the Hyprland configuration writer.");
-        }
         onRunningChanged: {
             if (!running)
                 Qt.callLater(root._startNextConfigWrite);
