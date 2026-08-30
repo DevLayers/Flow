@@ -101,41 +101,25 @@ PanelWindow {
         wallpaperSafetyTriggered: bgRoot.wallpaperSafetyTriggered
     }
 
-    // Gnome-like keeps the original single transform clock.  The shared
-    // controller remains the source for all other presets, but must not replace
-    // this legacy path or the transition layer can be mapped by two clocks.
-    OverviewZoomController {
-        id: gnomeOverviewController
-        wallpaperZoomedOut: overviewController.isGnomeLike
-            && GlobalStates.overviewBackgroundActive
-            && bgRoot.isMonitorFocused
-        minSafeScale: bgRoot.minSafeScale
-        zoomOutCoverScale: overviewController.overviewCoverScale
-        screenWidth: bgRoot.screen.width
-        screenHeight: bgRoot.screen.height
-    }
-
     readonly property bool isGnomeLikeOverview: overviewController.isGnomeLike
 
-    // Publish the legacy Gnome clock only for the focused monitor.  Modern
-    // presets use the per-monitor controller directly and leave this state at
-    // the neutral transform so no stale Gnome capture can be reused.
+    // Publish the overview background transform for the focused monitor.
     Binding {
         target: GlobalStates
         property: "overviewZoomScale"
-        value: bgRoot.isGnomeLikeOverview ? gnomeOverviewController.scaleValue : 1.0
+        value: bgRoot.isGnomeLikeOverview ? overviewController.scale : 1.0
         when: bgRoot.isMonitorFocused
     }
     Binding {
         target: GlobalStates
         property: "overviewZoomOriginX"
-        value: bgRoot.isGnomeLikeOverview ? gnomeOverviewController.scaleOriginX : 0.5
+        value: bgRoot.isGnomeLikeOverview ? overviewController.scaleOriginX : 0.5
         when: bgRoot.isMonitorFocused
     }
     Binding {
         target: GlobalStates
         property: "overviewZoomOriginY"
-        value: bgRoot.isGnomeLikeOverview ? gnomeOverviewController.scaleOriginY : 0.5
+        value: bgRoot.isGnomeLikeOverview ? overviewController.scaleOriginY : 0.5
         when: bgRoot.isMonitorFocused
     }
 
@@ -566,7 +550,6 @@ PanelWindow {
         WallpaperImage {
             id: wallpaperImage
             overviewController: overviewController
-            legacyGnomeZoomedOut: gnomeOverviewController.wallpaperZoomedOut
             screen: bgRoot.screen
             wallpaperPath: bgRoot.wallpaperPath
             lockscreenWallpaperPath: bgRoot.lockscreenWallpaperPath
@@ -587,10 +570,10 @@ PanelWindow {
             parallaxY: bgRoot.videoEffectsDisabled ? 0 : parallax.parallaxY
             effectiveValueX: bgRoot.videoEffectsDisabled ? 0.5 : parallax.effectiveValueX
             effectiveValueY: bgRoot.videoEffectsDisabled ? 0.5 : parallax.effectiveValueY
-            scaleValue: bgRoot.isGnomeLikeOverview ? gnomeOverviewController.scaleValue : overviewController.scale
-            scaleOriginX: bgRoot.isGnomeLikeOverview ? gnomeOverviewController.scaleOriginX : overviewController.scaleOriginX
-            scaleOriginY: bgRoot.isGnomeLikeOverview ? gnomeOverviewController.scaleOriginY : overviewController.scaleOriginY
-            scaleProgress: bgRoot.isGnomeLikeOverview ? gnomeOverviewController.scaleProgress : overviewController.scaleProgress
+            scaleValue: overviewController ? overviewController.scale : 1.0
+            scaleOriginX: overviewController ? overviewController.scaleOriginX : bgRoot.screen.width / 2
+            scaleOriginY: overviewController ? overviewController.scaleOriginY : bgRoot.screen.height / 2
+            scaleProgress: overviewController ? overviewController.scaleProgress : 0.0
             anyWidgetIsDragging: bgRoot.anyWidgetIsDragging
             mediaModeOpen: bgRoot.mediaModeOpen
             lockAnimationActive: bgRoot.lockAnimationActive

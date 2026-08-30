@@ -240,9 +240,7 @@ Item {
         opacity: wallpaperImageRoot.overviewController.progress
     }
 
-    property real wallpaperClipRadius: isGnomeLikeOverview
-        ? (legacyGnomeZoomedOut ? Appearance.rounding.windowRounding : 0)
-        : overviewController.cornerRadius
+    property real wallpaperClipRadius: overviewController ? overviewController.cornerRadius : 0
     Behavior on wallpaperClipRadius {
         animation: Appearance.animation.elementMove.numberAnimation.createObject(wallpaperImageRoot)
     }
