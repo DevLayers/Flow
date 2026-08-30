@@ -453,6 +453,7 @@ PanelWindow {
             Repeater {
                 model: widgetStateManager.model
                 delegate: WidgetDelegate {
+                    monitorName: bgWidgetsWindow.screen ? bgWidgetsWindow.screen.name : ""
                     widgetListModel: widgetStateManager.model
                     widgetSizes: widgetStateManager.widgetSizes
                     widgetSizesVersion: widgetStateManager.widgetSizesVersion

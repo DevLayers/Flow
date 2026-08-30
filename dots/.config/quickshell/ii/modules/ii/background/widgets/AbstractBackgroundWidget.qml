@@ -17,6 +17,10 @@ AbstractWidget {
 
     property string configEntryName: ""
     property var widgetInstance: null
+    // Monitor this instance is drawn on; "" for previews and legacy callers.
+    // Every persisted write carries it so the per-monitor fork rule in
+    // WidgetPlacement applies (see Config.updateWidgetPosition).
+    readonly property string monitorName: widgetInstance !== null ? (widgetInstance.monitorName ?? "") : ""
     property bool isPreview: false
     property string styleOverride: widgetInstance ? (WidgetsRegistry.getStyleOverride(widgetInstance.widgetId) || "") : ""
 
@@ -392,21 +396,11 @@ AbstractWidget {
     // drives a persisted write. The commit happens once, on release.
     property real _liveScaleOverride: 0
     readonly property real _effectiveInstanceScale: _liveScaleOverride > 0 ? _liveScaleOverride : _persistedInstanceScale
-    // Authoritative source is the config list, not the ListModel role: roles
-    // freeze at first append, so models created before `scale` existed read
-    // back undefined and visually revert the widget on the next resync.
-    readonly property real _persistedInstanceScale: {
-        const id = widgetInstance !== null ? widgetInstance.id : "";
-        const list = Config.options.background.activeWidgets || [];
-        let result = 1.0;
-        for (let i = 0; i < list.length; i++) {
-            if (list[i].id === id) {
-                result = list[i].scale ?? 1.0;
-                break;
-            }
-        }
-        return result;
-    }
+    // Authoritative source is the placement WidgetDelegate resolves from the
+    // config entry for this monitor, not a ListModel role: roles freeze at
+    // first append, so models created before `scale` existed read back
+    // undefined and visually revert the widget on the next resync.
+    readonly property real _persistedInstanceScale: widgetInstance !== null ? (widgetInstance.scale ?? 1.0) : 1.0
 
 
     // ── Resize gesture ───────────────────────────────────────────────────────
@@ -553,17 +547,13 @@ AbstractWidget {
             if (isPreview || widgetInstance === null)
                 return;
             const rounded = Math.round(target * 100) / 100;
-            Config.updateWidgetScale(widgetInstance.id, rounded);
-            // Write the role directly too, so the scale binding re-evaluates
-            // even if the config resync hiccups.
-            if ((widgetInstance.scale ?? -1) !== rounded)
-                widgetInstance.scale = rounded;
+            Config.updateWidgetScale(widgetInstance.id, rounded, monitorName);
             x = WidgetDragMath.clamp(x, dragMinimumX(), dragMaximumX());
             y = WidgetDragMath.clamp(y, dragMinimumY(), dragMaximumY());
         }
         if (!isPreview) {
             if (widgetInstance !== null)
-                Config.updateWidgetPosition(widgetInstance.id, x, y);
+                Config.updateWidgetPosition(widgetInstance.id, x, y, monitorName);
             else if (configEntry) {
                 configEntry.x = x;
                 configEntry.y = y;
@@ -758,8 +748,19 @@ AbstractWidget {
         return _lastGridY;
     }
 
+    // Every widget's placement on this monitor, keyed by instance id. The
+    // ListModel roles only carry the legacy, unforked coordinates.
+    function _placementsByInstance() {
+        const list = Config.options.background.activeWidgets || [];
+        const result = {};
+        for (let i = 0; i < list.length; i++)
+            result[list[i].id] = WidgetPlacement.resolve(list[i], monitorName);
+        return result;
+    }
+
     function snapCandidateX(rawX, rawY) {
         const candidates = [];
+        const placements = _placementsByInstance();
 
         if (widgetListModel) {
             const myCenterX = rawX + root.width / 2;
@@ -771,6 +772,7 @@ AbstractWidget {
                     continue;
 
                 const widgetId = widget.instanceId || widget.id;
+                const other = placements[widgetId] ?? { "x": widget.widgetX, "y": widget.widgetY, "scale": widget.scale ?? 1.0 };
                 let otherWidth = root.width;
                 let otherHeight = root.height;
                 let otherScale = 1.0;
@@ -782,20 +784,20 @@ AbstractWidget {
                         otherHeight = widgetSizes[widgetId].height;
                     if (widgetSizes[widgetId].scale > 0)
                         otherScale = widgetSizes[widgetId].scale;
-                    else if (widget.scale !== undefined && widget.scale > 0)
-                        otherScale = widget.scale * (Config.options.background.widgets.widgetsScale ?? 1.0);
-                } else if (widget.scale !== undefined && widget.scale > 0) {
-                    otherScale = widget.scale * (Config.options.background.widgets.widgetsScale ?? 1.0);
+                    else if (other.scale > 0)
+                        otherScale = other.scale * (Config.options.background.widgets.widgetsScale ?? 1.0);
+                } else if (other.scale > 0) {
+                    otherScale = other.scale * (Config.options.background.widgets.widgetsScale ?? 1.0);
                 }
 
-                const otherCenterY = widget.widgetY + otherHeight / 2;
+                const otherCenterY = other.y + otherHeight / 2;
                 if (Math.abs(myCenterY - otherCenterY) >= _snapOrthogonalRange)
                     continue;
 
                 const otherLeftOffset = otherWidth * (1 - otherScale) / 2;
                 const otherRightOffset = otherWidth * (1 + otherScale) / 2;
-                const otherVisualLeft = widget.widgetX + otherLeftOffset;
-                const otherVisualRight = widget.widgetX + otherRightOffset;
+                const otherVisualLeft = other.x + otherLeftOffset;
+                const otherVisualRight = other.x + otherRightOffset;
 
                 // 1. Align dragged widget's visual left with other widget's visual left
                 const tLeftToLeft = otherVisualLeft - root.visualLeftOffset;
@@ -845,6 +847,7 @@ AbstractWidget {
 
     function snapCandidateY(rawY, rawX) {
         const candidates = [];
+        const placements = _placementsByInstance();
 
         if (widgetListModel) {
             const myCenterX = rawX + root.width / 2;
@@ -856,6 +859,7 @@ AbstractWidget {
                     continue;
 
                 const widgetId = widget.instanceId || widget.id;
+                const other = placements[widgetId] ?? { "x": widget.widgetX, "y": widget.widgetY, "scale": widget.scale ?? 1.0 };
                 let otherWidth = root.width;
                 let otherHeight = root.height;
                 let otherScale = 1.0;
@@ -867,20 +871,20 @@ AbstractWidget {
                         otherHeight = widgetSizes[widgetId].height;
                     if (widgetSizes[widgetId].scale > 0)
                         otherScale = widgetSizes[widgetId].scale;
-                    else if (widget.scale !== undefined && widget.scale > 0)
-                        otherScale = widget.scale * (Config.options.background.widgets.widgetsScale ?? 1.0);
-                } else if (widget.scale !== undefined && widget.scale > 0) {
-                    otherScale = widget.scale * (Config.options.background.widgets.widgetsScale ?? 1.0);
+                    else if (other.scale > 0)
+                        otherScale = other.scale * (Config.options.background.widgets.widgetsScale ?? 1.0);
+                } else if (other.scale > 0) {
+                    otherScale = other.scale * (Config.options.background.widgets.widgetsScale ?? 1.0);
                 }
 
-                const otherCenterX = widget.widgetX + otherWidth / 2;
+                const otherCenterX = other.x + otherWidth / 2;
                 if (Math.abs(myCenterX - otherCenterX) >= _snapOrthogonalRange)
                     continue;
 
                 const otherTopOffset = otherHeight * (1 - otherScale) / 2;
                 const otherBottomOffset = otherHeight * (1 + otherScale) / 2;
-                const otherVisualTop = widget.widgetY + otherTopOffset;
-                const otherVisualBottom = widget.widgetY + otherBottomOffset;
+                const otherVisualTop = other.y + otherTopOffset;
+                const otherVisualBottom = other.y + otherBottomOffset;
 
                 // 1. Align dragged widget's visual top with other widget's visual top
                 const tTopToTop = otherVisualTop - root.visualTopOffset;
@@ -1031,7 +1035,7 @@ AbstractWidget {
         }
 
         if (widgetInstance !== null) {
-            Config.updateWidgetPosition(widgetInstance.id, finalX, finalY);
+            Config.updateWidgetPosition(widgetInstance.id, finalX, finalY, monitorName);
         } else if (configEntry) {
             configEntry.x = finalX;
             configEntry.y = finalY;
@@ -1039,7 +1043,6 @@ AbstractWidget {
 
         _pointerGestureReady = false;
         _dragMovementActive = false;
-        console.warn("[ResizeDebug]", "moveRelease id=", widgetInstance !== null ? widgetInstance.id : "?", "model.scale=", widgetInstance !== null ? widgetInstance.scale : null, "final=", finalX, finalY);
         settleTimer.restart();
     }
 

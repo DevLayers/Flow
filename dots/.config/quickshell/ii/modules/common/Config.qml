@@ -462,7 +462,10 @@ Singleton {
         }
     }
 
-    function addWidgetToDesktop(widgetId, defaultX, defaultY) {
+    // Collision placement reads what `monitorName` shows (see WidgetPlacement);
+    // the new entry itself is written as legacy x/y so every monitor starts it
+    // from the same spot.
+    function addWidgetToDesktop(widgetId, defaultX, defaultY, monitorName) {
         let cloned = JSON.parse(JSON.stringify(root.options.background.activeWidgets || []));
         for (let i = 0; i < cloned.length; i++) {
             if (cloned[i].widgetId === widgetId)
@@ -477,7 +480,8 @@ Singleton {
             while (true) {
                 let collision = false;
                 for (let i = 0; i < cloned.length; i++) {
-                    if (Math.abs(cloned[i].x - (startX + offset)) < 30 && Math.abs(cloned[i].y - (startY + offset)) < 30) {
+                    const placed = WidgetPlacement.resolve(cloned[i], monitorName);
+                    if (Math.abs(placed.x - (startX + offset)) < 30 && Math.abs(placed.y - (startY + offset)) < 30) {
                         collision = true;
                         break;
                     }
@@ -518,13 +522,15 @@ Singleton {
         }
     }
 
-    function updateWidgetPosition(instanceId, newX, newY) {
+    // With a monitor name the write lands in that monitor's fork, created from
+    // the values it currently shows; without one it lands in the legacy x/y
+    // that every monitor without a fork follows (see WidgetPlacement).
+    function updateWidgetPosition(instanceId, newX, newY, monitorName) {
         let cloned = JSON.parse(JSON.stringify(root.options.background.activeWidgets || []));
         let found = false;
         for (let i = 0; i < cloned.length; i++) {
             if (cloned[i].id === instanceId) {
-                cloned[i].x = newX;
-                cloned[i].y = newY;
+                WidgetPlacement.setPosition(cloned[i], monitorName, newX, newY);
                 found = true;
                 break;
             }
@@ -549,12 +555,12 @@ Singleton {
         }
     }
 
-    function updateWidgetScale(instanceId, newScale) {
+    function updateWidgetScale(instanceId, newScale, monitorName) {
         let cloned = JSON.parse(JSON.stringify(root.options.background.activeWidgets || []));
         let found = false;
         for (let i = 0; i < cloned.length; i++) {
             if (cloned[i].id === instanceId) {
-                cloned[i].scale = newScale;
+                WidgetPlacement.setScale(cloned[i], monitorName, newScale);
                 found = true;
                 break;
             }

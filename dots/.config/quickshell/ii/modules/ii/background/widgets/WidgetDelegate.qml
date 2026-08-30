@@ -1,5 +1,6 @@
 import QtQuick
 import qs.modules.common
+import qs.modules.common.functions
 import qs.modules.common.widgets
 import qs.modules.ii.background.widgets
 import qs.modules.ii.background.widgets.DateWidget
@@ -27,6 +28,14 @@ Item {
     // External inputs
     required property int screenWidth
     required property int screenHeight
+    // Monitor this delegate draws on. Position and scale are resolved per
+    // monitor from the config entry (see WidgetPlacement); the widgetX/widgetY
+    // roles only carry the legacy, unforked coordinates.
+    property string monitorName: ""
+    readonly property var placement: {
+        const list = Config.options.background.activeWidgets;
+        return WidgetPlacement.resolveIn(list, delegateRoot.instanceId, delegateRoot.monitorName);
+    }
     required property real wallpaperScale
     required property bool wallpaperSafetyTriggered
     required property bool lockAnimationActive
@@ -1254,8 +1263,10 @@ Item {
                 return {
                     "id": delegateRoot.instanceId,
                     "widgetId": delegateRoot.widgetId,
-                    "x": delegateRoot.widgetX,
-                    "y": delegateRoot.widgetY,
+                    "x": delegateRoot.placement.x,
+                    "y": delegateRoot.placement.y,
+                    "scale": delegateRoot.placement.scale,
+                    "monitorName": delegateRoot.monitorName,
                     "placementStrategy": delegateRoot.placementStrategy,
                     "lockBehavior": delegateRoot.lockBehavior
                 };
@@ -1363,8 +1374,8 @@ Item {
 
     MissingWidgetPlaceholder {
         widgetId: delegateRoot.widgetId
-        widgetX: delegateRoot.widgetX
-        widgetY: delegateRoot.widgetY
+        widgetX: delegateRoot.placement.x
+        widgetY: delegateRoot.placement.y
     }
 
 }
