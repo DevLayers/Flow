@@ -18,6 +18,7 @@ import qs.modules.ii.background.lockscreen
 import qs.modules.ii.background.parallax
 import qs.modules.ii.background.overview
 import qs.modules.ii.background.blur
+import qs.modules.ii.editMode
 
 PanelWindow {
     id: bgWidgetsWindow
@@ -28,6 +29,20 @@ PanelWindow {
     screen: modelData
     readonly property var overviewController: GlobalStates.overviewBackgroundControllerFor(bgWidgetsWindow.screen ? bgWidgetsWindow.screen.name : "")
     readonly property bool isGnomeLikeOverview: overviewController && overviewController.isGnomeLike
+
+    // Edit Mode's viewport: the same pure function, on the same inputs, on the same scalar as the
+    // wallpaper surface (BackgroundRoot), so the canvas and the wallpaper shrink as one rectangle
+    // across the two scene graphs. Only the screen the mode is on shrinks (decision D4).
+    readonly property string editScreenName: bgWidgetsWindow.screen ? bgWidgetsWindow.screen.name : ""
+    readonly property bool isEditMonitor: GlobalStates.editModeMonitor !== "" && GlobalStates.editModeMonitor === bgWidgetsWindow.editScreenName
+    readonly property real editProgress: bgWidgetsWindow.isEditMonitor ? GlobalStates.editProgress : 0
+    readonly property var editViewport: EditModeInsets.viewportFor(bgWidgetsWindow.editScreenName, bgWidgetsWindow.width, bgWidgetsWindow.height)
+    readonly property var editTransform: CF.EditModeLogic.atProgress(bgWidgetsWindow.editViewport, bgWidgetsWindow.editProgress, 0)
+    readonly property matrix4x4 editMatrix: Qt.matrix4x4(
+        bgWidgetsWindow.editTransform.scale, 0, 0, bgWidgetsWindow.editTransform.x,
+        0, bgWidgetsWindow.editTransform.scale, 0, bgWidgetsWindow.editTransform.y,
+        0, 0, 1, 0,
+        0, 0, 0, 1)
     exclusionMode: ExclusionMode.Ignore
     WlrLayershell.layer: WlrLayer.Bottom
     WlrLayershell.namespace: "quickshell:backgroundWidgets"
@@ -376,6 +391,12 @@ PanelWindow {
             Translate {
                 x: bgWidgetsWindow.overviewController && bgWidgetsWindow.overviewController.followWidgetsTranslation ? bgWidgetsWindow.overviewController.translateX : 0
                 y: bgWidgetsWindow.overviewController && bgWidgetsWindow.overviewController.followWidgetsTranslation ? bgWidgetsWindow.overviewController.translateY : 0
+            },
+            // Edit Mode's shrink, a third transform after the overview's pair rather than a
+            // replacement for it: the overview ends the mode, so the two only ever overlap for
+            // the frames of one exit, and composing keeps that exit continuous.
+            Matrix4x4 {
+                matrix: bgWidgetsWindow.editMatrix
             }
         ]
 

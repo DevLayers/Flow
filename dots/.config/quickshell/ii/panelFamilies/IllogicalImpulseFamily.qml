@@ -44,6 +44,7 @@ import qs.modules.ii.alarmRingingPopup
 import qs.modules.ii.screenshotOverlay
 import qs.modules.ii.dynamicIsland
 import qs.modules.ii.touchGestures
+import qs.modules.ii.editMode
 
 Scope {
     property bool barExtraCondition: true
@@ -70,6 +71,11 @@ Scope {
     PanelLoader {
         extraCondition: Config.options.background.enable
         component: Background {}
+    }
+    PanelLoader {
+        // The desktop layout editor's chrome; nothing to edit without the background.
+        extraCondition: Config.options.background.enable
+        component: EditModeChrome {}
     }
     PanelLoader {
         component: Cheatsheet {}

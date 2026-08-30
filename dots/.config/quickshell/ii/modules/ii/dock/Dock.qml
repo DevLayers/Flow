@@ -102,6 +102,26 @@ Scope {
             readonly property bool isVertical: dock.isVertical
             readonly property real dockThickness: dockRoot.sizing.dockThickness
             readonly property real unmagnifiedThickness: dockRoot.sizing.unmagnifiedThickness
+
+            // Edit Mode reserves this dock's edge from the thickness the dock reveals at rest -
+            // configuration-derived, unchanged by hover, magnification or a fullscreen window -
+            // published rather than re-derived by the mode, because the padding and the style
+            // that make up this number live here.
+            QtObject {
+                id: editInsetPublisher
+                readonly property string screenName: dockRoot.screen ? dockRoot.screen.name : ""
+                readonly property string side: dock.dockEffectivePosition
+                readonly property real thickness: dockRoot.unmagnifiedThickness
+
+                function publish() {
+                    GlobalStates.setDockInset(editInsetPublisher.screenName, editInsetPublisher.side, editInsetPublisher.thickness);
+                }
+
+                onSideChanged: publish()
+                onThicknessChanged: publish()
+                Component.onCompleted: publish()
+                Component.onDestruction: GlobalStates.setDockInset(editInsetPublisher.screenName, "", 0)
+            }
             readonly property bool anySidebarOpen: GlobalStates.effectiveLeftOpen || GlobalStates.effectiveRightOpen
 
             readonly property bool isSpecialWorkspaceOpen: {
@@ -111,7 +131,9 @@ Scope {
                 return monitor.specialWorkspace.name !== "";
             }
 
-            property bool reveal: dock.pinned || (!anySidebarOpen && ((Config.options?.dock.hoverToReveal && dockMouseArea.containsMouse) || (dockContent.requestDockShow) || (workspaceEmpty && !isSpecialWorkspaceOpen && (!(Config.options?.dock.showOnlyOnFocusedMonitor ?? false) || isFocusedMonitor))))
+            // Edit Mode holds the dock revealed: its viewport reserves the dock's edge whatever the
+            // dock is doing, and stage 6 edits the dock in place.
+            property bool reveal: dock.pinned || GlobalStates.editMode || (!anySidebarOpen && ((Config.options?.dock.hoverToReveal && dockMouseArea.containsMouse) || (dockContent.requestDockShow) || (workspaceEmpty && !isSpecialWorkspaceOpen && (!(Config.options?.dock.showOnlyOnFocusedMonitor ?? false) || isFocusedMonitor))))
             property bool positionChanging: false
 
             // TODO: check for multi-monitor situations

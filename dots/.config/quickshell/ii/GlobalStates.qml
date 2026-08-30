@@ -345,11 +345,217 @@ Singleton {
     property string activeRightSidebarMonitor: ""
 
     // ── Edit Mode ────────────────────────────────────────────────────────────
-    // `editMode` is the switch the mode shell flips; nothing turns it on yet.
+    // `editMode` is the switch: the keybind, the IPC target, the Escape ladder
+    // and the toolbar's Done flip it, and everything the mode does hangs off
+    // the change handler below.
     // The history below is inert outside the mode: entries are only recorded
     // while it is on and dropped when it ends, so an edit made on the plain
     // desktop is exactly as unrecorded as it always was.
     property bool editMode: false
+
+    // The screen the mode is on (decision D4: only the desktop focused at
+    // entry shrinks). Left pointing at it through the exit animation so the
+    // desktop that shrank is the one that grows back; the next entry re-points
+    // it.
+    property string editModeMonitor: ""
+
+    // The entry and the exit as ONE animated scalar. The desktop lives on two
+    // layer surfaces (the wallpaper and the widgets, two scene graphs) and the
+    // chrome framing it on a third; all three derive their geometry from this
+    // number, so a Behavior anywhere else would be two values that have to
+    // agree - and the frames where they do not are the ones where the chrome
+    // frames a rectangle the desktop is not at. `elementMove` whole, not an
+    // enter/exit tier: those carry alwaysRunToEnd, and a mode toggled twice
+    // inside its own duration would finish arriving before it started leaving.
+    property real editProgress: root.editMode ? 1 : 0
+    Behavior on editProgress {
+        enabled: !Appearance.reducedMotion
+        animation: Appearance.animation.elementMove.numberAnimation.createObject(root)
+    }
+
+    // Which face of the desktop the viewport shows: a FILTER, never a mode of
+    // its own - one entry, one exit ladder. The Lockscreen tab arrives with
+    // stage 7b; until then this only ever holds the desktop.
+    property string editTab: EditModeLogic.desktopTab
+    readonly property bool editLockPreview: root.editMode && root.editTab === EditModeLogic.lockscreenTab
+    // "The lock's LOOK is on screen": the real lock session or the preview of
+    // it. The one derivation the theme sites are meant to read, so the preview
+    // can never show the lock's wallpaper under the desktop's palette.
+    readonly property bool lockLookActive: root.screenLocked || root.editLockPreview
+
+    // The edge each dock occupies, published by the dock window itself
+    // (screen name -> { side, thickness }). The dock is the one place that
+    // knows its padding and style, so the mode's viewport reads this rather
+    // than deriving the dock's size a second time.
+    property var dockInsets: ({})
+    function setDockInset(screenName, side, thickness) {
+        if (!screenName)
+            return;
+        const next = Object.assign({}, root.dockInsets);
+        if (!side || !(thickness > 0))
+            delete next[screenName];
+        else
+            next[screenName] = { "side": side, "thickness": thickness };
+        root.dockInsets = next;
+    }
+
+    function openEditMode() {
+        if (root.editMode)
+            return;
+        // Nothing to edit without a desktop, and nothing to see while the
+        // lock or media mode holds the screen.
+        if (!Config.options.background.enable || root.screenLocked || root.mediaModeActive)
+            return;
+        // Full-screen modes over the same desktop close first rather than
+        // having the mode layered under them.
+        root.overviewOpen = false;
+        root.sessionOpen = false;
+        root.editMode = true;
+    }
+
+    function closeEditMode() {
+        root.editMode = false;
+    }
+
+    function toggleEditMode() {
+        if (root.editMode)
+            root.closeEditMode();
+        else
+            root.openEditMode();
+    }
+
+    function _enterEditMode() {
+        root.editTab = EditModeLogic.desktopTab;
+        root.editModeMonitor = Hyprland.focusedMonitor?.name ?? Quickshell.primaryScreen?.name ?? "";
+        // Panels covering the desktop being edited close, and stay closed: the
+        // sidebar open handlers refuse them for the length of the mode.
+        root.policiesPanelOpen = false;
+        root.dashboardPanelOpen = false;
+        root.mediaControlsOpen = false;
+        root._editClearWorkspace();
+    }
+
+    function _leaveEditMode() {
+        // The lock now owns every monitor's workspace - it parks them itself
+        // and restores its own record on unlock - so a restore fired here
+        // would fight it. The saved pair waits for the unlock instead.
+        if (root.screenLocked)
+            return;
+        root._editRestoreWorkspace();
+    }
+
+    // ---- the workspace under the mode ------------------------------------
+    //
+    // The mode can be entered over windows (the keybind), and windows cover
+    // the desktop being edited. The lock's route: the focused monitor moves to
+    // an empty workspace for the length of the mode and comes back on exit.
+    // The empty workspace is the lock's own temp id for the workspace it
+    // replaces (2147483647 - id), which the parallax and the workspace
+    // indicator already map back to the real one, so nothing visibly jumps.
+    // Pinned windows are ignored: they follow to the temp workspace anyway.
+    property int _editSavedWorkspace: 0
+    property int _editTempWorkspace: 0
+
+    function _editClearWorkspace() {
+        root._editSavedWorkspace = 0;
+        root._editTempWorkspace = 0;
+        const mon = root.editModeMonitor;
+        if (mon === "")
+            return;
+        const mData = HyprlandData.monitors.find(m => m.name === mon);
+        const ws = mData?.activeWorkspace?.id;
+        if (ws === undefined || ws === null)
+            return;
+        let batch = "";
+        // A special workspace is summoned over the desktop; close it first,
+        // as the lock does.
+        const specName = mData.specialWorkspace?.name ?? "";
+        if (specName !== "" && (mData.specialWorkspace?.id ?? 0) !== 0) {
+            let clean = specName.startsWith("special:") ? specName.substring(8) : specName;
+            if (!clean)
+                clean = "special";
+            batch += ` ; dispatch hl.dsp.focus {monitor="${mon}"} ; dispatch hl.dsp.workspace.toggle_special('${clean}')`;
+        }
+        // Already parked on a temp workspace (the lock's, or ours): nothing to
+        // clear, and nothing of ours to restore.
+        if (ws <= 1000000) {
+            const hasWindows = (HyprlandData.windowList ?? []).some(w => w.workspace?.id === ws && !w.pinned);
+            if (hasWindows) {
+                const temp = 2147483647 - ws;
+                batch += ` ; dispatch hl.dsp.focus {monitor="${mon}"} ; dispatch hl.dsp.focus {workspace=${temp}}`;
+                root._editSavedWorkspace = ws;
+                root._editTempWorkspace = temp;
+            }
+        }
+        if (batch !== "")
+            Quickshell.execDetached(["hyprctl", "--batch", batch.substring(3)]);
+    }
+
+    function _editRestoreWorkspace() {
+        const mon = root.editModeMonitor;
+        const saved = root._editSavedWorkspace;
+        const temp = root._editTempWorkspace;
+        root._editSavedWorkspace = 0;
+        root._editTempWorkspace = 0;
+        if (saved === 0 || mon === "")
+            return;
+        // Only put back a monitor still parked where the entry left it: a
+        // user who switched workspaces during the mode has moved on. The saved
+        // id is accepted too, because HyprlandData refreshes asynchronously
+        // and a mode left within that window still reads the pre-entry state;
+        // focusing a workspace the monitor is already on is a no-op.
+        const mData = HyprlandData.monitors.find(m => m.name === mon);
+        const current = mData?.activeWorkspace?.id ?? 0;
+        if (current !== temp && current !== saved)
+            return;
+        Quickshell.execDetached(["hyprctl", "--batch", `dispatch hl.dsp.focus {monitor="${mon}"} ; dispatch hl.dsp.focus {workspace=${saved}}`]);
+    }
+
+    Timer {
+        id: editUnlockRestoreTimer
+        // After the lock's own restore (Lock.qml waits 450 ms for its zoom-in
+        // before dispatching), so the two batches never race.
+        interval: 800
+        repeat: false
+        onTriggered: root._editRestoreWorkspace()
+    }
+
+    Connections {
+        target: root
+
+        // Anything that takes the desktop off the screen ends the mode: the
+        // lock repurposes the background as its own backdrop, the overview and
+        // the session menu cover it, media mode promotes the wallpaper over
+        // everything, and Connect mode rebuilds the bar the mode will edit.
+        function onScreenLockedChanged() {
+            if (root.screenLocked) {
+                root.editMode = false;
+                return;
+            }
+            if (root._editSavedWorkspace !== 0)
+                editUnlockRestoreTimer.restart();
+        }
+
+        function onOverviewOpenChanged() {
+            if (root.overviewOpen)
+                root.editMode = false;
+        }
+
+        function onSessionOpenChanged() {
+            if (root.sessionOpen)
+                root.editMode = false;
+        }
+
+        function onMediaModeActiveChanged() {
+            if (root.mediaModeActive)
+                root.editMode = false;
+        }
+
+        function onConnectModeActiveChanged() {
+            if (root.connectModeActive)
+                root.editMode = false;
+        }
+    }
 
     // Undo and redo, as two stacks of {undo, redo} closures. Closures rather
     // than diffs: each commit site knows how to reverse and replay its own
@@ -454,11 +660,16 @@ Singleton {
         root.editRedoStack = [];
     }
 
-    // Done means "stop": the history is about this session of the mode, and a
-    // stack surviving it would let the next entry undo edits made outside it.
     onEditModeChanged: {
-        if (!root.editMode)
-            root.editHistoryClear();
+        if (root.editMode) {
+            root._enterEditMode();
+            return;
+        }
+        root._leaveEditMode();
+        // Done means "stop": the history is about this session of the mode,
+        // and a stack surviving it would let the next entry undo edits made
+        // outside it.
+        root.editHistoryClear();
     }
 
     function isScreenAllowedForBar(screen) {
@@ -1226,6 +1437,15 @@ Singleton {
     onAnimatedRightSidebarWidthChanged: {}
 
     onPoliciesPanelOpenChanged: {
+        // Edit Mode refuses the sidebars for its whole length: its chrome is
+        // Overlay and the sidebars are Top, so an open one is painted over by
+        // the toolbar that shares its edge - and neither sidebar is something
+        // the mode edits. Refused here, on the flag, because the corners, the
+        // bar and the IPC handlers all open them through it.
+        if (policiesPanelOpen && root.editMode) {
+            policiesPanelOpen = false;
+            return;
+        }
         if (policiesPanelOpen) {
             if (root.activeLeftSidebarMonitor === "") {
                 root.activeLeftSidebarMonitor = Hyprland.focusedMonitor?.name ?? "";
@@ -1237,6 +1457,12 @@ Singleton {
     }
 
     onDashboardPanelOpenChanged: {
+        // Before the notification sweep, not after: a refused open must not
+        // count as the user having read what it would have shown them.
+        if (dashboardPanelOpen && root.editMode) {
+            dashboardPanelOpen = false;
+            return;
+        }
         if (dashboardPanelOpen) {
             if (root.activeRightSidebarMonitor === "") {
                 root.activeRightSidebarMonitor = Hyprland.focusedMonitor?.name ?? "";
@@ -1335,5 +1561,29 @@ Singleton {
         onReleased: {
             root.superDown = false;
         }
+    }
+
+    // Edit Mode entry points. `qs -c ii ipc call editMode toggle|open|close`;
+    // the shortcut is what the Super+Shift+E bind reaches.
+    IpcHandler {
+        target: "editMode"
+
+        function toggle(): void {
+            root.toggleEditMode();
+        }
+
+        function open(): void {
+            root.openEditMode();
+        }
+
+        function close(): void {
+            root.closeEditMode();
+        }
+    }
+
+    GlobalShortcut {
+        name: "editModeToggle"
+        description: "Toggles the desktop layout editor"
+        onPressed: root.toggleEditMode()
     }
 }

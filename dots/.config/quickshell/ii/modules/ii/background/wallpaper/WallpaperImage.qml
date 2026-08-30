@@ -46,6 +46,8 @@ Item {
     required property real scaleOriginY
     required property real scaleProgress
     property bool legacyGnomeZoomedOut: false
+    // Edit Mode's shrink of the whole plane; the identity outside the mode.
+    property matrix4x4 editMatrix: Qt.matrix4x4(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1)
 
     // Smoothly center parallax during overview opening to ensure zoom-out presets
     // never expose black screen edges at extreme workspace positions.
@@ -73,6 +75,9 @@ Item {
     // Output aliases
     property alias wallpaperItem: wallpaper
     property alias clipRectItem: centralWallpaperClipRect
+    // The plane as it looks at rest, for Edit Mode's backdrop: sampled in its own coordinates,
+    // so the sample stays full-screen while the plane itself is transformed into the card.
+    readonly property alias wallpaperPlanesItem: wallpaperPlanes
 
     // ── Decode cap ────────────────────────────────────────────────────────────
     // A wallpaper larger than the plane it is drawn on costs RAM twice (decoded QImage plus GPU
@@ -255,12 +260,19 @@ Item {
         readonly property real centeredX: -movableXSpace
         readonly property real centeredY: -movableYSpace
 
-        transform: Scale {
-            origin.x: scaleOriginX
-            origin.y: scaleOriginY
-            xScale: scaleValue
-            yScale: scaleValue
-        }
+        transform: [
+            Scale {
+                origin.x: scaleOriginX
+                origin.y: scaleOriginY
+                xScale: scaleValue
+                yScale: scaleValue
+            },
+            // Edit Mode's shrink, applied after the overview's zoom so the whole plane - overview
+            // state included - lands inside the card. The identity outside the mode.
+            Matrix4x4 {
+                matrix: wallpaperImageRoot.editMatrix
+            }
+        ]
 
         Rectangle {
             id: centralClipMask

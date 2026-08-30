@@ -17,6 +17,7 @@ import qs.modules.ii.background.lockscreen
 import qs.modules.ii.background.parallax
 import qs.modules.ii.background.overview
 import qs.modules.ii.background.blur
+import qs.modules.ii.editMode
 
 PanelWindow {
     id: bgRoot
@@ -25,6 +26,32 @@ PanelWindow {
     required property var widgetStateManager
 
     property bool anyWidgetIsDragging: (widgetStateManager?.draggingActive) ?? false
+
+    // ── Edit Mode's viewport ──────────────────────────────────────────────────
+    // The desktop stops being the whole screen and becomes an object on it. The wallpaper plane
+    // here and the widget canvas in BackgroundWidgetsWindow take the same transform, derived
+    // from the same pure function on the same inputs, on the one animated scalar GlobalStates
+    // owns - so two windows in two scene graphs shrink as one rectangle. Only the screen the mode
+    // is on shrinks (decision D4); every other screen reads progress 0 and the identity.
+    readonly property string editScreenName: bgRoot.screen ? bgRoot.screen.name : ""
+    readonly property bool isEditMonitor: GlobalStates.editModeMonitor !== "" && GlobalStates.editModeMonitor === bgRoot.editScreenName
+    readonly property real editProgress: bgRoot.isEditMonitor ? GlobalStates.editProgress : 0
+    readonly property var editViewport: EditModeInsets.viewportFor(bgRoot.editScreenName, bgRoot.width, bgRoot.height)
+    readonly property var editTransform: CF.EditModeLogic.atProgress(bgRoot.editViewport, bgRoot.editProgress, 0)
+    // A scale about the top-left followed by a translation, as one matrix rather than a
+    // [Scale, Translate] pair: the order a transform list composes in is exactly the kind of thing
+    // that is wrong by a factor of the scale and still looks plausible. What it DRAWS is a scale
+    // about the usable area's centre, and that is the geometry's doing: the offset it hands in is
+    // the centring offset for the scale beside it, on every frame.
+    readonly property matrix4x4 editMatrix: Qt.matrix4x4(
+        bgRoot.editTransform.scale, 0, 0, bgRoot.editTransform.x,
+        0, bgRoot.editTransform.scale, 0, bgRoot.editTransform.y,
+        0, 0, 1, 0,
+        0, 0, 0, 1)
+    readonly property var editCardGeometry: CF.EditModeLogic.cardRect(bgRoot.editViewport, bgRoot.editProgress, bgRoot.width, bgRoot.height, 0)
+    readonly property rect editCard: Qt.rect(bgRoot.editCardGeometry.x, bgRoot.editCardGeometry.y, bgRoot.editCardGeometry.width, bgRoot.editCardGeometry.height)
+    // The corner grows with the shrink, so a desktop at rest has no radius applied to it at all.
+    readonly property real editCardRadius: Appearance.rounding.verylarge * bgRoot.editProgress
     property real baseWallpaperScale: 1 // Calculated scale from wallpaper size
     property int wallpaperWidth: modelData.width // Some reasonable init value, to be updated
     property int wallpaperHeight: modelData.height // Some reasonable init value, to be updated
@@ -579,6 +606,25 @@ PanelWindow {
             lockAnimationActive: bgRoot.lockAnimationActive
             hasWindowsInActiveWorkspace: bgRoot.hasWindowsInActiveWorkspace
             widgetStateManager: bgRoot.widgetStateManager
+            editMatrix: bgRoot.editMatrix
+        }
+
+        // Edit Mode's card: the blurred backdrop, corner, shadow and edge around the shrunk
+        // desktop, drawn over the wallpaper and cut out to the card. Loaded only while the mode is
+        // on or animating, so at rest nothing here exists. Non-interactive: the widgets surface
+        // above owns every click.
+        Loader {
+            id: editCardLoader
+            anchors.fill: parent
+            z: 1
+            enabled: false
+            active: bgRoot.editProgress > 0
+            opacity: Math.max(0, Math.min(1, bgRoot.editProgress))
+            sourceComponent: EditModeCard {
+                wallpaperLayer: wallpaperImage.wallpaperPlanesItem
+                card: bgRoot.editCard
+                cardRadius: bgRoot.editCardRadius
+            }
         }
 
         GlobalShortcut {
