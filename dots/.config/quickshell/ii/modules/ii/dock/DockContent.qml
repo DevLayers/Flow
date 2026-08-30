@@ -521,8 +521,7 @@ Item {
                 && nextOrder.every((entry, index) => entry === currentOrder[index]))
             return false;
 
-        Config.options.dock.order = nextOrder;
-        TaskbarApps.syncPinnedFileOrder();
+        root._writeDockOrder(nextOrder);
         return true;
     }
 
@@ -960,8 +959,7 @@ Item {
 
         const nextOrder = currentOrder.filter(entry => !memberIds[root._orderEntryAppId(entry)]);
         nextOrder.splice(insertionIndex, 0, ...groupOrderKeys);
-        Config.options.dock.order = nextOrder;
-        TaskbarApps.syncPinnedFileOrder();
+        root._writeDockOrder(nextOrder);
     }
 
     function isGroupAppExiting(appId) {
@@ -1177,6 +1175,19 @@ Item {
         return root.runningAppMap[appId] ? "runningApp:" + appId : "app:" + appId;
     }
 
+    // Every reorder lands here: one write, and in Edit Mode one history entry
+    // closed over copies of the order (a no-op outside the mode).
+    function _writeDockOrder(nextOrder) {
+        const before = Array.from(Config.options?.dock?.order ?? []);
+        const after = Array.from(nextOrder);
+        Config.options.dock.order = after;
+        TaskbarApps.syncPinnedFileOrder();
+        GlobalStates.editHistoryPush({
+            "undo": () => { Config.options.dock.order = before; TaskbarApps.syncPinnedFileOrder(); },
+            "redo": () => { Config.options.dock.order = after; TaskbarApps.syncPinnedFileOrder(); }
+        });
+    }
+
     function moveDockItem(sourceItem, targetItem) {
         if (!sourceItem || !targetItem || sourceItem.orderKey === targetItem.orderKey)
             return false;
@@ -1220,8 +1231,7 @@ Item {
                 && nextOrder.every((entry, index) => entry === currentOrder[index]))
             return false;
 
-        Config.options.dock.order = nextOrder;
-        TaskbarApps.syncPinnedFileOrder();
+        root._writeDockOrder(nextOrder);
         return true;
     }
 

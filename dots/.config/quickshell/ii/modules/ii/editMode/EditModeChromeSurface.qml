@@ -72,6 +72,31 @@ PanelWindow {
 
     // Whether the one widget menu belongs to this screen.
     readonly property bool menuOpenHere: GlobalStates.editWidgetMenuOpen && GlobalStates.editWidgetMenuScreenName === root.screenName
+    readonly property bool barMenuOpenHere: GlobalStates.editBarMenuOpen && GlobalStates.editBarMenuScreenName === root.screenName
+
+    // The bar menu's point arrives in the bar window's coordinates; the bar
+    // sits flush with one screen edge, so the far edges translate by the
+    // window's own size.
+    function barMenuPoint() {
+        let x = GlobalStates.editBarMenuX;
+        let y = GlobalStates.editBarMenuY;
+        const side = EditModeInsets.barSide;
+        if (side === "bottom")
+            y += root.height - GlobalStates.editBarMenuWindowHeight;
+        else if (side === "right")
+            x += root.width - GlobalStates.editBarMenuWindowWidth;
+        // Off the bar's body, so the card never covers the widgets it is about.
+        const clear = EditModeInsets.barThickness + 4;
+        if (side === "top")
+            y = Math.max(y, clear);
+        else if (side === "bottom")
+            y = Math.min(y, root.height - clear) - 80;
+        else if (side === "left")
+            x = Math.max(x, clear);
+        else
+            x = Math.min(x, root.width - clear) - 200;
+        return Qt.point(x, y);
+    }
 
     // The toolbar, plus - while a menu is open - the whole screen: a click
     // anywhere that is not the menu dismisses it before it reaches the desktop.
@@ -177,8 +202,47 @@ PanelWindow {
 
     Item {
         id: menuCloser
-        width: root.menuOpenHere ? root.width : 0
-        height: root.menuOpenHere ? root.height : 0
+        width: (root.menuOpenHere || root.barMenuOpenHere) ? root.width : 0
+        height: (root.menuOpenHere || root.barMenuOpenHere) ? root.height : 0
+    }
+
+    Loader {
+        anchors.fill: parent
+        active: root.barMenuOpenHere
+        z: 10
+        sourceComponent: Item {
+            MouseArea {
+                anchors.fill: parent
+                acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
+                onPressed: GlobalStates.closeEditBarMenu()
+            }
+            EditBarMenu {
+                id: barMenuCard
+                readonly property point at: root.barMenuPoint()
+                x: Math.min(Math.max(at.x, 8), root.width - width - 8)
+                y: Math.min(Math.max(at.y, 8), root.height - height - 8)
+                controller: GlobalStates.editBarMenuController
+                bucket: GlobalStates.editBarMenuBucket
+                index: GlobalStates.editBarMenuIndex
+                centered: GlobalStates.editBarMenuCentered
+                onDismissRequested: GlobalStates.closeEditBarMenu()
+                transformOrigin: Item.TopLeft
+                scale: 0.85
+                opacity: 0
+                Component.onCompleted: {
+                    scale = 1;
+                    opacity = 1;
+                }
+                Behavior on scale {
+                    enabled: !Appearance.reducedMotion
+                    animation: Appearance.animation.elementMoveEnter.numberAnimation.createObject(barMenuCard)
+                }
+                Behavior on opacity {
+                    enabled: !Appearance.reducedMotion
+                    animation: Appearance.animation.elementMoveEnter.numberAnimation.createObject(barMenuCard)
+                }
+            }
+        }
     }
 
     Loader {

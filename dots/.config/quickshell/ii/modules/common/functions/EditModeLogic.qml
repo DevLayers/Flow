@@ -80,6 +80,12 @@ Singleton {
     function dropPosition(...args) {
         return EditMode.dropPosition(...args)
     }
+    function barDropTarget(...args) {
+        return EditMode.barDropTarget(...args)
+    }
+    function moveTargetForInsertion(...args) {
+        return EditMode.moveTargetForInsertion(...args)
+    }
 
     readonly property var sizeSteps: EditMode.SIZE_STEPS
 

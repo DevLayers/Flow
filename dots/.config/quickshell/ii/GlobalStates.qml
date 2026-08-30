@@ -401,6 +401,7 @@ Singleton {
 
     function openDesktopMenu(screenName, x, y) {
         root.closeEditWidgetMenu();
+        root.closeEditBarMenu();
         root.desktopMenuScreenName = screenName;
         root.desktopMenuX = x;
         root.desktopMenuY = y;
@@ -411,10 +412,51 @@ Singleton {
         root.desktopMenuOpen = false;
     }
 
+    // The bar, edited in place: a reorder drag in flight (a gesture for the
+    // Escape ladder) and the per-widget menu, which the chrome surface draws
+    // because the bar's own window is too thin to hold it. The point is in
+    // the bar window's coordinates with that window's size alongside, so the
+    // host can place it from whichever screen edge the bar sits on.
+    property bool editBarDragActive: false
+    signal editBarDragCancel()
+    property bool editBarMenuOpen: false
+    property string editBarMenuScreenName: ""
+    property var editBarMenuController: null
+    property int editBarMenuBucket: -1
+    property int editBarMenuIndex: -1
+    property bool editBarMenuCentered: false
+    property real editBarMenuX: 0
+    property real editBarMenuY: 0
+    property real editBarMenuWindowWidth: 0
+    property real editBarMenuWindowHeight: 0
+
+    function openEditBarMenu(screenName, controller, bucket, index, centered, x, y, windowWidth, windowHeight) {
+        if (!root.editMode)
+            return;
+        root.closeDesktopMenu();
+        root.closeEditWidgetMenu();
+        root.editBarMenuScreenName = screenName;
+        root.editBarMenuController = controller;
+        root.editBarMenuBucket = bucket;
+        root.editBarMenuIndex = index;
+        root.editBarMenuCentered = centered;
+        root.editBarMenuX = x;
+        root.editBarMenuY = y;
+        root.editBarMenuWindowWidth = windowWidth;
+        root.editBarMenuWindowHeight = windowHeight;
+        root.editBarMenuOpen = true;
+    }
+
+    function closeEditBarMenu() {
+        root.editBarMenuOpen = false;
+        root.editBarMenuController = null;
+    }
+
     function openEditWidgetMenu(canvas, instanceId, screenName, x, y) {
         if (!root.editMode)
             return;
         root.closeDesktopMenu();
+        root.closeEditBarMenu();
         root.editWidgetMenuCanvas = canvas;
         root.editWidgetMenuInstanceId = instanceId;
         root.editWidgetMenuScreenName = screenName;
@@ -507,7 +549,9 @@ Singleton {
 
     function _leaveEditMode() {
         root.closeEditWidgetMenu();
+        root.closeEditBarMenu();
         root.closeDesktopMenu();
+        root.editBarDragActive = false;
         // The drawer and its drop hint are the mode's: one left open would
         // greet the next entry mid-slide.
         root.editDrawerOpen = false;

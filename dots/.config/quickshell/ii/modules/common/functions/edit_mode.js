@@ -585,3 +585,47 @@ function nearestSizeStep(current) {
     }
     return nearest;
 }
+
+// ---- the bar, edited in place (stage 6) ------------------------------------
+//
+// The bar's three lists are laid out along one axis, and a drag between them
+// answers two questions: which list, and which stored insertion index. `slots`
+// are the DRAWN widgets other than the dragged one, each with its list, its
+// index in the stored list (hidden entries included, so the answer is a
+// stored index and needs no visible-to-stored mapping) and its scene centre;
+// `anchors` are three stand-in points for a list with nothing drawn in it -
+// without one an empty list could never win a drop. Nearest is decided along
+// the axis only: every slot in a vertical bar has the same x.
+function barDropTarget(slots, anchors, point, axis) {
+    if (!point) return null;
+    var best = null;
+    var bestDistance = Infinity;
+    var seen = [false, false, false];
+    var list = slots || [];
+    for (var i = 0; i < list.length; i++) {
+        var slot = list[i];
+        if (!slot || !slot.centre) continue;
+        seen[slot.bucket] = true;
+        var distance = Math.abs(point[axis] - slot.centre[axis]);
+        if (distance < bestDistance) {
+            bestDistance = distance;
+            best = { bucket: slot.bucket, index: slot.index + (point[axis] > slot.centre[axis] ? 1 : 0) };
+        }
+    }
+    var stand = anchors || [];
+    for (var b = 0; b < 3; b++) {
+        if (seen[b] || !stand[b]) continue;
+        var anchorDistance = Math.abs(point[axis] - stand[b][axis]);
+        if (anchorDistance < bestDistance) {
+            bestDistance = anchorDistance;
+            best = { bucket: b, index: 0 };
+        }
+    }
+    return best;
+}
+
+// An insertion index counts a GAP and a move destination counts a SLOT: taking
+// the dragged item out first shifts every gap past it one place down.
+function moveTargetForInsertion(from, insertion) {
+    return insertion > from ? insertion - 1 : insertion;
+}

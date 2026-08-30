@@ -762,6 +762,31 @@ Item {
         }
     }
 
+    // ── Edit Mode overlay ─────────────────────────────────────────────────
+    // The bar's controller sits on the content root; found by walking up, so
+    // every style and both orientations get it from this one insertion.
+    readonly property var editController: {
+        let p = rootItem.parent;
+        while (p) {
+            if (p.barEditController !== undefined)
+                return p.barEditController;
+            p = p.parent;
+        }
+        return null;
+    }
+
+    Loader {
+        anchors.fill: wrapper
+        z: 5
+        active: GlobalStates.editMode && rootItem.hasLayoutContent && rootItem.editController !== null
+        sourceComponent: BarEditSlot {
+            controller: rootItem.editController
+            bucket: rootItem.barSection
+            storedIndex: rootItem.originalIndex
+            widgetId: modelData.id
+        }
+    }
+
     function toggleHighlight(highlight) {
         rootItem.highlighted = highlight;
     }

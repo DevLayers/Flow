@@ -113,21 +113,24 @@ MouseArea {
     // applies. EditModeLogic.resolveEscape owns that precedence.
     Keys.onEscapePressed: event => {
         const action = EditModeLogic.resolveEscape({
-            "menuOpen": GlobalStates.editWidgetMenuOpen && GlobalStates.editWidgetMenuCanvas === root,
+            "menuOpen": (GlobalStates.editWidgetMenuOpen && GlobalStates.editWidgetMenuCanvas === root) || GlobalStates.editBarMenuOpen,
             "desktopMenuOpen": GlobalStates.desktopMenuOpen,
             "drawerOpen": root.editMode && GlobalStates.editDrawerOpen,
-            "gestureInFlight": root.draggingWidget() !== null,
+            "gestureInFlight": root.draggingWidget() !== null || GlobalStates.editBarDragActive,
             "selectionCount": root.selectedWidgets.length,
             "tab": EditModeLogic.desktopTab
         });
         if (action === "closeMenu") {
             GlobalStates.closeEditWidgetMenu();
+            GlobalStates.closeEditBarMenu();
             GlobalStates.closeDesktopMenu();
         }
         else if (action === "closeDrawer")
             GlobalStates.editDrawerOpen = false;
-        else if (action === "cancelGesture")
+        else if (action === "cancelGesture") {
             root.cancelActiveDrag();
+            GlobalStates.editBarDragCancel();
+        }
         else if (action === "clearSelection")
             root.clearSelection();
         else if (action === "exit" && root.editMode)
