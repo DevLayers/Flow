@@ -98,6 +98,12 @@ Singleton {
             configPage: "SystemMonitorConfig.qml"
         },
         {
+            id: "privacy_pill",
+            icon: "shield_lock",
+            title: "Privacy pill",
+            configPage: "PrivacyPillConfig.qml"
+        },
+        {
             id: "port_watcher",
             icon: "lan",
             title: "Port Watcher",

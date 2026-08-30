@@ -236,6 +236,15 @@ ContentPage {
             }
 
             ServiceCard {
+                cardIcon: "shield_lock"
+                cardShape: "Circle"
+                cardHue: 100
+                title: Translation.tr("Privacy pill")
+                description: Translation.tr("Android-style indicator for camera, microphone, screen and location access")
+                onOpenCard: root.openComponentPage("privacy_pill")
+            }
+
+            ServiceCard {
                 cardIcon: "lan"
                 cardShape: "Circle"
                 cardHue: 140
