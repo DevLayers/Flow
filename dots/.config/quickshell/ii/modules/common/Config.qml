@@ -1103,7 +1103,7 @@ Singleton {
                 property string borderColorType: "primary" // Options: primary, secondary, tertiary, primaryContainer, surface
                 property bool borderless: true
                 property string colorEngine: "vynx" // "vynx" | "fork" — color generation engine
-                property string iconTheme: "kora"
+                property string iconTheme: "Fluent"
                 property JsonObject palette: JsonObject {
                     property string type: "scheme-intense" // Allowed: auto, scheme-content, scheme-expressive, scheme-fidelity, scheme-fruit-salad, scheme-intense, scheme-monochrome, scheme-neutral, scheme-rainbow, scheme-tonal-spot, scheme-vibrant
                     property string accentColor: ""

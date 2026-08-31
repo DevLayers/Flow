@@ -13,7 +13,7 @@ depends=(
   eza
   fontconfig
 kitty
-  kora-icon-theme
+  fluent-icon-theme
   matugen
   starship
   ttf-jetbrains-mono-nerd

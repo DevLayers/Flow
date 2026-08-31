@@ -156,7 +156,7 @@ def get_brightness(hex_color):
 def is_monochrome_svg(content):
     """Return True when every color in the SVG is near-gray (r≈g≈b).
 
-    Brand icons (kora's Firefox, LibreOffice, ...) carry saturated colors and
+    Brand icons (Fluent's Firefox, LibreOffice, ...) carry saturated colors and
     must be kept as-is; only genuinely monochrome icons should be tinted with
     the material palette. An icon with no parseable colors counts as gray.
     """
@@ -177,6 +177,82 @@ def is_monochrome_svg(content):
         if max(r, g, b) - min(r, g, b) > 48:
             return False
     return True
+
+
+# Explicit brand allowlist: app icon basenames (sans extension) that must never
+# be recolored, even when they use a single brand colour (LibreOffice indigo,
+# Spotify green, Telegram blue, ...). The old hue-count heuristic could not tell
+# a single-colour brand logo from a single-colour system icon, so it tinted
+# these. Matching is explicit + deterministic here.
+#
+# Two buckets keep this safe:
+#   * BRAND_ROOTS — *unambiguous* distinctive root words matched by prefix, so
+#     Fluent's naming variants are caught (gimp-2.99, inkscape-logo, spotify_A,
+#     steam_icon_<appid>, chrome-<hash>-Default, ...).
+#   * BRAND_ICON_EXACT — exact basenames only. Short/ambiguous words that also
+#     prefix unrelated apps live here instead of Roots (e.g. "obs" vs obsidian,
+#     "code" vs codeblocks, "docker" vs docker-desktop), staying exact to avoid
+#     trapping a different, themable product.
+BRAND_ROOTS = (
+    "firefox", "chrome", "chromium", "blender", "gimp", "inkscape",
+    "keepassxc", "libreoffice", "steam_", "spotify", "telegram", "discord",
+    "vlc", "postman", "android-studio", "intellij-idea", "virtualbox",
+    "signal", "docker-",
+)
+
+BRAND_ICON_EXACT = {
+    "code", "obs", "docker",
+}
+
+
+def is_brand_logo_svg(content):
+    """True when the SVG is a genuine multi-hue brand logo that must survive
+    recoloring untouched (Firefox's blue + purple, LibreOffice's palette, ...).
+
+    Fluent ships system icons *under apps/* too (system-file-manager, Nautilus)
+    that are single-hue — usually a flat brand blue. Those are themable. The
+    discriminator is having at least two clearly separate hue families
+    (e.g. blue AND red/purple together), not just light/dark shades of one hue.
+    This is only a safety net for brands not in the explicit allowlist.
+    """
+    hex_pattern = re.compile(r'#[0-9a-fA-F]{6}|#[0-9a-fA-F]{3}')
+    hues = set()
+    for m in hex_pattern.findall(content):
+        h = m.lstrip('#')
+        if len(h) == 3:
+            h = ''.join([c * 2 for c in h])
+        try:
+            r = int(h[0:2], 16)
+            g = int(h[2:4], 16)
+            b = int(h[4:6], 16)
+        except ValueError:
+            continue
+        mx, mn = max(r, g, b), min(r, g, b)
+        if mx - mn <= 48:
+            continue
+        if mx == r:
+            hue = (g - b) % 360
+        elif mx == g:
+            hue = 120 + (b - r) % 360
+        else:
+            hue = 240 + (r - g) % 360
+        hues.add(hue // 60)
+    return len(hues) >= 2
+
+
+def should_preserve(content, basename):
+    """Decide whether an icon must keep its own colours.
+
+    Explicit allowlist wins (deterministic brand preservation). Anything not
+    in the allowlist falls back to the multi-hue brand heuristic as a safety
+    net. basename is the icon file name without directory or extension.
+    """
+    name = basename.lower()
+    if any(name.startswith(r) for r in BRAND_ROOTS):
+        return True
+    if name in BRAND_ICON_EXACT:
+        return True
+    return is_brand_logo_svg(content)
 
 
 def recolor_svg(content, colors):
@@ -224,12 +300,16 @@ def process_file(args):
         if src_file.endswith(".svg"):
             with open(src_file, 'r', errors='ignore') as f:
                 content = f.read()
-            # Smart recolor: keep brand-color icons (kora's colored SVGs)
-            # untouched; tint only monochrome/gray icons with the palette.
-            if is_monochrome_svg(content):
-                new_content = recolor_svg(content, colors)
-            else:
+            # Smart recolor. Family-brand logos (Firefox, LibreOffice, ...) keep
+            # their own colours via the explicit allowlist (single-colour brands
+            # included); everything else — gray icons and single-hue system/
+            # managers (Fluent's flat-blue folders and file managers, even when
+            # shipped under apps/) — follows the theme.
+            basename = os.path.splitext(os.path.basename(src_file))[0]
+            if should_preserve(content, basename):
                 new_content = content
+            else:
+                new_content = recolor_svg(content, colors)
             with open(dst_file, 'w') as f:
                 f.write(new_content)
         else:
@@ -563,10 +643,10 @@ def inject_scavenged_svgs(svg_icons, colors, target_apps_dir):
         try:
             with open(source_path, 'r', errors='ignore') as f:
                 content = f.read()
-            if is_monochrome_svg(content):
-                new_content = recolor_svg(content, colors)
-            else:
+            if should_preserve(content, icon_name):
                 new_content = content
+            else:
+                new_content = recolor_svg(content, colors)
 
             for size_dir in ["scalable/apps", "symbolic/apps"]:
                 dest_dir = os.path.join(TARGET_THEME_PATH, size_dir)
@@ -691,7 +771,7 @@ def _generate_locked():
         return
 
     # Get icon theme from config or default
-    icon_theme_name = config.get("appearance", {}).get("iconTheme", "kora")
+    icon_theme_name = config.get("appearance", {}).get("iconTheme", "Fluent")
     print(f"Configured icon theme: {icon_theme_name}")
 
     # Locate base theme
@@ -704,7 +784,7 @@ def _generate_locked():
 
     if not base_theme_path:
         print(f"Icon theme '{icon_theme_name}' not found. Falling back...")
-        for fallback_name in ["kora", "kora-pgrey", "breeze", "Adwaita"]:
+        for fallback_name in ["Fluent", "Fluent-dark", "breeze", "Adwaita"]:
             for d in ICON_SEARCH_DIRS:
                 p = os.path.join(d, fallback_name)
                 if os.path.exists(p):
@@ -776,8 +856,17 @@ def _generate_locked():
     # ── Phase 1: Recolor base theme SVGs ─────────────────────────────────
     tasks = []
     processed_folders = set()
+    # Symlink-based themes (Fluent's dirs are links into a shared .base tree)
+    # are invisible to os.walk unless we follow links, so do that — but keep a
+    # real-path set so any theme that cycles never walks in circles.
+    visited_real = set()
 
-    for root_dir, dirs, files in os.walk(base_theme_path):
+    for root_dir, dirs, files in os.walk(base_theme_path, followlinks=True):
+        real = os.path.realpath(root_dir)
+        if real in visited_real:
+            dirs[:] = []
+            continue
+        visited_real.add(real)
         if any(x in root_dir.lower() for x in ["apps", "places", "categories", "devices", "status", "actions"]):
             rel_path = os.path.relpath(root_dir, base_theme_path)
             dst_folder = os.path.join(TARGET_THEME_PATH, rel_path)
