@@ -255,6 +255,9 @@ flow_dep qt6-5compat      shell  qt6-5compat      "Qt5Compat GraphicalEffects (8
 flow_dep matugen-bin      shell  matugen-bin      "Material theme generator"     matugen
 flow_dep python3          shell  python           "Theme generation backend"     python3
 flow_dep jq               shell  jq               "JSON processing engine"       jq
+# Icon theme. `pkg:` entry because an icon pack has no binary on PATH. Must be
+# installed or recolor_icons.py silently falls back to Breeze (flat/white icons).
+flow_dep papirus-icon-theme shell papirus-icon-theme "Icon base for DynamicTheme recolor" "pkg:papirus-icon-theme"
 
 # Tools exec'd by the shell (screenshots, media, dialogs, power, clipboard…)
 flow_dep libnotify        shell  libnotify        "Notifications (notify-send)"  notify-send

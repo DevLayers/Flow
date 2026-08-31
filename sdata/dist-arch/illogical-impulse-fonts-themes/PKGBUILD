@@ -16,6 +16,7 @@ depends=(
   kitty
   matugen
   otf-space-grotesk
+  papirus-icon-theme
   starship
   ttf-jetbrains-mono-nerd
   ttf-material-symbols-variable-git
