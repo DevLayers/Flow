@@ -18,7 +18,11 @@ function plugin-load {
     fi
     plugdir=$ZPLUGINDIR/${repo:t}
     initfile=$plugdir/${repo:t}.plugin.zsh
-    if [[ ! -d $plugdir ]]; then
+    # Re-clone if the directory is missing OR its checkout is broken. A clone
+    # interrupted mid-flight leaves the folder behind with an empty .git,
+    # which the -d check alone would otherwise accept and never repair.
+    if [[ ! -d $plugdir ]] || ! git -C $plugdir rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+      [[ -d $plugdir ]] && rm -rf $plugdir
       echo "Cloning $repo..."
       git clone "${clone_args[@]}" https://github.com/$repo $plugdir
       if [[ -n "$commitsha" ]]; then
@@ -28,6 +32,9 @@ function plugin-load {
     fi
     if [[ ! -e $initfile ]]; then
       initfiles=($plugdir/*.{plugin.zsh,zsh-theme,zsh,sh}(N))
+      # Drop a stale init link that points at itself, which the symlink step
+      # below could otherwise re-create into an infinite link loop.
+      initfiles=(${initfiles:#$initfile})
       (( $#initfiles )) || { echo >&2 "No init file found '$repo'." && continue }
       ln -sf $initfiles[1] $initfile
     fi
@@ -40,7 +47,12 @@ function plugin-load {
 function plugin-update {
   for d in $ZPLUGINDIR/*/.git(/); do
     echo "Updating ${d:h:t}..."
-    command git -C "${d:h}" pull --ff --recurse-submodules --depth 1 --rebase --autostash
+    if git -C "${d:h}" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+      command git -C "${d:h}" pull --ff --recurse-submodules --depth 1 --rebase --autostash
+    else
+      echo "  corrupt checkout — will be re-cloned on the next shell" >&2
+      rm -rf "${d:h}"
+    fi
   done
 }
 
