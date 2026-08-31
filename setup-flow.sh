@@ -1798,6 +1798,7 @@ EXTRA_DOTFILES=(
     starship.toml
     zsh
     matugen
+    kdeglobals
 )
 
 # install_extras_config <repo_root> <verb>
