@@ -1,0 +1,16 @@
+/iris
+iris.log
+autocomplete
+temp
+docs/guide.md
+task
+docs/code
+docs/plan
+todo.txt
+scratch/
+.env
+.byte/
+dist/
+vendor/
+iris-*-vendor.tar.gz
+iris-*-vendor.tar.gz.sha256

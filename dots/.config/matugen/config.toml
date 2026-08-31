@@ -6,8 +6,8 @@ input_path = '~/.config/matugen/templates/colors.json'
 output_path = '~/.local/state/quickshell/user/generated/colors.json'
 
 [templates.hyprland]
-input_path = '~/.config/matugen/templates/hyprland/colors.conf'
-output_path = '~/.config/hypr/hyprland/colors.conf'
+input_path = '~/.config/matugen/templates/hyprland/colors.lua'
+output_path = '~/.config/hypr/hyprland/colors.lua'
 
 [templates.hyprlock]
 input_path = '~/.config/matugen/templates/hyprland/hyprlock-colors.conf'
@@ -32,3 +32,24 @@ output_path = '~/.local/state/quickshell/user/generated/color.txt'
 [templates.wallpaper]
 input_path = '~/.config/matugen/templates/wallpaper.txt'
 output_path = '~/.local/state/quickshell/user/generated/wallpaper/path.txt'
+
+[templates.sddm]
+input_path = '~/.config/matugen/templates/sddm/theme.conf'
+output_path = '/var/tmp/sddm-dotfiles/theme.conf'
+
+[templates.flow_engine]
+input_path = '~/.config/matugen/templates/flow-engine/theme.toml'
+output_path = '~/.config/iris/theme.toml'
+
+[templates.kitty]
+input_path = '~/.config/matugen/templates/kitty_theme.conf'
+output_path = '~/.config/kitty/current-theme.conf'
+
+[templates.terminal]
+input_path = '~/.config/matugen/templates/terminal/sequences.txt'
+output_path = '~/.local/state/quickshell/user/generated/terminal/sequences.txt'
+post_hook = "~/.config/quickshell/ii/scripts/colors/applycolor.sh"
+
+[templates.starship]
+input_path = '~/.config/matugen/templates/starship/starship.toml'
+output_path = '~/.local/state/quickshell/user/generated/terminal/starship.toml'

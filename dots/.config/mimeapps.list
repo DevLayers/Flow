@@ -1,0 +1,56 @@
+[Default Applications]
+# Web / HTML → Zen browser
+text/html=zen.desktop
+application/xhtml+xml=zen.desktop
+x-scheme-handler/http=zen.desktop
+x-scheme-handler/https=zen.desktop
+x-scheme-handler/about=zen.desktop
+x-scheme-handler/unknown=zen.desktop
+
+# Freelens → the `freelens://` URI scheme (deep links / handshake)
+x-scheme-handler/freelens=freelens.desktop
+
+# Folders → Nautilus
+inode/directory=org.gnome.Nautilus.desktop
+
+# Images → Loupe
+image/png=org.gnome.Loupe.desktop
+image/jpeg=org.gnome.Loupe.desktop
+image/gif=org.gnome.Loupe.desktop
+image/webp=org.gnome.Loupe.desktop
+image/bmp=org.gnome.Loupe.desktop
+image/tiff=org.gnome.Loupe.desktop
+image/svg+xml=org.gnome.Loupe.desktop
+image/x-portable-pixmap=org.gnome.Loupe.desktop
+
+# Video → mpv
+video/mp4=mpv.desktop
+video/x-matroska=mpv.desktop
+video/webm=mpv.desktop
+video/quicktime=mpv.desktop
+video/x-msvideo=mpv.desktop
+video/mpeg=mpv.desktop
+video/ogg=mpv.desktop
+video/x-flv=mpv.desktop
+video/3gpp=mpv.desktop
+
+# Audio → mpv
+audio/mpeg=mpv.desktop
+audio/mp4=mpv.desktop
+audio/flac=mpv.desktop
+audio/x-wav=mpv.desktop
+audio/ogg=mpv.desktop
+audio/x-vorbis+ogg=mpv.desktop
+audio/opus=mpv.desktop
+audio/aac=mpv.desktop
+audio/x-m4a=mpv.desktop
+
+# Text / code → GNOME Text Editor
+text/plain=org.gnome.TextEditor.desktop
+text/markdown=org.gnome.TextEditor.desktop
+application/json=org.gnome.TextEditor.desktop
+application/xml=org.gnome.TextEditor.desktop
+text/csv=org.gnome.TextEditor.desktop
+
+# PDF → Zen (no dedicated viewer installed; the browser renders PDFs natively)
+application/pdf=zen.desktop

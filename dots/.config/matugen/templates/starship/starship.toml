@@ -1,0 +1,336 @@
+# Flow Terminal — Starship Configuration
+# Phase 5: Broad, Context-Rich Starship Prompt
+# Phase 6: Colors driven by Material 3 tokens (palette mechanism)
+# Two-line structure: identity → info → prompt character
+# All icons from sdata/lib/starship-icons.sh (verified Nerd Font codepoints)
+# NOTE: custom modules MUST be referenced as ${custom.<name>} in 1.26
+#
+# Color architecture: styles reference semantic palette keys resolved from
+# the `flow` palette below. This file IS the matugen template — wallpaper
+# change regenerates it with live Material tokens automatically.
+
+format = """
+$username$hostname $directory
+│  $git_branch$git_status${custom.flow_profile}${custom.flow_target}${custom.flow_python}${custom.flow_node}${custom.flow_go}${custom.flow_rust}${custom.flow_docker}${custom.flow_terraform}${custom.flow_kubernetes}${custom.flow_ansible}${custom.flow_aws}${custom.flow_gcp}${custom.flow_azure}${custom.flow_remote}${custom.flow_prod_warning}
+$character"""
+
+palette = "flow"
+
+# ─── Prompt Character ──────────────────────────────────────────
+
+# Large repos can exceed starship's default 500ms git scan.
+command_timeout = 5000
+[character]
+success_symbol = "[╰─❯](bold fg:flow_success)"
+error_symbol = "[╰─⚠❯](bold fg:flow_error)"
+
+[package]
+disabled = true
+
+[cmd_duration]
+min_time = 2_000
+format = "[ 󰔚 $duration]($style)"
+style = "bold fg:flow_metadata"
+
+# ─── Layer 1: Identity / Location ──────────────────────────────
+
+[username]
+show_always = true
+style_user = "fg:flow_identity"
+style_root = "bold fg:flow_error"
+format = "[╭─ $user]($style)"
+
+[hostname]
+ssh_only = false
+format = "[@](fg:flow_metadata)[$hostname](fg:flow_identity)"
+trim_at = ".local"
+
+[directory]
+home_symbol = "~"
+read_only = " 󰍾"
+style = "bold fg:flow_identity"
+truncation_length = 4
+truncation_symbol = "…/"
+format = "[ $path]($style)"
+
+# Filesystem identity stays TEXTUAL: paths are read, navigated, copied and
+# pasted, so they must remain exact. Icons are reserved for things whose
+# identity benefits from symbolic recognition:
+#   filesystem identity → textual names
+#   service/tool identity → real Nerd Font icons (custom.flow_* modules)
+#   git identity         → Git icon
+#   risk/state            → semantic status icon
+#   runtime               → language icon
+#   infrastructure        → service icon
+
+# ─── Layer 2: Git ──────────────────────────────────────────────
+
+[git_branch]
+symbol = ""
+style = "bold fg:flow_git"
+truncation_length = 24
+truncation_symbol = "…"
+format = "$symbol [$branch]($style)"
+
+[git_status]
+format = '([$all_status$ahead_behind]($style))'
+style = "bold fg:flow_git_status"
+ahead = " ↑$count"
+behind = " ↓$count"
+diverged = " ⇕↑$ahead↓$behind"
+conflicted = " !$count"
+untracked = " ?$count"
+modified = " +$count"
+staged = " ●$count"
+renamed = " »$count"
+deleted = " -$count"
+stashed = " ⧉$count"
+
+[git_commit]
+commit_hash_length = 8
+format = "[ 󰜯 $hash]($style)"
+
+[git_state]
+format = '[\\($state( $progress_current of $progress_total)\\)]($style)'
+cherry_pick = "[ PICKING](bold red)"
+
+# ─── Layer 3: Flow State Modules ───────────────────────────────
+
+[custom.flow_profile]
+description = "Flow active profile"
+command = """
+if [ -n "$FLOW_STARSHIP_PROFILE" ]; then
+  echo "· 󰷏 $FLOW_STARSHIP_PROFILE"
+fi
+"""
+when = '[ -n "$FLOW_STARSHIP_PROFILE" ]'
+shell = ["bash"]
+style = "bold fg:flow_profile"
+format = "[ $output]($style)"
+disabled = false
+
+[custom.flow_target]
+description = "Flow environment target"
+command = """
+if [ -n "$FLOW_STARSHIP_TARGET" ]; then
+  echo "·  $FLOW_STARSHIP_TARGET"
+fi
+"""
+when = '[ -n "$FLOW_STARSHIP_TARGET" ]'
+shell = ["bash"]
+style = "bold fg:flow_target"
+format = "[ $output]($style)"
+disabled = false
+
+# ─── Layer 4: Active Runtimes (Flow state only — no CLI calls) ─
+
+[custom.flow_python]
+description = "Python runtime"
+command = """
+if [ -n "$VIRTUAL_ENV" ]; then
+  echo "· ${FLOW_ICON_PYTHON:-$'\uE73C'} $(basename "$VIRTUAL_ENV")"
+elif [ -n "$FLOW_STARSHIP_MISE_PYTHON" ]; then
+  echo "· ${FLOW_ICON_PYTHON:-$'\uE73C'} $FLOW_STARSHIP_MISE_PYTHON"
+fi
+"""
+when = '[ -n "$VIRTUAL_ENV" ] || [ -n "$FLOW_STARSHIP_MISE_PYTHON" ]'
+shell = ["bash"]
+style = "bold fg:flow_runtime"
+format = "[ $output]($style)"
+disabled = false
+
+[custom.flow_node]
+description = "Node.js runtime"
+command = """
+if [ -n "$FLOW_STARSHIP_MISE_NODE" ]; then
+  echo "· ${FLOW_ICON_NODEJS:-$'\uED0D'} $FLOW_STARSHIP_MISE_NODE"
+elif [ -n "$FLOW_STARSHIP_NODE_VERSION" ]; then
+  echo "· ${FLOW_ICON_NODEJS:-$'\uED0D'} $FLOW_STARSHIP_NODE_VERSION"
+fi
+"""
+when = '[ -n "$FLOW_STARSHIP_MISE_NODE" ] || [ -n "$FLOW_STARSHIP_NODE_VERSION" ]'
+shell = ["bash"]
+style = "bold fg:flow_runtime"
+format = "[ $output]($style)"
+disabled = false
+
+[custom.flow_go]
+description = "Go runtime"
+command = """
+if [ -n "$FLOW_STARSHIP_MISE_GO" ]; then
+  echo "· ${FLOW_ICON_GO:-$'\uE65E'} $FLOW_STARSHIP_MISE_GO"
+fi
+"""
+when = '[ -n "$FLOW_STARSHIP_MISE_GO" ]'
+shell = ["bash"]
+style = "bold fg:flow_runtime"
+format = "[ $output]($style)"
+disabled = false
+
+[custom.flow_rust]
+description = "Rust runtime"
+command = """
+if [ -n "$FLOW_STARSHIP_MISE_RUST" ]; then
+  echo "· ${FLOW_ICON_RUST:-$'\uE7A8'} $FLOW_STARSHIP_MISE_RUST"
+fi
+"""
+when = '[ -n "$FLOW_STARSHIP_MISE_RUST" ]'
+shell = ["bash"]
+style = "bold fg:flow_runtime"
+format = "[ $output]($style)"
+disabled = false
+
+# ─── Layer 5: Development Tools (cheap file checks) ────────────
+
+[custom.flow_docker]
+description = "Docker tools"
+command = """
+if [ -f "docker-compose.yml" ] || [ -f "docker-compose.yaml" ] || [ -f "compose.yml" ] || [ -f "compose.yaml" ]; then
+  echo "· ${FLOW_ICON_COMPOSE:-$'\uE615'} Compose"
+elif [ -f "Dockerfile" ]; then
+  echo "· ${FLOW_ICON_DOCKER:-$'\uE7B0'} Docker"
+fi
+"""
+when = '[ -f "docker-compose.yml" ] || [ -f "docker-compose.yaml" ] || [ -f "compose.yml" ] || [ -f "compose.yaml" ] || [ -f "Dockerfile" ]'
+shell = ["bash"]
+style = "bold fg:flow_tool"
+format = "[ $output]($style)"
+disabled = true
+
+[custom.flow_terraform]
+description = "Terraform"
+command = """
+if [ -d ".terraform" ] || ls ./*.tf &>/dev/null 2>&1; then
+  echo "· ${FLOW_ICON_TERRAFORM:-$'\uE8BD'} Terraform"
+fi
+"""
+when = '[ -d ".terraform" ] || ls ./*.tf &>/dev/null 2>&1'
+shell = ["bash"]
+style = "bold fg:flow_tool"
+format = "[ $output]($style)"
+disabled = true
+
+[custom.flow_kubernetes]
+description = "Active Kubernetes context (from kubeconfig, no CLI)"
+command = """
+if [ -n "$FLOW_STARSHIP_K8S" ]; then
+  echo "· ${FLOW_ICON_KUBERNETES:-$'\uE81D'} $FLOW_STARSHIP_K8S"
+fi
+"""
+when = '[ -n "$FLOW_STARSHIP_K8S" ]'
+disabled = false
+
+
+[custom.flow_ansible]
+description = "Ansible"
+command = """
+if [ -f "ansible.cfg" ] || [ -d "playbooks" ] || [ -d "roles" ]; then
+  echo "· ${FLOW_ICON_ANSIBLE:-$'\uE723'} Ansible"
+fi
+"""
+when = '[ -f "ansible.cfg" ] || [ -d "playbooks" ] || [ -d "roles" ]'
+shell = ["bash"]
+style = "bold fg:flow_tool"
+format = "[ $output]($style)"
+disabled = true
+
+# ─── Layer 6: Infrastructure Context (provider slots for Phase 7) ───
+
+[custom.flow_aws]
+description = "Active AWS profile"
+command = """
+if [ -n "$FLOW_STARSHIP_AWS" ]; then
+  echo "· ${FLOW_ICON_AWS:-$'\uE7AD'} $FLOW_STARSHIP_AWS"
+fi
+"""
+when = '[ -n "$FLOW_STARSHIP_AWS" ]'
+disabled = false
+
+
+[custom.flow_gcp]
+description = "GCP context"
+command = """
+if [ -d ".gcp" ] || [ -f "gcloud.config" ]; then
+  echo "· ${FLOW_ICON_GCP:-$'\uE7F1'} GCP"
+fi
+"""
+when = '[ -d ".gcp" ] || [ -f "gcloud.config" ]'
+shell = ["bash"]
+style = "bold fg:flow_infra"
+format = "[ $output]($style)"
+disabled = true
+
+[custom.flow_azure]
+description = "Azure context"
+command = """
+if [ -d ".azure" ] || [ -f "azure.config" ]; then
+  echo "· ${FLOW_ICON_AZURE:-$'\uE754'} Azure"
+fi
+"""
+when = '[ -d ".azure" ] || [ -f "azure.config" ]'
+shell = ["bash"]
+style = "bold fg:flow_infra"
+format = "[ $output]($style)"
+disabled = true
+
+# ─── Layer 7: Risk / Remote Visual Treatment ───────────────────
+
+[custom.flow_remote]
+description = "Remote shell indicator"
+command = "echo \"· ${FLOW_ICON_REMOTE:-$'\\uE8B1'} remote\""
+when = '[ "$FLOW_STARSHIP_REMOTE" = "1" ]'
+shell = ["bash"]
+style = "bold fg:flow_remote"
+format = "[ $output]($style)"
+disabled = false
+
+[custom.flow_prod_warning]
+description = "Production context warning"
+command = "echo \"· ${FLOW_ICON_WARNING:-$'\\u26A0'} production\""
+when = '[ "$FLOW_STARSHIP_PROD" = "1" ]'
+shell = ["bash"]
+style = "bold fg:flow_production"
+format = "[ $output]($style)"
+disabled = false
+
+# ─── Material 3 Semantic Palette ───────────────────────────────
+# Style keys above map to Material 3 tokens (see kitty-theme.conf —
+# both consume the same material_colors.scss source). applycolor
+# regenerates the [palettes.flow] section from the live tokens on every
+# theme change; the values below are the OFFLINE FALLBACK only.
+#
+#   Key                Role                              Material token
+#   ─────────────────────────────────────────────────────────────────
+#   flow_identity      username, directory              onSurface
+#   flow_host_bg       (reserved — hostname background) surfaceContainerHigh
+#   flow_host_fg       hostname text                    onSurface
+#   flow_git           git branch                        primary
+#   flow_git_status    git status detail                 onSurfaceVariant
+#   flow_profile       active profile                    primary
+#   flow_target        environment target                onSurfaceVariant
+#   flow_runtime       language runtimes (py/node/go/rust) secondary
+#   flow_tool          dev tools (docker/tf/helm/k8s/ansible) secondary
+#   flow_infra         cloud context (aws/gcp/azure)     secondary
+#   flow_remote        remote shell — warning role       tertiary (amber)
+#   flow_production    production context — risk role    error
+#   flow_success       prompt success                    primary
+#   flow_error         prompt error                      error
+#   flow_metadata      cmd_duration, subtle info         onSurfaceVariant
+#
+# FLOW_GENERATED_PALETTE_BEGIN
+[palettes.flow]
+flow_identity      = "{{colors.on_surface.default.hex}}"
+flow_host_bg       = "{{colors.surface_container_high.default.hex}}"
+flow_host_fg       = "{{colors.on_surface.default.hex}}"
+flow_git           = "{{colors.primary.default.hex}}"
+flow_git_status    = "{{colors.on_surface_variant.default.hex}}"
+flow_profile       = "{{colors.primary.default.hex}}"
+flow_target        = "{{colors.on_surface_variant.default.hex}}"
+flow_runtime       = "{{colors.secondary_container.default.hex}}"
+flow_tool          = "{{colors.secondary_container.default.hex}}"
+flow_infra         = "{{colors.secondary_container.default.hex}}"
+flow_remote        = "{{colors.tertiary.default.hex}}"
+flow_production    = "{{colors.error.default.hex}}"
+flow_success       = "{{colors.primary.default.hex}}"
+flow_error         = "{{colors.error.default.hex}}"
+flow_metadata      = "{{colors.on_surface_variant.default.hex}}"

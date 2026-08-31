@@ -1,0 +1,251 @@
+package root
+
+import (
+	"bufio"
+	"bytes"
+	"context"
+	"errors"
+	"fmt"
+	"io"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"runtime"
+	"strconv"
+	"strings"
+	"syscall"
+
+	_ "github.com/SrwR16/flow-engine/commands"
+	"github.com/SrwR16/flow-engine/internal/config"
+	"github.com/SrwR16/flow-engine/internal/logger"
+	"github.com/spf13/cobra"
+	"golang.org/x/term"
+)
+
+var (
+	rootCmd = &cobra.Command{
+		Use:   "iris",
+		Short: "Flow Engine — context-aware terminal suggestions",
+		Long: `Flow Engine is Flow Terminal's context-aware suggestion system.
+It ranks commands by directory context, success rates, and workflow history.`,
+		Run: func(cmd *cobra.Command, args []string) {
+			defer func() {
+				if r := recover(); r != nil {
+					WriteCrashLog(r)
+					restoreTerminal()
+					printCrashNotice()
+					startRescueShell()
+					os.Exit(2)
+				}
+			}()
+			if pidStr := os.Getenv("IRIS_PID"); pidStr != "" {
+				if pid, err := strconv.Atoi(pidStr); err == nil && pid > 0 {
+					if logDir, err := config.CachePath(); err == nil {
+						argsFile := filepath.Join(logDir, "reload-args")
+						_ = os.WriteFile(argsFile, []byte(strings.Join(os.Args[1:], "\n")), 0600)
+					}
+					_ = syscall.Kill(pid, syscall.SIGUSR1)
+					fmt.Println("\r\033[K\033[36m[IRIS] Sent reload signal to parent session.\033[0m")
+					return
+				}
+			}
+			runWrapper()
+		},
+	}
+	shellFlag      string
+	shellLoginFlag bool
+	debugMode      bool
+)
+
+func init() {
+	rootCmd.PersistentFlags().StringVarP(&shellFlag, "shell", "s", "", "shell to use (bash, zsh, fish)")
+	rootCmd.PersistentFlags().BoolVar(&shellLoginFlag, "shell-login", false, "run the selected shell as a login shell")
+	rootCmd.PersistentFlags().BoolVarP(&debugMode, "debug", "d", false, "enable debug logging to iris.log")
+
+	rootCmd.PersistentPreRun = func(cmd *cobra.Command, args []string) {
+		if shellFlag != "" {
+			config.Get().Core.Shell = shellFlag
+		}
+		if cmd.Flags().Changed("shell-login") {
+			config.Get().Core.ShellLogin = shellLoginFlag
+		}
+		logDir, err := config.CachePath()
+		if err == nil {
+			logger.Init(filepath.Join(logDir, "iris.log"), debugMode || config.Get().Core.Debug)
+			logger.Infof("Flow session started: os=%s, arch=%s, go=%s, pid=%d", runtime.GOOS, runtime.GOARCH, runtime.Version(), os.Getpid())
+			cfg := config.Get()
+			logger.Debugf("IRIS loaded config: shell=%q, shell-login=%v, mode=%q, ghost-text=%v, max-suggestions=%d", cfg.Core.Shell, cfg.Core.ShellLogin, cfg.Core.Mode, cfg.UI.GhostText, cfg.UI.MaxSuggestions)
+		}
+	}
+}
+
+// relayWatchdogCWD reads null-delimited cwd updates the wrapper relays over
+// r and applies each one to the watchdog's own working directory.
+func relayWatchdogCWD(r io.Reader) {
+	scanner := bufio.NewScanner(r)
+	scanner.Split(nullTokenSplit)
+	for scanner.Scan() {
+		syncProcessCWD(scanner.Text())
+	}
+	if err := scanner.Err(); err != nil {
+		logger.Errorf("watchdog cwd relay scanner error: %v", err)
+	}
+}
+
+// runWatchdog spawns the watchdog parent process
+func runWatchdog() {
+	exe, err := os.Executable()
+	if err != nil {
+		runOriginal()
+		return
+	}
+
+	cmdStdin := os.Stdin
+	if !term.IsTerminal(int(cmdStdin.Fd())) {
+		if tty, ttyErr := os.OpenFile("/dev/tty", os.O_RDWR, 0); ttyErr == nil {
+			cmdStdin = tty
+		}
+	}
+
+	// save original terminal settings in parent process if Stdin is a terminal
+	var watchdogOldState *term.State
+	if term.IsTerminal(int(cmdStdin.Fd())) {
+		var errState error
+		watchdogOldState, errState = term.MakeRaw(int(cmdStdin.Fd()))
+		if errState == nil {
+			_ = term.Restore(int(cmdStdin.Fd()), watchdogOldState)
+		}
+	}
+
+	r, w, err := os.Pipe()
+	if err != nil {
+		runOriginal()
+		return
+	}
+
+	cmd := exec.CommandContext(context.Background(), exe, os.Args[1:]...)
+	cmd.Env = append(os.Environ(), "IRIS_IS_CHILD=true")
+	cmd.Stdin = cmdStdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = w
+
+	// give the wrapper a pipe to relay the shell's cwd back to the watchdog
+	// so it doesn't stay stuck at its initial working directory
+	// the watchdog holds the outer tty, so it's the process external tools
+	// inspect to resolve this session's cwd.
+	cwdR, cwdW, cwdErr := os.Pipe()
+	if cwdErr == nil {
+		cwdFD := 3 + len(cmd.ExtraFiles)
+		cmd.ExtraFiles = append(cmd.ExtraFiles, cwdW)
+		cmd.Env = append(cmd.Env, fmt.Sprintf("IRIS_WATCHDOG_CWD_FD=%d", cwdFD))
+	}
+
+	err = cmd.Start()
+	if err != nil {
+		runOriginal()
+		return
+	}
+
+	_ = w.Close()
+	if cwdErr == nil {
+		_ = cwdW.Close()
+		go relayWatchdogCWD(cwdR)
+	}
+
+	// copy child stderr to both our buffer and the real stderr, filtering out panics
+	var stderrBuf bytes.Buffer
+	origStderr := os.Stderr
+	tempBuf := make([]byte, 1024)
+	suppress := false
+	for {
+		n, errRead := r.Read(tempBuf)
+		if n > 0 {
+			_, _ = stderrBuf.Write(tempBuf[:n])
+			if stderrBuf.Len() > 64*1024 {
+				// discard oldest bytes to avoid memory leak
+				over := stderrBuf.Len() - 64*1024
+				_ = stderrBuf.Next(over)
+			}
+			if !suppress {
+				currentContent := stderrBuf.Bytes()
+				searchStart := 0
+				if len(currentContent) > n+12 {
+					searchStart = len(currentContent) - (n + 12)
+				}
+				searchSlice := currentContent[searchStart:]
+				idxPanic := bytes.Index(searchSlice, []byte("panic:"))
+				idxFatal := bytes.Index(searchSlice, []byte("fatal error:"))
+				triggerIdx := -1
+				if idxPanic != -1 {
+					triggerIdx = searchStart + idxPanic
+				} else if idxFatal != -1 {
+					triggerIdx = searchStart + idxFatal
+				}
+
+				if triggerIdx != -1 {
+					suppress = true
+					printedLen := len(currentContent) - n
+					if triggerIdx > printedLen {
+						_, _ = origStderr.Write(currentContent[printedLen:triggerIdx])
+					}
+				} else {
+					_, _ = origStderr.Write(tempBuf[:n])
+				}
+			}
+		}
+		if errRead != nil {
+			break
+		}
+	}
+
+	// check if child exited abnormally or crashed
+	errWait := cmd.Wait()
+	if errWait != nil {
+		content := stderrBuf.Bytes()
+		if bytes.Contains(content, []byte("panic:")) || bytes.Contains(content, []byte("fatal error:")) {
+			WriteCrashLog(string(content))
+			// restore terminal state if watchdog saved it
+			if watchdogOldState != nil {
+				_ = term.Restore(int(cmdStdin.Fd()), watchdogOldState)
+			}
+			printCrashNotice()
+			startRescueShell()
+			os.Exit(2)
+		}
+
+		var exitErr *exec.ExitError
+		if errors.As(errWait, &exitErr) {
+			os.Exit(exitErr.ExitCode())
+		}
+		os.Exit(1)
+	}
+}
+
+// runOriginal runs the normal command execution
+func runOriginal() {
+	if os.Getenv("IRIS_RELOADED") == "true" {
+		fmt.Printf("\r\033[K\033[35m[IRIS] reloading...\033[0m\n")
+		_ = os.Unsetenv("IRIS_RELOADED")
+	}
+
+	if err := rootCmd.Execute(); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+}
+
+func Execute() {
+	_ = config.MigrateFromLegacyJSON()
+	cfg, err := config.Load()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "[IRIS] config error: %v\n", err)
+	}
+	config.Init(cfg)
+
+	if os.Getenv("IRIS_IS_CHILD") != "true" {
+		runWatchdog()
+		return
+	}
+
+	runOriginal()
+}

@@ -1,0 +1,30 @@
+# IRIS Configuration (Intelligent Real-time Input Suggestion)
+# Configured for ArchTide Flow Terminal
+
+[core]
+version = 1
+expand-alias = true
+atuin-history = 1
+
+[ui]
+style = "modern"
+ghost-text = true
+max-suggestions = 15
+max-height = 10
+nerd-fonts = true
+
+[git]
+filter-active-branch = true
+deduplicate-branches = true
+
+[updater]
+check-on-startup = false
+auto-update = 0
+
+[keybindings]
+toggle-mode = "ctrl+r"
+toggle-menu = "shift+tab"
+select = "tab"
+navigate-up = "up"
+navigate-down = "down"
+navigate-right = "right"

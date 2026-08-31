@@ -1,0 +1,309 @@
+package root
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+
+	"github.com/SrwR16/flow-engine/integration/shell"
+	"github.com/SrwR16/flow-engine/internal/config"
+	"github.com/spf13/cobra"
+)
+
+var initCmd = &cobra.Command{
+	Use:   "init [bash|zsh|fish]",
+	Short: "Generate the autostart script for your shell",
+	Long: `Add the output of this command to your shell's configuration file to start Iris automatically.
+For example, add this to your ~/.zshrc:
+  eval "$(iris init zsh)"`,
+	ValidArgs: []string{"bash", "zsh", "fish"},
+	Args:      cobra.MatchAll(cobra.ExactArgs(1), cobra.OnlyValidArgs),
+	Run: func(cmd *cobra.Command, args []string) {
+		shell := args[0]
+		switch shell {
+		case "zsh":
+			fmt.Printf(`
+# Iris Autostart Hook
+# a multiplexer pane inherits IRIS_* but runs on its own tty, so those vars
+# point at an iris that is not driving this terminal
+if [ -n "$IRIS_PID" ] && [ "$IRIS_PID" != "$PPID" ] && [ "${TTY:-$(tty 2>/dev/null)}" != "$IRIS_TTY" ]; then
+    unset IRIS_PID IRIS_IS_CHILD IRIS_FD IRIS_TTY
+fi
+
+# a non-interactive shell (tool runners sourcing rc files, scripts) has no
+# prompt to complete, and exec'ing here would seize the tty from the real iris
+if [[ -o interactive ]] && [ -t 0 ] && [ -z "$IRIS_PID" ] && [ -z "$IRIS_RESCUE" ]; then
+    export IRIS_ACTIVE_SHELL="zsh"
+    exec iris
+fi
+
+# Iris Autocomplete Hook
+if [ -n "$IRIS_PID" ] && [ -n "$IRIS_FD" ]; then
+  _iris_send_lbuffer() {
+    print -u $IRIS_FD -N -r -- "$LBUFFER" 2>/dev/null
+  }
+
+  _iris_sync_cwd() {
+    print -u $IRIS_FD -N -r -- "IRIS_CWD:$PWD" 2>/dev/null
+  }
+
+  _iris_precmd() {
+    local iris_exit_code=$?
+    _iris_sync_cwd
+    print -u $IRIS_FD -N -r -- "IRIS_CMD_STOP:$iris_exit_code" 2>/dev/null
+  }
+
+  _iris_preexec() {
+    print -u $IRIS_FD -N -r -- "IRIS_CMD_START" 2>/dev/null
+  }
+
+  autoload -Uz add-zle-hook-widget
+  autoload -Uz add-zsh-hook
+  
+  add-zle-hook-widget line-pre-redraw _iris_send_lbuffer
+  add-zsh-hook precmd _iris_precmd
+  add-zsh-hook preexec _iris_preexec
+  add-zsh-hook chpwd _iris_sync_cwd
+fi
+`)
+		case "bash":
+			fmt.Printf(`
+# Iris Autostart Hook
+# a multiplexer pane inherits IRIS_* but runs on its own tty, so those vars
+# point at an iris that is not driving this terminal
+if [ -n "$IRIS_PID" ] && [ "$IRIS_PID" != "$PPID" ] && [ "$(tty 2>/dev/null)" != "$IRIS_TTY" ]; then
+    unset IRIS_PID IRIS_IS_CHILD IRIS_FD IRIS_TTY
+fi
+
+# a non-interactive shell (tool runners sourcing rc files, scripts) has no
+# prompt to complete, and exec'ing here would seize the tty from the real iris
+if [[ $- == *i* ]] && [ -t 0 ] && [ -z "$IRIS_PID" ] && [ -z "$IRIS_RESCUE" ]; then
+    export IRIS_ACTIVE_SHELL="bash"
+    exec iris
+fi
+
+# Iris Autocomplete Hook
+if [ -n "$IRIS_PID" ] && [ -n "$IRIS_FD" ]; then
+  _iris_bash_precmd() {
+    local iris_exit_code=$?
+    printf "IRIS_CWD:%%s\x00" "$PWD" >&$IRIS_FD 2>/dev/null
+    printf "IRIS_CMD_STOP:%%s\x00" "$iris_exit_code" >&$IRIS_FD 2>/dev/null
+  }
+
+  if [[ ";$PROMPT_COMMAND;" != *";_iris_bash_precmd;"* ]]; then
+    PROMPT_COMMAND="_iris_bash_precmd${PROMPT_COMMAND:+;$PROMPT_COMMAND}"
+  fi
+fi
+
+`)
+		case "fish":
+			fmt.Printf(`
+# Iris Autostart Hook
+# a multiplexer pane inherits IRIS_* but runs on its own tty, so those vars
+# point at an iris that is not driving this terminal
+if set -q IRIS_PID
+    set -l iris_ppid (ps -o ppid= -p $fish_pid 2>/dev/null | string trim)
+    set -l iris_cur_tty (tty 2>/dev/null)
+    if test "$IRIS_PID" != "$iris_ppid"; and test "$iris_cur_tty" != "$IRIS_TTY"
+        set -e IRIS_PID
+        set -e IRIS_IS_CHILD
+        set -e IRIS_FD
+        set -e IRIS_TTY
+    end
+end
+
+if status is-interactive; and not set -q IRIS_PID; and not set -q IRIS_RESCUE
+    set -gx IRIS_ACTIVE_SHELL "fish"
+    exec iris
+end
+
+# Iris Autocomplete Hook
+if set -q IRIS_PID; and set -q IRIS_FD
+    function _iris_fish_postexec --on-event fish_postexec
+        set -l iris_exit_code $status
+        printf "IRIS_CWD:%%s\x00" "$PWD" >&$IRIS_FD 2>/dev/null
+        printf "IRIS_CMD_STOP:%%s\x00" "$iris_exit_code" >&$IRIS_FD 2>/dev/null
+    end
+    function _iris_fish_prompt --on-event fish_prompt
+        printf "IRIS_CWD:%%s\x00" "$PWD" >&$IRIS_FD 2>/dev/null
+    end
+    function _iris_fish_preexec --on-event fish_preexec
+        printf "IRIS_CMD_START\x00" >&$IRIS_FD 2>/dev/null
+    end
+end
+`)
+		}
+	},
+}
+
+func init() {
+	rootCmd.AddCommand(initCmd)
+	rootCmd.AddCommand(setupCmd)
+}
+
+var setupCmd = &cobra.Command{
+	Use:   "setup [shell]",
+	Short: "Automatically setup iris shell integration and install binary",
+	Args:  cobra.MaximumNArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		home, _ := os.UserHomeDir()
+
+		localBin := filepath.Join(home, ".local", "bin")
+		_ = os.MkdirAll(localBin, 0755)
+
+		exe, _ := os.Executable()
+		targetExe := filepath.Join(localBin, "iris")
+
+		fmt.Printf("Installing Flow engine to %s...\n", targetExe)
+		input, err := os.ReadFile(exe)
+		if err != nil {
+			fmt.Printf("Failed to read current executable: %v\n", err)
+			return
+		}
+
+		_ = os.Remove(targetExe)
+		err = os.WriteFile(targetExe, input, 0755)
+		if err != nil {
+			fmt.Printf("Failed to write to %s: %v\n", targetExe, err)
+			return
+		}
+
+		var shellName string
+		if len(args) > 0 {
+			shellName = filepath.Base(args[0])
+		} else {
+			shellPath := os.Getenv("SHELL")
+			shellName = filepath.Base(shellPath)
+		}
+		var configFile string
+		var evalCmd string
+
+		switch shellName {
+		case "zsh":
+			configFile = filepath.Join(shell.GetZshConfigDir(), ".zshrc")
+			evalCmd = `eval "$(iris init zsh)"`
+		case "bash":
+			configFile = filepath.Join(home, ".bashrc")
+			evalCmd = `eval "$(iris init bash)"`
+		case "fish":
+			configFile = filepath.Join(shell.GetFishConfigDir(), "config.fish")
+			evalCmd = `iris init fish | source`
+		default:
+			fmt.Printf("Unsupported shell: %s. Please add flow-engine init manually.\n", shellName)
+			return
+		}
+
+		content, readErr := os.ReadFile(configFile)
+		if strings.Contains(string(content), "iris init") {
+			fmt.Printf("Iris is already configured in %s\n", configFile)
+		} else {
+			var newContent string
+			if readErr == nil && len(content) > 0 {
+				newContent = "# Iris Autocomplete\n" + evalCmd + "\n\n" + string(content)
+			} else {
+				newContent = "# Iris Autocomplete\n" + evalCmd + "\n"
+			}
+			if mkdirErr := os.MkdirAll(filepath.Dir(configFile), 0755); mkdirErr != nil {
+				fmt.Printf("Failed to create directory for %s: %v\n", configFile, mkdirErr)
+				return
+			}
+			err = os.WriteFile(configFile, []byte(newContent), 0644)
+			if err != nil {
+				fmt.Printf("Failed to update %s: %v\n", configFile, err)
+				return
+			}
+			fmt.Printf("✓ Added Flow engine integration to top of %s\n", configFile)
+		}
+
+		// initialize default config file if it does not exist
+		if path, err := config.ConfigPath(); err == nil {
+			if _, statErr := os.Stat(path); os.IsNotExist(statErr) {
+				_ = os.MkdirAll(filepath.Dir(path), 0755)
+				defaultContent := `# ~/.config/iris/config.toml
+# iris configuration file
+
+[core]
+# schema version
+# do not edit this field manually
+version = 1
+
+# override shell: "bash", "zsh", "fish", keep empty for auto detection
+shell = ""
+
+# run the selected shell as a login shell
+shell-login = false
+
+# startup mode: "last", "spec", "history"
+# "last" = remember last mode used
+mode = "last"
+
+# enable debug logging
+debug = false
+
+# automatically expand aliases on space
+expand-alias = true
+
+# automatically execute command after accepting suggestion
+auto-execute = false
+
+[ui]
+# visual style: "modern" (icons, category pills, shortcut footer) or "classic" (minimalist, centered number, no icons)
+style = "modern"
+
+# enable Nerd Fonts icons in overlay menu
+nerd-fonts = true
+
+# show hidden files with dot prefix
+hidden-files = false
+
+# enable inline ghost text
+ghost-text = true
+
+# maximum suggestions to display
+max-suggestions = 100
+
+# maximum height of the overlay
+max-height = 15
+
+# maximum width of the overlay (0 = responsive to terminal)
+max-width = 0
+
+[git]
+# hide current branch in checkout/switch list
+filter-active-branch = true
+
+# merge remote and local branches with same name
+deduplicate-branches = true
+
+[updater]
+# check for updates on startup
+check-on-startup = true
+
+# update channel: "stable", "nightly"
+channel = "stable"
+
+# interval between update checks, e.g. "24h", "6h", "30m"
+check-interval = "24h"
+
+# 0 = off (default, notify only), 1 = auto-install, 2 = always confirm first
+auto-update = 0
+
+[keybindings]
+toggle-mode = "ctrl+r"
+toggle-menu = "shift+tab"
+select = "tab"
+navigate-up = "up"
+navigate-down = "down"
+navigate-right = "right"
+`
+				if errWrite := os.WriteFile(path, []byte(defaultContent), 0644); errWrite == nil {
+					fmt.Printf("✓ Initialized default config file at %s\n", path)
+				}
+			}
+		}
+
+		fmt.Println("\nSetup complete! Please restart your terminal or run:")
+		fmt.Printf("  \033[32msource %s\033[0m\n", configFile)
+	},
+}
