@@ -1445,11 +1445,15 @@ start_quickshell() {
         hyprctl reload >>"$LOG_FILE" 2>&1 || ui_warn "hyprctl reload failed."
         sleep 0.5
     fi
+    # Launch the shell on its own; it is a long-lived daemon, not part of the
+    # script's contract, so it must never be able to trigger the ERR trap (which
+    # a backgrounded job inherits) and clatter a spurious "Aborted" into the log
+    # after the session has already reported success.
     if [[ "$TARGET_DIR" == "$QS_DIR/ii" ]]; then
-        nohup "$bin" -c ii >/dev/null 2>&1 &
+        ( trap - ERR; exec nohup "$bin" -c ii >/dev/null 2>&1 & )
         ui_ok "Started" "$bin -c ii"
     else
-        nohup "$bin" --path "$TARGET_DIR" >/dev/null 2>&1 &
+        ( trap - ERR; exec nohup "$bin" --path "$TARGET_DIR" >/dev/null 2>&1 & )
         ui_ok "Started" "$bin --path $(tilde "$TARGET_DIR")"
     fi
     return 0
