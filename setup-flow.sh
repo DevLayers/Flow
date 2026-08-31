@@ -79,6 +79,10 @@
 # explicit yes. Install or update a single one by name: `install kitty`,
 # `update zshrc.d starship.toml`.
 #
+# The shorthand `all` means the full deploy: config, hypr, sddm and extras all
+# at once, as if `--hypr --sddm --extras` were passed. `flow install all` sets
+# up a complete machine; `flow update all` refreshes everything.
+#
 # `install` finishes with the terminal bootstrap: it detects the missing core
 # stack (zsh, git, starship, mise, direnv, atuin, fzf, fd, ripgrep, zoxide),
 # installs them in one transaction, wires the Flow managed block into ~/.zshrc
@@ -2745,10 +2749,12 @@ show_help() {
     ui_rule "Commands"
     printf '  %s%-16s%s %s\n' "$C_OK" "apply" "$C_RST" "Apply the Quickshell config (default)"
     printf '  %s%-16s%s %s\n' "$C_OK" "install" "$C_RST" "Install deps, deploy config, bootstrap the shell"
+    printf '  %s%-16s%s %s\n' "$C_OK" "install all" "$C_RST" "Full setup: config, hypr, sddm and extras"
     printf '  %s%-16s%s %s\n' "$C_OK" "install missing" "$C_RST" "Install only the missing core dependencies"
     printf '  %s%-16s%s %s\n' "$C_OK" "install ux" "$C_RST" "Install recommended UX tools (bat, eza, lazygit)"
     printf '  %s%-16s%s %s\n' "$C_OK" "install devops" "$C_RST" "Install the DevOps profile (docker, kubectl, helm, ...)"
     printf '  %s%-16s%s %s\n' "$C_OK" "update" "$C_RST" "Refresh Flow config from GitHub"
+    printf '  %s%-16s%s %s\n' "$C_OK" "update all" "$C_RST" "Refresh config plus hypr, sddm and extras"
     printf '  %s%-16s%s %s\n' "$C_OK" "restart" "$C_RST" "Restart Quickshell (alias: run)"
     printf '  %s%-16s%s %s\n' "$C_OK" "doctor" "$C_RST" "Report shell, deps, terminal and Flow state"
     printf '  %s%-16s%s %s\n' "$C_OK" "shell" "$C_RST" "Shell status; shell default zsh opts in"
@@ -2811,7 +2817,9 @@ show_help() {
     printf '  %sinstall also offers the fork'"'"'s extra configs (mpv, kitty, zshrc.d,%s\n' "$C_SUB" "$C_RST"
     printf '  %sstarship.toml, zsh; folders may carry a fetch-extras.sh/install.sh).%s\n' "$C_SUB" "$C_RST"
     printf '  %sSame -y/no rule; --extras is the explicit yes. Pass names to deploy%s\n' "$C_SUB" "$C_RST"
-    printf '  %sonly those: "install kitty zshrc.d" or "update starship.toml".%s\n' "$C_SUB" "$C_RST"
+    printf '  %sonly those: "install kitty zshrc.d" or "update starship.toml". The%s\n' "$C_SUB" "$C_RST"
+    printf '  %skeyword "all" is the full deploy — config, hypr, sddm and extras%s\n' "$C_SUB" "$C_RST"
+    printf '  %sat once — as if --hypr --sddm --extras were all passed.%s\n' "$C_SUB" "$C_RST"
     printf '  %sinstall then bootstraps the shell: missing core deps in one%s\n' "$C_SUB" "$C_RST"
     printf '  %stransaction, a Flow managed block appended to ~/.zshrc (your file%s\n' "$C_SUB" "$C_RST"
     printf '  %sis never overwritten), a Nerd Font check, and a default-shell%s\n' "$C_SUB" "$C_RST"
@@ -2833,6 +2841,7 @@ show_help() {
     printf '  %s%s shell default zsh%s        %sopt in to making Zsh the login shell%s\n' "$C_ACC" "$me" "$C_RST" "$C_SUB" "$C_RST"
     printf '  %s%s update%s                   %spull the latest from Flow upstream%s\n' "$C_ACC" "$me" "$C_RST" "$C_SUB" "$C_RST"
     printf '  %s%s update starship.toml%s     %supdate just that config%s\n' "$C_ACC" "$me" "$C_RST" "$C_SUB" "$C_RST"
+    printf '  %s%s update all%s               %srefresh config + hypr, sddm and extras%s\n' "$C_ACC" "$me" "$C_RST" "$C_SUB" "$C_RST"
     printf '  %s%s apply --local .%s          %sdeploy the checkout you stand in%s\n' "$C_ACC" "$me" "$C_RST" "$C_SUB" "$C_RST"
     printf '\n'
     printf '%sLog: %s%s\n' "$C_SUB" "$(tilde "$DEFAULT_LOG_FILE")" "$C_RST"
@@ -3047,7 +3056,21 @@ parse_args() {
             ;;
         install | update | apply | switch)
             # Individual extra-config targets: `install kitty zshrc.d`.
-            DEPLOY_TARGETS=("${positional[@]}")
+            # `all` = the full deploy: config plus hypr, sddm and extras, no
+            # flags needed. It is consumed here so it never reaches validation
+            # as a config name.
+            local -a targets=()
+            local t
+            for t in "${positional[@]}"; do
+                if [[ "$t" == "all" ]]; then
+                    OPT_HYPR=true
+                    OPT_SDDM=true
+                    OPT_EXTRAS=true
+                else
+                    targets+=("$t")
+                fi
+            done
+            DEPLOY_TARGETS=("${targets[@]}")
             ;;
         *)
             if ((${#positional[@]} > 0)); then
