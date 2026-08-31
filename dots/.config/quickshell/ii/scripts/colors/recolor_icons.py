@@ -153,6 +153,32 @@ def get_brightness(hex_color):
         return 128
 
 
+def is_monochrome_svg(content):
+    """Return True when every color in the SVG is near-gray (r≈g≈b).
+
+    Brand icons (kora's Firefox, LibreOffice, ...) carry saturated colors and
+    must be kept as-is; only genuinely monochrome icons should be tinted with
+    the material palette. An icon with no parseable colors counts as gray.
+    """
+    hex_pattern = re.compile(r'#[0-9a-fA-F]{6}|#[0-9a-fA-F]{3}')
+    matches = hex_pattern.findall(content)
+    if not matches:
+        return True
+    for m in matches:
+        h = m.lstrip('#')
+        if len(h) == 3:
+            h = ''.join([c * 2 for c in h])
+        try:
+            r = int(h[0:2], 16)
+            g = int(h[2:4], 16)
+            b = int(h[4:6], 16)
+        except ValueError:
+            continue
+        if max(r, g, b) - min(r, g, b) > 48:
+            return False
+    return True
+
+
 def recolor_svg(content, colors):
     # Collect available tones and sort them by brightness
     # We use a mix of primary, secondary and their containers to get a rich scale
@@ -198,7 +224,12 @@ def process_file(args):
         if src_file.endswith(".svg"):
             with open(src_file, 'r', errors='ignore') as f:
                 content = f.read()
-            new_content = recolor_svg(content, colors)
+            # Smart recolor: keep brand-color icons (kora's colored SVGs)
+            # untouched; tint only monochrome/gray icons with the palette.
+            if is_monochrome_svg(content):
+                new_content = recolor_svg(content, colors)
+            else:
+                new_content = content
             with open(dst_file, 'w') as f:
                 f.write(new_content)
         else:
@@ -420,6 +451,21 @@ def recolor_raster_icons(raster_icons, colors, target_apps_dir):
     def get_luminance(rgb):
         return 0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2]
 
+    def is_monochrome_png(img):
+        """True when the raster has no saturated pixels — then and only then is
+        it tinted. Colorful icons (brand logos) are kept as-is."""
+        rgb = img.convert("RGB")
+        colors = rgb.getcolors(maxcolors=200000)
+        if not colors:
+            return False
+        colored = 0
+        total = 0
+        for count, (r, g, b) in colors:
+            total += count
+            if max(r, g, b) - min(r, g, b) > 48:
+                colored += count
+        return total == 0 or colored / total < 0.02
+
     # Build a multi-stop gradient palette for deep, rich recoloring
     # Including 'on' colors to ensure we have a full range from dark to light
     raw_palette = [
@@ -459,15 +505,19 @@ def recolor_raster_icons(raster_icons, colors, target_apps_dir):
             try:
                 img = Image.open(source_path).convert("RGBA")
                 alpha = img.split()[3]
-                gray = img.convert("L")
-                
-                # Apply gradient map
-                r = gray.point(r_lut)
-                g = gray.point(g_lut)
-                b = gray.point(b_lut)
-                
-                mapped = Image.merge("RGB", (r, g, b))
-                mapped.putalpha(alpha)
+                if not is_monochrome_png(img):
+                    # Brand/large icon — pixel-copy pixel for pixel.
+                    mapped = img
+                else:
+                    gray = img.convert("L")
+
+                    # Apply gradient map
+                    r = gray.point(r_lut)
+                    g = gray.point(g_lut)
+                    b = gray.point(b_lut)
+
+                    mapped = Image.merge("RGB", (r, g, b))
+                    mapped.putalpha(alpha)
                 img = mapped
                 
                 # Save full res for SVG wrapping
@@ -513,7 +563,10 @@ def inject_scavenged_svgs(svg_icons, colors, target_apps_dir):
         try:
             with open(source_path, 'r', errors='ignore') as f:
                 content = f.read()
-            new_content = recolor_svg(content, colors)
+            if is_monochrome_svg(content):
+                new_content = recolor_svg(content, colors)
+            else:
+                new_content = content
 
             for size_dir in ["scalable/apps", "symbolic/apps"]:
                 dest_dir = os.path.join(TARGET_THEME_PATH, size_dir)
@@ -638,7 +691,7 @@ def _generate_locked():
         return
 
     # Get icon theme from config or default
-    icon_theme_name = config.get("appearance", {}).get("iconTheme", "Papirus-Base")
+    icon_theme_name = config.get("appearance", {}).get("iconTheme", "kora")
     print(f"Configured icon theme: {icon_theme_name}")
 
     # Locate base theme
@@ -651,7 +704,7 @@ def _generate_locked():
 
     if not base_theme_path:
         print(f"Icon theme '{icon_theme_name}' not found. Falling back...")
-        for fallback_name in ["Papirus-Base", "Papirus", "breeze", "Adwaita"]:
+        for fallback_name in ["kora", "kora-pgrey", "breeze", "Adwaita"]:
             for d in ICON_SEARCH_DIRS:
                 p = os.path.join(d, fallback_name)
                 if os.path.exists(p):

@@ -12,10 +12,9 @@ depends=(
   darkly-bin
   eza
   fontconfig
-  kitty
+kitty
+  kora-icon-theme
   matugen
-  otf-space-grotesk
-  papirus-icon-theme
   starship
   ttf-jetbrains-mono-nerd
   ttf-material-symbols-variable-git

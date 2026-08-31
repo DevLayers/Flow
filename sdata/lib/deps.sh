@@ -256,8 +256,9 @@ flow_dep matugen-bin      shell  matugen-bin      "Material theme generator"    
 flow_dep python3          shell  python           "Theme generation backend"     python3
 flow_dep jq               shell  jq               "JSON processing engine"       jq
 # Icon theme. `pkg:` entry because an icon pack has no binary on PATH. Must be
-# installed or recolor_icons.py silently falls back to Breeze (flat/white icons).
-flow_dep papirus-icon-theme shell papirus-icon-theme "Icon base for DynamicTheme recolor" "pkg:papirus-icon-theme"
+# present or recolor_icons.py silently falls back to Breeze (flat/white icons).
+# kora is colorful (23k icons); Papirus has been removed from Flow.
+flow_dep kora-icon-theme shell kora-icon-theme "Icon base for DynamicTheme recolor" "pkg:kora-icon-theme"
 
 # Tools exec'd by the shell (screenshots, media, dialogs, power, clipboard…)
 flow_dep libnotify        shell  libnotify        "Notifications (notify-send)"  notify-send
