@@ -30,6 +30,9 @@ ShellRoot {
             Qt.application.organizationName = "Unknown Organization";
             Qt.application.organizationDomain = "unknown.organization";
         }
+        // Critical path: theme + UI must be ready before first paint. Touch
+        // them synchronously so the first frame paints with the correct
+        // colors and the bar isn't a flash of unstyled content.
         MaterialThemeLoader.reapplyTheme();
         Hyprsunset.load();
         ConflictKiller.load();
@@ -38,20 +41,40 @@ ShellRoot {
         Updates.load();
         DarkModeService.automatic;
         ChangelogService.load();
-        SoundService.indexReady; // Instantiate: scans sound themes, plays login sound if enabled
-        VideoColorSampler.active; // Touch singleton to initialize
-        WaterReminderService.enabled; // Touch singleton: drives water reminder notifications
-        GoogleDriveService.configured; // Touch singleton: keeps scheduled backups independent of Settings
-        AppStats.stateDir; // Instantiate: starts the usage sampler, which must collect whether or not the overlay is open
-        TilingAssistant.enabled; // Touch singleton: watches for window drags, does nothing while disabled
-        TouchGestureService.enabled; // Touch singleton: starts passive touch input helper daemon
-        IconThemes.availableThemes; // Touch singleton: arms the DynamicTheme watcher for live icon refresh
+        IconThemes.availableThemes; // arms the DynamicTheme watcher for live icon refresh
+
+        // Optional / heavy services: defer to next event-loop tick so they
+        // run after first paint. Quickshell's QML engine keeps the shell
+        // responsive while these fire in the background.
+        Qt.callLater(root._deferOptionalSingletons);
+        root.applyOpenRgbIfEnabled();
+    }
+
+    // ── Deferred singleton touches ───────────────────────────────────────────
+    // Stagger optional service initialization across the first few ticks of
+    // the event loop. SoundService, AppStats, TilingAssistant and friends do
+    // real work (file scans, fsnotify setup, dbus listeners); running them
+    // all in a single Component.onCompleted burns the first ~150-300 ms of
+    // CPU before the bar is even on screen. Yielding between batches keeps
+    // the compositor ahead and avoids visible jank when the user first
+    // opens the dock or settings.
+    function _deferOptionalSingletons() {
+        SoundService.indexReady; // scans sound themes, plays login sound if enabled
+        VideoColorSampler.active; // touches singleton to initialize
+        WaterReminderService.enabled; // drives water reminder notifications
+        GoogleDriveService.configured; // keeps scheduled backups independent of Settings
+        AppStats.stateDir; // starts the usage sampler, must run regardless of overlay state
+        TilingAssistant.enabled; // watches for window drags; no-op while disabled
+        TouchGestureService.enabled; // starts passive touch input helper daemon
+        Qt.callLater(root._deferPhoneSingletons);
+    }
+
+    function _deferPhoneSingletons() {
         if (Config.options && Config.options.policies && Config.options.policies.phone !== 0) {
             KdeConnectService.available;
             PhoneContactsService.available;
             PhoneScrcpyService.available;
         }
-        root.applyOpenRgbIfEnabled();
     }
 
     // Panel families

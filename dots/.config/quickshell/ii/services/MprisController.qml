@@ -28,12 +28,15 @@ Singleton {
 		updatePlayersList();
 	}
 
-	Timer {
-		id: playersRefreshTimer
-		interval: 10000
-		running: true
-		repeat: true
-		onTriggered: root.updatePlayersList()
+	// Track D-Bus player list changes without polling. Quickshell's
+	// Mpris.players is reactive, so the Instantiator below reacts to player
+	// add/remove; we mirror that onto our filtered `players` list so UI
+	// consumers see updates without a 10s timer burning CPU.
+	Connections {
+		target: Mpris.players
+		function onValuesChanged() {
+			root.updatePlayersList();
+		}
 	}
 
 	property MprisPlayer trackedPlayer: null;

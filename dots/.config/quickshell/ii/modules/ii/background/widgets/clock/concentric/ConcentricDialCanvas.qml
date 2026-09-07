@@ -8,6 +8,9 @@ import qs.services
 Canvas {
     id: root
 
+    Component.onCompleted: ResourceUsage.touch()
+    Component.onDestruction: ResourceUsage.releaseConsumer()
+
     property string dialStyle: "concentric" // "concentric" | "outer_only" | "inner_only" | "full_dense" | "minimal_arc" | "full_pixel3" | "none"
     property bool hideMinutePillArea: false
     property bool showMinuteDot: true

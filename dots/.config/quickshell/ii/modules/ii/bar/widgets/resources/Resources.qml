@@ -17,6 +17,10 @@ MouseArea {
     implicitHeight: Appearance.sizes.baseBarHeight
     hoverEnabled: !Config.options.bar.tooltips.clickToShow
 
+    // Bar widget is always visible while the bar exists; keep polling alive.
+    Component.onCompleted: ResourceUsage.touch()
+    Component.onDestruction: ResourceUsage.releaseConsumer()
+
     readonly property color capsuleColor: root.groupBgColor
 
     RowLayout {

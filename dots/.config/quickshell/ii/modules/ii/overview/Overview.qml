@@ -49,6 +49,7 @@ Scope {
 
                     component: PanelWindow {
                         id: root
+                        reloadableId: "overview_" + (realOverviewLoader.modelData?.name ?? "default")
 
                         screen: realOverviewLoader.modelData
                         readonly property bool monitorIsFocused: realOverviewLoader.monitorIsFocused

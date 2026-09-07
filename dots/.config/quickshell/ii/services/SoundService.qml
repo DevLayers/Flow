@@ -58,7 +58,13 @@ Singleton {
         fileScanProc.running = true;
     }
 
-    Component.onCompleted: rescan()
+    Component.onCompleted: {
+    // Defer the heavy scan: the `find -L ...` file walk over
+    // /usr/share/sounds and ~/.local/share/sounds can take 80–250 ms on
+    // cold cache (KDE/Oxygen themes ship hundreds of files). Push it past
+    // the first paint so the bar and dock aren't blocked behind it.
+    Qt.callLater(root.rescan);
+}
 
     /**
      * Resolve event names to a playable file url.

@@ -19,6 +19,9 @@ AbstractBackgroundWidget {
                     || root.lockBehavior === "center"
                     || root.lockBehavior === "lockOnly"
 
+    Component.onCompleted: ResourceUsage.touch()
+    Component.onDestruction: ResourceUsage.releaseConsumer()
+
     opacity: {
         if (root.lockBehavior === "lockOnly")
             return GlobalStates.screenLocked ? 1 : 0;

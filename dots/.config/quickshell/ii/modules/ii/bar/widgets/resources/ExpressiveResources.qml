@@ -19,6 +19,9 @@ Item {
     property bool alwaysShowAllResources: false
     property bool isMaterial: true // Forced expressive
 
+    Component.onCompleted: ResourceUsage.touch()
+    Component.onDestruction: ResourceUsage.releaseConsumer()
+
     implicitWidth: vertical ? Appearance.sizes.verticalBarWidth : mainRow.implicitWidth
     implicitHeight: vertical ? mainCol.implicitHeight : Appearance.sizes.baseBarHeight
     width: implicitWidth

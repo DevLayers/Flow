@@ -19,6 +19,10 @@ import qs.modules.ii.overview
 
 PanelWindow {
     id: topPanel
+    // Persistent identifier — Quickshell uses this to preserve the top-layer
+    // state across hot-reloads (settings, theme changes) instead of
+    // recreating the window and dropping any in-flight animations.
+    reloadableId: "topLayer"
     color: "transparent"
     WlrLayershell.namespace: "quickshell:topLayer"
     WlrLayershell.layer: searchOpenOnMonitor ? WlrLayer.Overlay : WlrLayer.Top

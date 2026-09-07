@@ -21,6 +21,10 @@ AbstractBackgroundWidget {
                     || root.lockBehavior === "center"
                     || root.lockBehavior === "lockOnly"
 
+    // Wake ResourceUsage polling while this widget is on screen.
+    Component.onCompleted: ResourceUsage.touch()
+    Component.onDestruction: ResourceUsage.releaseConsumer()
+
     opacity: {
         if (root.lockBehavior === "lockOnly")
             return GlobalStates.screenLocked ? 1 : 0;

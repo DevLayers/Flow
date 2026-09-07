@@ -11,6 +11,9 @@ MouseArea {
 
     property bool alwaysShowAllResources: false
 
+    Component.onCompleted: ResourceUsage.touch()
+    Component.onDestruction: ResourceUsage.releaseConsumer()
+
     implicitWidth: Appearance.sizes.verticalBarWidth
     implicitHeight: mainCol.implicitHeight
     hoverEnabled: !Config.options.bar.tooltips.clickToShow

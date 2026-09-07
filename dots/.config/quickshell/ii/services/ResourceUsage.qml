@@ -87,9 +87,12 @@ Singleton {
 	readonly property int popupSampleIntervalMs: 1000
 	readonly property int popupHistoryWindowMs: 12000
 
+	// 1 Hz when the resource popup is open (graphs need smoothness), else the
+	// user-configured rate (default 3 s) so background widgets don't burn CPU
+	// while the user isn't looking at the popup.
 	readonly property int effectiveResourceInterval: resourcePopupMonitoringEnabled
 		? popupSampleIntervalMs
-		: (Config.options?.resources?.updateInterval ?? 1000)
+		: (Config.options?.resources?.updateInterval ?? 3000)
 
 	readonly property int effectiveGpuInterval: resourcePopupMonitoringEnabled
 		? popupSampleIntervalMs
@@ -98,22 +101,51 @@ Singleton {
 	signal cpuSampled(real usage)
 	signal gpuSampled(real usage)
 
-	function requestGpuSample() {
-		if (!resourcePopupMonitoringEnabled) return
-		if (root.gpuVendor === "nvidia" || root.gpuVendor === "intel") {
-			if (!gpuMonitorProc.running) {
-				gpuMonitorProc.running = true
-			}
+	// Lazy start: the cpuRamTimer is `running: false` until any consumer
+	// signals activity. Background widgets call `touch()` from their
+	// Component.onCompleted; the popup sets resourcePopupMonitoringEnabled
+	// true. After first activation we keep polling because the values feed
+	// live graphs and history buffers. The counter is decremented on widget
+	// destruction so unused widgets release their hold.
+	property int _consumerTouches: 0
+
+	function touch() {
+		if (_consumerTouches === 0) {
+			cpuRamTimer.running = true
 		}
+		_consumerTouches += 1
+	}
+
+	function releaseConsumer() {
+		if (_consumerTouches > 0) _consumerTouches -= 1
+	}
+
+	// Auto-pause when popup closes AND no consumer has registered interest.
+	// Background widgets register via touch(); the popup toggles
+	// resourcePopupMonitoringEnabled directly. Either signal keeps polling
+	// alive; both must clear to fully idle.
+	function _updateIdleState() {
+		cpuRamTimer.running = resourcePopupMonitoringEnabled || _consumerTouches > 0
 	}
 
 	onResourcePopupMonitoringEnabledChanged: {
+		_updateIdleState()
 		if (resourcePopupMonitoringEnabled) {
 			requestGpuSample()
 		} else {
 			gpuUsage = 0
 			gpuTemp = 0
 			previousIntelGpuSample = null
+		}
+	}
+	on_ConsumerTouchesChanged: _updateIdleState()
+
+	function requestGpuSample() {
+		if (!resourcePopupMonitoringEnabled) return
+		if (root.gpuVendor === "nvidia" || root.gpuVendor === "intel") {
+			if (!gpuMonitorProc.running) {
+				gpuMonitorProc.running = true
+			}
 		}
 	}
 
@@ -162,10 +194,14 @@ Singleton {
     // ── CPU/RAM polling Timer (drives FileView reloads) ─────────────
     // No more `while true; do` bash loops. One QML Timer per subsystem,
     // reuses FileView instances that just reload files in-place.
+    //
+    // Started on demand: idle by default, woken by ResourceUsage.touch()
+    // from any visible consumer (bar widget, popup, background widget, …).
+    // Pauses again once every consumer has released its hold.
 	Timer {
         id: cpuRamTimer
 		interval: root.effectiveResourceInterval
-		running: true
+		running: false
 		repeat: true
 		onTriggered: {
 			// Reload files

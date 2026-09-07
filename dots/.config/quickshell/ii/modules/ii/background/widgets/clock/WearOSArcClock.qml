@@ -17,6 +17,9 @@ import qs.modules.ii.background.widgets
 Item {
     id: root
 
+    Component.onCompleted: ResourceUsage.touch()
+    Component.onDestruction: ResourceUsage.releaseConsumer()
+
     // Configuration shortcuts
     readonly property var cfg: Config.options.background.widgets.wearos_arc_clock
     readonly property bool cfgBlackBg: cfg ? (cfg.blackBackground ?? false) : false

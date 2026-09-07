@@ -22,6 +22,7 @@ Scope {
         active: GlobalStates.overlayOpen || OverlayContext.hasPinnedWidgets
         sourceComponent: PanelWindow {
             id: overlayWindow
+            reloadableId: "overlay"
             exclusionMode: ExclusionMode.Ignore
             WlrLayershell.namespace: "quickshell:overlay"
             WlrLayershell.layer: WlrLayer.Overlay
