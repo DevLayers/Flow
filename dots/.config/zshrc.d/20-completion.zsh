@@ -108,19 +108,28 @@ else
   compinit -C -d "$zcompdump"
 fi
 
-# ── fzf-tab: fuzzy completion picker (load AFTER compinit via plugin-load) ────
-# https://github.com/Aloxaf/fzf-tab
-# Configured via plugin-load in 05-plugin-manager.zsh
-# Styles applied here after plugin loads
-if (( $+functions[-ftb-complete] )); then
-  zstyle ':completion:*' menu no
-  zstyle ':fzf-tab:*' fzf-flags --color=fg:1,fg+:2 --bind=tab:accept
-  zstyle ':fzf-tab:*' switch-group '<' '>'
-
-  # DevOps previews — fzf shows useful info on the right pane while you cycle.
-  zstyle ':fzf-tab:complete:cd:*' fzf-preview 'eza -1 --color=always --icons $realpath 2>/dev/null'
-  zstyle ':fzf-tab:complete:ssh:*' fzf-preview 'echo {}'
-  zstyle ':fzf-tab:complete:git-checkout:*' sort false
-  zstyle ':fzf-tab:complete:git-add:*' fzf-preview 'git diff --color=always -- {} 2>/dev/null | head -200'
-  zstyle ':fzf-tab:complete:git-status:*' fzf-preview 'git diff --color=always -- {} 2>/dev/null | head -200'
+# ── zsh-autocomplete: live completion + history panels ─────────────────────
+# https://github.com/marlonrichert/zsh-autocomplete
+# Loaded via plugin-load in 06-plugins.zsh (must run AFTER compinit). The
+# plugin owns:
+#   Tab  → cycle top completion (no panel; inserts on single match, otherwise
+#          opens the live panel)
+#   ↓    → .autocomplete__down-line-or-select__zle-widget
+#          (live multi-row completion panel beneath the prompt, refined on
+#           every keystroke, sourced from compctl + Atuin history)
+#   ↑    → .autocomplete__up-line-or-search__zle-widget
+#          (typed: substring/multi-word history search against Atuin-backed
+#           $HISTFILE; empty: cursor up / walk history)
+#   Alt-↓ / Alt-↑  → force-enter the menus regardless of state
+#   Ctrl-X, /      → recent-path completion
+# fzf-tab is no longer in the plugin stack; zsh-autocomplete subsumes the
+# picker role. fzf's own widgets (Ctrl-T, Alt-C, Ctrl-R history) are still
+# loaded by 40-keybindings.zsh.
+if (( $+widgets[.autocomplete__down-line-or-select__zle-widget] )); then
+  # Auto-show the completion panel as you type (don't wait for Tab). Default
+  # is "Tab triggers panel"; setting fzf_tab_completion="show" with the
+  # tab-trigger widget makes the panel live-update.
+  zstyle ':autocomplete:*' default-context ''
+  # DevOps previews — visible in the right pane of the live panel.
+  zstyle ':autocomplete:cd:*' fzf-preview 'eza -1 --color=always --icons $realpath 2>/dev/null'
 fi

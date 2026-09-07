@@ -6,6 +6,9 @@ export ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE="fg=8"
 export ZSH_AUTOSUGGEST_STRATEGY=(history completion)
 export ZSH_AUTOSUGGEST_BUFFER_MAX_SIZE=20
 
+# zsh-autocomplete is the source of the live completion panel. Keep these
+# ghost-text widgets for a single suggestion between completions.
+
 # ── Accept-key bindings (fish-model) ────────────────────────────────────────
 # Autosuggestions show ghost text after the cursor. Accept it with:
 #   →             accept the entire suggestion

@@ -66,8 +66,13 @@ if command -v fzf >/dev/null 2>&1; then
 fi
 
 # ── Final arrow-key assignment (last write wins) ─────────────────────────────
-# Run AFTER fzf keybindings are sourced so fzf-history-widget is registered
-# and wins ↓. Atuin's --disable-up-arrow keeps it from competing for ↑;
-# even if Atuin's widgets weren't ready yet (zsh-defer), we re-bind now.
-bindkey '^[[A' atuin-up-search    # Up   → Atuin frecency-sorted inline match
-bindkey '^[[B' fzf-history-widget  # Down → fzf multi-line fuzzy panel
+# zsh-autocomplete (loaded via plugin-load) owns both arrows. We intentionally
+# do NOT bind ^[[A/^[[B here — letting autocomplete's smart widgets stand:
+#   ↑ → .autocomplete__up-line-or-search__zle-widget (history search when typed,
+#                                                cursor-up when empty)
+#   ↓ → .autocomplete__down-line-or-select__zle-widget (live completion panel
+#                                                      when typed, cursor-down
+#                                                      when empty)
+# Atuin's --disable-up-arrow keeps it from racing for ↑.
+# Ctrl-T and Alt-C remain on fzf file/cd widgets (set up by fzf's
+# key-bindings.zsh above).

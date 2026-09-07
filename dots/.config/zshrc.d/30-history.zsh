@@ -36,17 +36,19 @@ if command -v atuin >/dev/null 2>&1; then
 fi
 
 # ── Arrow-key strategy ──────────────────────────────────────────────────────
-# ↑   → atuin-up-search    (frecency-sorted inline match; re-press for next)
-# ↓   → fzf-history-widget (multi-line fuzzy panel, --query=$LBUFFER)
-# Both bindkeys use literal ^[A / ^[B so they work regardless of when
-# zsh/terminfo was loaded. Atuin's --disable-up-arrow keeps it from trying
-# to also bind ↑; fzf-history-widget is registered when its key-bindings.zsh
-# is sourced in 40-keybindings.zsh (last fragment, last write wins).
+# Both ↑ and ↓ are owned by zsh-autocomplete (loaded via plugin-load in
+# 06-plugins.zsh). Do NOT bind them here:
+#   ↑   → .autocomplete__up-line-or-search__zle-widget
+#         empty buffer: cursor up / start of history
+#         typed buffer: history-search matching current $LBUFFER (substring,
+#         multi-word, Atuin-backed since zsh-autocomplete reads $HISTFILE which
+#         atuin's preexec hook writes to).
+#   ↓   → .autocomplete__down-line-or-select__zle-widget
+#         empty buffer: cursor down
+#         typed buffer: opens the multi-row live completion panel beneath the
+#         prompt, populated from Atuin history + compctl completions, refined
+#         on every keystroke.
 #
-# Atuin's `atuin-up-search` widget is registered by `atuin init zsh`, but
-# that runs under zsh-defer — possibly AFTER this fragment. We bind anyway
-# (bindkey to a non-existent widget is a silent no-op); 40-keybindings.zsh
-# re-asserts both bindings at the very end so whichever init finished last
-# wins.
-bindkey '^[[A' atuin-up-search   # Up arrow
-bindkey '^[[B' fzf-history-widget # Down arrow
+# Atuin's own widgets stay bound:
+#   Ctrl-R → atuin-search (full-screen TUI history)
+# Atuin's --disable-up-arrow (set above) keeps it from competing for ↑.
