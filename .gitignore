@@ -53,6 +53,9 @@ __pycache__/
 /dots/.config/quickshell/ii/scripts/appStats/app_stats_src/target/
 /dots/.config/quickshell/ii/scripts/appStats/app_stats_src/Cargo.lock
 
+# puku-cli worktrees and runtime artifacts (not part of Flow)
+/.puku-cli/
+
 # Compiled binary — build it from touch_gestures_src/ instead (see scripts/touchGestures/README.md)
 /dots/.config/quickshell/ii/scripts/touchGestures/touch_gestures
 /dots/.config/quickshell/ii/scripts/touchGestures/touch_gestures_src/target/
