@@ -116,7 +116,11 @@ if (( $+functions[-ftb-complete] )); then
   zstyle ':completion:*' menu no
   zstyle ':fzf-tab:*' fzf-flags --color=fg:1,fg+:2 --bind=tab:accept
   zstyle ':fzf-tab:*' switch-group '<' '>'
-  zstyle ':fzf-tab:complete:cd:*' fzf-preview 'eza -1 --color=always $realpath'
+
+  # DevOps previews — fzf shows useful info on the right pane while you cycle.
+  zstyle ':fzf-tab:complete:cd:*' fzf-preview 'eza -1 --color=always --icons $realpath 2>/dev/null'
   zstyle ':fzf-tab:complete:ssh:*' fzf-preview 'echo {}'
   zstyle ':fzf-tab:complete:git-checkout:*' sort false
+  zstyle ':fzf-tab:complete:git-add:*' fzf-preview 'git diff --color=always -- {} 2>/dev/null | head -200'
+  zstyle ':fzf-tab:complete:git-status:*' fzf-preview 'git diff --color=always -- {} 2>/dev/null | head -200'
 fi
