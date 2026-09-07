@@ -2,8 +2,12 @@
 # Environment switcher for project-local env
 
 if command -v direnv >/dev/null 2>&1; then
-  # Load direnv hook for Zsh
-  _flow_cached_eval direnv direnv hook zsh
+  # Load direnv hook for Zsh, deferred until first prompt (~10 ms saved).
+  if (( $+functions[zsh-defer] )); then
+    zsh-defer _flow_cached_eval direnv direnv hook zsh
+  else
+    _flow_cached_eval direnv direnv hook zsh
+  fi
   
   # Direnv configuration
   export DIRENV_WARN_TIMEOUT=5s

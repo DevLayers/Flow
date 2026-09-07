@@ -63,28 +63,46 @@ _flow_source_cached_completion() {
 _flow_comp_cache_dir="${zcompdir}/completions"
 [[ -d "$_flow_comp_cache_dir" ]] || mkdir -p "$_flow_comp_cache_dir"
 
-_flow_source_cached_completion kubectl "$_flow_comp_cache_dir/kubectl.zsh" kubectl completion zsh
-_flow_source_cached_completion helm "$_flow_comp_cache_dir/helm.zsh" helm completion zsh
-_flow_source_cached_completion gh "$_flow_comp_cache_dir/gh.zsh" gh completion -s zsh
-_flow_source_cached_completion mise "$_flow_comp_cache_dir/mise.zsh" mise completion zsh
-_flow_source_cached_completion docker "$_flow_comp_cache_dir/docker.zsh" docker completion zsh
-_flow_source_cached_completion docker-compose "$_flow_comp_cache_dir/docker-compose.zsh" docker-compose completion zsh
-_flow_source_cached_completion terraform "$_flow_comp_cache_dir/terraform.zsh" terraform -install-autocomplete 2>/dev/null || terraform completion zsh 2>/dev/null
-_flow_source_cached_completion kubectx "$_flow_comp_cache_dir/kubectx.zsh" kubectx completion zsh 2>/dev/null
-_flow_source_cached_completion kubens "$_flow_comp_cache_dir/kubens.zsh" kubens completion zsh 2>/dev/null
-_flow_source_cached_completion k9s "$_flow_comp_cache_dir/k9s.zsh" k9s completion zsh 2>/dev/null
-_flow_source_cached_completion stern "$_flow_comp_cache_dir/stern.zsh" stern completion zsh 2>/dev/null
-_flow_source_cached_completion flux "$_flow_comp_cache_dir/flux.zsh" flux completion zsh 2>/dev/null
-_flow_source_cached_completion argocd "$_flow_comp_cache_dir/argocd.zsh" argocd completion zsh 2>/dev/null
-_flow_source_cached_completion kustomize "$_flow_comp_cache_dir/kustomize.zsh" kustomize completion zsh 2>/dev/null
-_flow_source_cached_completion helmfile "$_flow_comp_cache_dir/helmfile.zsh" helmfile completion zsh 2>/dev/null
-_flow_source_cached_completion aws "$_flow_comp_cache_dir/aws.zsh" aws_completer 2>/dev/null
-_flow_source_cached_completion gcloud "$_flow_comp_cache_dir/gcloud.zsh" gcloud completion zsh 2>/dev/null
-_flow_source_cached_completion az "$_flow_comp_cache_dir/az.zsh" az completion zsh 2>/dev/null
-_flow_source_cached_completion talosctl "$_flow_comp_cache_dir/talosctl.zsh" talosctl completion zsh 2>/dev/null
+# ── Defer all completion caches (first-prompt, not startup) ──────────────────
+# Each of the calls below runs `command` to check the binary exists, then
+# sources the generated zsh script. Forking 20 subshells synchronously adds
+# ~80–150 ms of cold-start cost. With zsh-defer, the entire block runs once
+# Zsh is idle, after the first prompt is drawn. Completions work for normal
+# commands on first tab-press; the deferred tool-specific completions appear
+# shortly after. This is the single biggest startup-time win available.
+_flow_defer_completion_caches() {
+  setopt local_options no_glob no_ksh_arrays 2>/dev/null
+  _flow_source_cached_completion kubectl "$_flow_comp_cache_dir/kubectl.zsh" kubectl completion zsh
+  _flow_source_cached_completion helm "$_flow_comp_cache_dir/helm.zsh" helm completion zsh
+  _flow_source_cached_completion gh "$_flow_comp_cache_dir/gh.zsh" gh completion -s zsh
+  _flow_source_cached_completion mise "$_flow_comp_cache_dir/mise.zsh" mise completion zsh
+  _flow_source_cached_completion docker "$_flow_comp_cache_dir/docker.zsh" docker completion zsh
+  _flow_source_cached_completion docker-compose "$_flow_comp_cache_dir/docker-compose.zsh" docker-compose completion zsh
+  _flow_source_cached_completion terraform "$_flow_comp_cache_dir/terraform.zsh" terraform -install-autocomplete 2>/dev/null || terraform completion zsh 2>/dev/null
+  _flow_source_cached_completion kubectx "$_flow_comp_cache_dir/kubectx.zsh" kubectx completion zsh 2>/dev/null
+  _flow_source_cached_completion kubens "$_flow_comp_cache_dir/kubens.zsh" kubens completion zsh 2>/dev/null
+  _flow_source_cached_completion k9s "$_flow_comp_cache_dir/k9s.zsh" k9s completion zsh 2>/dev/null
+  _flow_source_cached_completion stern "$_flow_comp_cache_dir/stern.zsh" stern completion zsh 2>/dev/null
+  _flow_source_cached_completion flux "$_flow_comp_cache_dir/flux.zsh" flux completion zsh 2>/dev/null
+  _flow_source_cached_completion argocd "$_flow_comp_cache_dir/argocd.zsh" argocd completion zsh 2>/dev/null
+  _flow_source_cached_completion kustomize "$_flow_comp_cache_dir/kustomize.zsh" kustomize completion zsh 2>/dev/null
+  _flow_source_cached_completion helmfile "$_flow_comp_cache_dir/helmfile.zsh" helmfile completion zsh 2>/dev/null
+  _flow_source_cached_completion aws "$_flow_comp_cache_dir/aws.zsh" aws_completer 2>/dev/null
+  _flow_source_cached_completion gcloud "$_flow_comp_cache_dir/gcloud.zsh" gcloud completion zsh 2>/dev/null
+  _flow_source_cached_completion az "$_flow_comp_cache_dir/az.zsh" az completion zsh 2>/dev/null
+  _flow_source_cached_completion talosctl "$_flow_comp_cache_dir/talosctl.zsh" talosctl completion zsh 2>/dev/null
+}
+if (( $+functions[zsh-defer] )); then
+  zsh-defer _flow_defer_completion_caches
+else
+  # zsh-defer not loaded yet (fragment order raced); call immediately
+  _flow_defer_completion_caches
+fi
+unfunction _flow_defer_completion_caches
 
-# Rebuild completion cache once per day
-if [[ ! -f "$zcompdump" ]] || [[ "$zcompdump" -ot "${ZDOTDIR:-$HOME}/.zshrc" ]]; then
+# Rebuild completion cache only if the zshrc has changed since the last dump.
+# ZDOTDIR is exported early in 00-environment.zsh so this resolves correctly.
+if [[ ! -f "$zcompdump" ]] || [[ "$zcompdump" -ot "$ZDOTDIR/.zshrc" ]]; then
   compinit -d "$zcompdump"
 else
   compinit -C -d "$zcompdump"

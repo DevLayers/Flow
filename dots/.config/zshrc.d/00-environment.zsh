@@ -1,6 +1,17 @@
 # Flow Zsh Environment
 # Basic environment variables and early initialization
 
+# ── Critical early loads ────────────────────────────────────────────────────
+# zsh/terminfo populates $terminfo[kcuu1], $terminfo[kcud1], etc. Without this,
+# arrow-key bindkeys that reference those names silently bind to "" and the
+# default up/down fallbacks survive.
+zmodload zsh/terminfo 2>/dev/null
+
+# Export ZDOTDIR so 20-completion.zsh's `[[ $zcompdump -ot $ZDOTDIR/.zshrc ]]`
+# staleness check points at the real config, not $HOME/.zshrc. Otherwise
+# compinit rebuilds every shell.
+export ZDOTDIR="${ZDOTDIR:-$HOME/.config/zsh}"
+
 # Language and locale
 export LANG="${LANG:-en_US.UTF-8}"
 export LC_ALL="${LC_ALL:-en_US.UTF-8}"

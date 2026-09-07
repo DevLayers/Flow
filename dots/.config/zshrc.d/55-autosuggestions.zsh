@@ -6,8 +6,19 @@ export ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE="fg=8"
 export ZSH_AUTOSUGGEST_STRATEGY=(history completion)
 export ZSH_AUTOSUGGEST_BUFFER_MAX_SIZE=20
 
-# Keybindings (after plugin loads via 06-plugins.zsh)
-# → / End = accept suggestion
-# Ctrl+Right = partial accept (forward-word)
-bindkey '^[[1;5C' forward-word
-bindkey '^[[1;5D' backward-word
+# ── Accept-key bindings (fish-model) ────────────────────────────────────────
+# Autosuggestions show ghost text after the cursor. Accept it with:
+#   →             accept the entire suggestion
+#   End           accept the entire suggestion (fallback for terminals where
+#                 → is consumed for forward-char or sticky-keys)
+#   Shift-→       accept the next word of the suggestion
+#   Ctrl-→        accept the next word (alt for the same)
+#   Ctrl-F        accept the entire suggestion (readline muscle memory)
+#
+# Word-skip on Ctrl-← is kept as `backward-word` (NOT auto-suggest-related —
+# we want plain word-jump when no suggestion is showing).
+bindkey '^[[C'           autosuggest-accept         # bare →
+bindkey '^[[1;2C'        autosuggest-accept-word    # Shift-→
+bindkey '^[[1;5C'        autosuggest-accept-word    # Ctrl-→  (was forward-word — this was the ghost-text bug)
+bindkey '^F'             autosuggest-accept         # Ctrl-F muscle memory
+bindkey '^[[1;5D'        backward-word              # Ctrl-← unchanged

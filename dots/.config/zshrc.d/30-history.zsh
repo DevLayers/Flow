@@ -26,12 +26,27 @@ setopt HIST_REDUCE_BLANKS
 # Commands starting with a space are NOT recorded (for secrets/one-offs).
 setopt HIST_IGNORE_SPACE
 
-# Atuin integration (if installed)
+# Atuin integration (deferred; runs on first prompt, not at startup)
 if command -v atuin >/dev/null 2>&1; then
-  # Initialize Atuin for Zsh
-  # --disable-up-arrow: we bind atuin to Down arrow instead of Ctrl+R
-  _flow_cached_eval atuin atuin init zsh --disable-up-arrow
-  # Bind atuin search to Down arrow (replaces Ctrl+R)
-  # Note: This overrides history-substring-search-down on Down arrow
-  bindkey "$terminfo[kcud1]" atuin-search
+  if (( $+functions[zsh-defer] )); then
+    zsh-defer _flow_cached_eval atuin atuin init zsh --disable-up-arrow
+  else
+    _flow_cached_eval atuin atuin init zsh --disable-up-arrow
+  fi
 fi
+
+# ── Arrow-key strategy ──────────────────────────────────────────────────────
+# ↑   → atuin-up-search    (frecency-sorted inline match; re-press for next)
+# ↓   → fzf-history-widget (multi-line fuzzy panel, --query=$LBUFFER)
+# Both bindkeys use literal ^[A / ^[B so they work regardless of when
+# zsh/terminfo was loaded. Atuin's --disable-up-arrow keeps it from trying
+# to also bind ↑; fzf-history-widget is registered when its key-bindings.zsh
+# is sourced in 40-keybindings.zsh (last fragment, last write wins).
+#
+# Atuin's `atuin-up-search` widget is registered by `atuin init zsh`, but
+# that runs under zsh-defer — possibly AFTER this fragment. We bind anyway
+# (bindkey to a non-existent widget is a silent no-op); 40-keybindings.zsh
+# re-asserts both bindings at the very end so whichever init finished last
+# wins.
+bindkey '^[[A' atuin-up-search   # Up arrow
+bindkey '^[[B' fzf-history-widget # Down arrow

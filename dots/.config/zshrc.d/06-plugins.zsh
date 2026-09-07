@@ -12,11 +12,13 @@
 
 # Load all plugins
 plugin-load \
+  romkatv/zsh-defer \
   zsh-users/zsh-autosuggestions \
-  zsh-users/zsh-history-substring-search \
   hlissner/zsh-autopair \
   MichaelAquilina/zsh-you-should-use \
   zdharma-continuum/fast-syntax-highlighting
 
 # fzf-tab is loaded in 20-completion.zsh after compinit (checks for -ftb-complete function)
 # zsh-completions fpath is added in 20-completion.zsh before compinit
+# zsh-history-substring-search dropped — Atuin's `atuin-up-search` covers ↑
+#   and fzf-history-widget covers ↓. String-match plugins no longer needed.
