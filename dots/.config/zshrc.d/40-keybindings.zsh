@@ -58,21 +58,47 @@ if command -v fzf >/dev/null 2>&1; then
     [[ -f "$fzf_shell/key-bindings.zsh" ]] && break || fzf_shell=""
   done
   if [[ -n "$fzf_shell" ]]; then
+    # fzf's key-bindings.zsh saves and restores shell options around its
+    # widget definitions. Newer zsh refuses `setopt zle` and fzf's
+    # restore uses `eval $__fzf_key_bindings_options` whose value is
+    # `options=( ... zle on ... )`. We stub `eval` so that an
+    # `options=(...)` array assignment rebuilds `$options` and then
+    # suppresses just the `zle` token before zsh parses it.
+    eval() {
+      local cmd="$*"
+      if [[ "$cmd" == 'options=('* ]]; then
+        # Drop `zle on` / `zle off` token pairs from the captured options
+        # string. `zle` is implicit in interactive shells.
+        cmd=${cmd// zle on / }
+        cmd=${cmd// zle off / }
+      fi
+      builtin eval "$cmd"
+    }
     source "$fzf_shell/key-bindings.zsh"
+    unfunction eval
   else
     print -P "%F{yellow}fzf key-bindings.zsh not found in any known location — arrow-down history widget will not work%f" 2>/dev/null
   fi
   unset fzf_shell
 fi
 
-# ── Final arrow-key assignment (last write wins) ─────────────────────────────
-# zsh-autocomplete (loaded via plugin-load) owns both arrows. We intentionally
-# do NOT bind ^[[A/^[[B here — letting autocomplete's smart widgets stand:
-#   ↑ → .autocomplete__up-line-or-search__zle-widget (history search when typed,
-#                                                cursor-up when empty)
-#   ↓ → .autocomplete__down-line-or-select__zle-widget (live completion panel
-#                                                      when typed, cursor-down
-#                                                      when empty)
-# Atuin's --disable-up-arrow keeps it from racing for ↑.
-# Ctrl-T and Alt-C remain on fzf file/cd widgets (set up by fzf's
-# key-bindings.zsh above).
+# ── Final arrow-key assignment (after zsh-autocomplete's precmd) ───────────────
+# zsh-autocomplete creates its arrow widgets from a precmd hook, after this
+# fragment has already loaded. Rebind the first prompt once, after that hook
+# has registered `up-line-or-search` and `down-line-or-select`.
+_flow_rebind_autocomplete_arrows() {
+  add-zsh-hook -d precmd _flow_rebind_autocomplete_arrows
+  if (( ${+widgets[up-line-or-search]} &&
+        ${+widgets[down-line-or-select]} )); then
+    bindkey -M main   '^[[A' up-line-or-search
+    bindkey -M main   '^[[B' down-line-or-select
+    bindkey -M emacs  '^[[A' up-line-or-search
+    bindkey -M emacs  '^[[B' down-line-or-select
+    bindkey -M viins  '^[[A' up-line-or-search
+    bindkey -M viins  '^[[B' down-line-or-select
+  fi
+}
+add-zsh-hook precmd _flow_rebind_autocomplete_arrows
+
+# Atuin's --disable-up-arrow keeps it from racing for ↑. Ctrl-T and Alt-C remain
+# on fzf file/cd widgets set up by key-bindings.zsh above.

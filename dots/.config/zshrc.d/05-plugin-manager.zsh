@@ -6,7 +6,11 @@
 
 # Clone a plugin, identify its init file, source it, and add to fpath
 function plugin-load {
-  local plugin repo commitsha plugdir initfile initfiles=()
+  local plugin repo commitsha plugdir initfile initfiles=() defer=1
+  if [[ ${1-} == --sync ]]; then
+    defer=0
+    shift
+  fi
   for plugin in $@; do
     repo="$plugin"
     clone_args=(-q --depth 1 --recursive --shallow-submodules)
@@ -39,7 +43,21 @@ function plugin-load {
       ln -sf $initfiles[1] $initfile
     fi
     fpath+=$plugdir
-    (( $+functions[zsh-defer] )) && zsh-defer . $initfile || . $initfile
+    if [[ "$plugin" == marlonrichert/zsh-autocomplete ]]; then
+      # zsh-autocomplete modules are opt-in per module. Enable the full
+      # engine: live completion, history search, key bindings, async refresh,
+      # and recent directories.
+      zstyle ':autocomplete:*' enabled yes
+    fi
+    # Defer nonessential plugins when zsh-defer is available. This keeps the
+    # shell's interactive widgets available synchronously while allowing the
+    # completion UI to initialize before syntax highlighting wraps its
+    # completion widgets.
+    if (( $+functions[zsh-defer] && defer )); then
+      zsh-defer . $initfile
+    else
+      . $initfile
+    fi
   done
 }
 

@@ -1,5 +1,5 @@
 # Flow Zsh Completion
-# Native Zsh completion with caching + zsh-completions + fzf-tab
+# Native Zsh completion with caching + zsh-completions + zsh-autocomplete
 
 # Completion directory
 local zcompdir="${XDG_CACHE_HOME:-$HOME/.cache}/zsh"
@@ -10,8 +10,10 @@ local zcompdump="$zcompdir/zcompdump-${ZSH_VERSION}"
 # https://github.com/zsh-users/zsh-completions
 fpath=("${ZPLUGINDIR:-${ZDOTDIR:-$HOME/.config/zsh}/plugins}/zsh-completions/src" $fpath)
 
-# Load completion system — ONE call below (daily-rebuild block).
-autoload -Uz compinit
+# zsh-autocomplete owns completion initialization — it patches compinit and
+# runs it from its own precmd hook so that completion definitions registered
+# after this fragment are still captured. Calling compinit here would be a
+# no-op (the patch makes it a stub). Don't autoload it.
 
 # Completion styles
 zstyle ':completion:*' cache-path "$zcompdir"
@@ -102,16 +104,12 @@ unfunction _flow_defer_completion_caches
 
 # Rebuild completion cache only if the zshrc has changed since the last dump.
 # ZDOTDIR is exported early in 00-environment.zsh so this resolves correctly.
-if [[ ! -f "$zcompdump" ]] || [[ "$zcompdump" -ot "$ZDOTDIR/.zshrc" ]]; then
-  compinit -d "$zcompdump"
-else
-  compinit -C -d "$zcompdump"
-fi
+# (zsh-autocomplete runs compinit itself in its precmd hook.)
 
 # ── zsh-autocomplete: live completion + history panels ─────────────────────
 # https://github.com/marlonrichert/zsh-autocomplete
-# Loaded via plugin-load in 06-plugins.zsh (must run AFTER compinit). The
-# plugin owns:
+# Loaded via plugin-load in 06-plugins.zsh before the first prompt. The plugin
+# installs its widgets in its precmd hook and owns:
 #   Tab  → cycle top completion (no panel; inserts on single match, otherwise
 #          opens the live panel)
 #   ↓    → .autocomplete__down-line-or-select__zle-widget
@@ -125,11 +123,3 @@ fi
 # fzf-tab is no longer in the plugin stack; zsh-autocomplete subsumes the
 # picker role. fzf's own widgets (Ctrl-T, Alt-C, Ctrl-R history) are still
 # loaded by 40-keybindings.zsh.
-if (( $+widgets[.autocomplete__down-line-or-select__zle-widget] )); then
-  # Auto-show the completion panel as you type (don't wait for Tab). Default
-  # is "Tab triggers panel"; setting fzf_tab_completion="show" with the
-  # tab-trigger widget makes the panel live-update.
-  zstyle ':autocomplete:*' default-context ''
-  # DevOps previews — visible in the right pane of the live panel.
-  zstyle ':autocomplete:cd:*' fzf-preview 'eza -1 --color=always --icons $realpath 2>/dev/null'
-fi
