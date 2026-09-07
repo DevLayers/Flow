@@ -33,9 +33,16 @@ Scope {
         }
     }
 
+    // BlurOverlayWindow is only meaningful while zoom-out mirroring is enabled.
+    // Skipping it for everyone else saves one PanelWindow + scenegraph per
+    // monitor (and its blur layer in Hyprland).
+    readonly property bool blurOverlayNeeded:
+        Config.options.background.zoomOutEnabled
+        && Config.options.background.zoomOutStyle === 1
+
     Variants {
         id: blurOverlayVariant
-        model: Quickshell.screens
+        model: backgroundScope.blurOverlayNeeded ? Quickshell.screens : []
 
         BlurOverlayWindow {}
     }

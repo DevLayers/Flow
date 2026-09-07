@@ -251,6 +251,134 @@ Singleton {
         }
     }
 
+    // ── Unified snapshot ─────────────────────────────────────────────────
+    // One bash invocation, one fork, one stdout parse. Each section is
+    // delimited by an "S:" tag the parser keys off, so we can emit empty
+    // sections for connected-only data without breaking the layout.
+    //
+    // SECTION ORDER:
+    //   1) device status + connectivity       (was: updateConnectionType)
+    //   2) radio wifi                         (was: wifiStatusProcess)
+    //   3) active connection name             (was: updateNetworkName)
+    //   4) signal strength for active SSID    (was: updateNetworkStrength)
+    //   5) saved-connection SSIDs + profiles  (was: getSavedConnections)
+    //   6) IP / gateway / DNS for active dev  (was: connectionDetailsProc)
+    Process {
+        id: snapshotProc
+        running: false
+        command: ["sh", "-c", `
+            echo "S:device"
+            nmcli -t -f TYPE,STATE d status
+            echo "S:connectivity"
+            nmcli -t -f CONNECTIVITY g
+            echo "S:radio"
+            nmcli -t radio wifi
+            echo "S:activename"
+            nmcli -t -f NAME c show --active | head -1
+            echo "S:signal"
+            nmcli -f IN-USE,SIGNAL,SSID device wifi | awk '/^\\\\*/{if (NR!=1) print $2}'
+            echo "S:saved"
+            nmcli -t -f 802-11-wireless.ssid,NAME connection show
+            echo "S:end"
+            dev=$(nmcli -t -f DEVICE,TYPE d status | grep wifi | head -1 | cut -d: -f1)
+            if [ -n "$dev" ]; then
+                echo "S:details"
+                nmcli -t -f IP4.ADDRESS,IP4.GATEWAY,IP4.DNS device show "$dev"
+            fi
+        `]
+        environment: ({
+            LANG: "C",
+            LC_ALL: "C"
+        })
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const text = text;
+                const sections = {};
+                let cur = "";
+                for (const line of text.split("\n")) {
+                    if (line.startsWith("S:")) {
+                        cur = line.slice(2);
+                        sections[cur] = [];
+                    } else if (cur) {
+                        sections[cur].push(line);
+                    }
+                }
+
+                // 1+2) device status + connectivity
+                const devLines = sections.device || [];
+                const connectivity = (sections.connectivity || []).join("").trim();
+                let hasEthernet = false;
+                let hasWifi = false;
+                let wifiStatus = "disconnected";
+                for (const line of devLines) {
+                    if (line.includes("ethernet") && line.includes("connected")) hasEthernet = true;
+                    else if (line.includes("wifi:")) {
+                        if (line.includes("disconnected")) wifiStatus = "disconnected";
+                        else if (line.includes("connected")) {
+                            hasWifi = true;
+                            wifiStatus = connectivity === "limited" ? "limited" : "connected";
+                        } else if (line.includes("connecting")) wifiStatus = "connecting";
+                        else if (line.includes("unavailable")) wifiStatus = "disabled";
+                    }
+                }
+                root.wifiStatus = wifiStatus;
+                root.ethernet = hasEthernet;
+                root.wifi = hasWifi;
+                if (wifiStatus !== "connected") {
+                    root.ipAddress = "";
+                    root.gateway = "";
+                    root.dns = "";
+                    root.subnetMask = "";
+                }
+
+                // radio
+                root.wifiEnabled = (sections.radio || []).join("").trim() === "enabled";
+
+                // active name
+                const nameLines = sections.activename || [];
+                root.networkName = (nameLines[0] || "").trim();
+
+                // signal
+                const sigLines = sections.signal || [];
+                root.networkStrength = parseInt((sigLines[0] || "").trim()) || 0;
+
+                // saved
+                const saved = [];
+                for (const line of (sections.saved || [])) {
+                    const parts = line.split(":");
+                    if (parts[0]) saved.push(parts[0]);
+                    if (parts[1]) saved.push(parts[1]);
+                }
+                root.savedSsids = saved;
+
+                // IP / gateway / DNS (only present when connected)
+                if (sections.details) {
+                    let dns = "";
+                    for (const line of sections.details) {
+                        const idx = line.indexOf(":");
+                        if (idx < 0) continue;
+                        const key = line.substring(0, idx);
+                        const val = line.substring(idx + 1);
+                        if (key.includes("IP4.ADDRESS")) {
+                            const parts = val.split("/");
+                            root.ipAddress = parts[0] || "";
+                            const cidr = parseInt(parts[1] || "24");
+                            root.subnetMask = cidr === 32 ? "255.255.255.255"
+                                : cidr === 24 ? "255.255.0.0"
+                                : cidr === 16 ? "255.255.0.0"
+                                : ("/" + cidr);
+                        } else if (key.includes("IP4.GATEWAY")) {
+                            root.gateway = val;
+                        } else if (key.includes("IP4.DNS")) {
+                            dns = dns ? (dns + " / " + val) : val;
+                        }
+                    }
+                    root.dns = dns;
+                }
+            }
+        }
+    }
+
     Process {
         id: getSavedConnections
         command: ["sh", "-c", "nmcli -t -f 802-11-wireless.ssid,NAME connection show"]
@@ -268,16 +396,19 @@ Singleton {
     }
 
     // Status update
+    //
+    // One unified snapshot bash invocation replaces the previous fan-out of
+    // 5–6 parallel nmcli processes. Each nmcli fork costs ~10–25 ms of exec
+    // + Python init time; running them in parallel traded that for a
+    // window of forked processes all hitting NetworkManager at once. A
+    // single shell script with backticks/`$()` collects the same data with
+    // one fork and a single NM transaction.
+    //
+    // The four legacy processes below stay for any direct callers (e.g.
+    // `wifiStatusProcess.running = true` after toggling wifi radio), but
+    // the `update()` path uses the snapshot exclusively.
     function update() {
-        updateConnectionType.startCheck();
-        wifiStatusProcess.running = true;
-        updateNetworkName.running = true;
-        updateNetworkStrength.running = true;
-
-        if (root.wifiStatus === "connected") {
-            connectionDetailsProc.running = true;
-        }
-        getSavedConnections.running = true;
+        snapshotProc.running = true;
     }
 
     Process {

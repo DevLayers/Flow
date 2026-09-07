@@ -163,8 +163,18 @@ Scope {
         }
     }
 
+    // Corners only allocate a surface when actually needed. Both
+    // fakeScreenRounding and cornerOpen.enable gate the same windows;
+    // when neither is enabled we skip creating them entirely (saves 4
+    // PanelWindows per monitor = up to 16 surfaces on a 4-monitor setup).
+    readonly property bool cornersEnabled: Config.ready && (
+        Config.options.appearance.fakeScreenRounding === 1
+        || Config.options.appearance.fakeScreenRounding === 2
+        || Config.options.sidebar.cornerOpen.enable
+    )
+
     Variants {
-        model: Quickshell.screens
+        model: screenCorners.cornersEnabled ? Quickshell.screens : []
 
         Scope {
             id: monitorScope

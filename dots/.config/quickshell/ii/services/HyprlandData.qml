@@ -92,6 +92,54 @@ Singleton {
         }
     }
 
+    // ── Frame-coalesced batch update ────────────────────────────────────────
+    // A single Hyprland event (workspace switch, focused-monitor change, …)
+    // often triggers three or more update*() calls back-to-back, each
+    // spawning its own hyprctl fork. Coalesce them onto one tick of the
+    // event loop so we issue at most one of each query per frame instead
+    // of three forks in the same millisecond.
+    property bool _frameScheduled: false
+    function _scheduleFrame() {
+        if (root._frameScheduled) return;
+        root._frameScheduled = true;
+        Qt.callLater(_runFrameBatch);
+    }
+    function _runFrameBatch() {
+        root._frameScheduled = false;
+        if (root._pendingMonitor || root._pendingWorkspace || root._pendingWindow || root._pendingLayer) {
+            if (root._pendingMonitor) { root._pendingMonitor = false; root.updateMonitors(); }
+            if (root._pendingWorkspace) { root._pendingWorkspace = false; root.updateWorkspaces(); }
+            if (root._pendingWindow) { root._pendingWindow = false; root.updateWindowList(); }
+            if (root._pendingLayer) { root._pendingLayer = false; root.updateLayers(); }
+        }
+    }
+    property bool _pendingMonitor: false
+    property bool _pendingWorkspace: false
+    property bool _pendingWindow: false
+    property bool _pendingLayer: false
+
+    // Coalesced variants: each marks a "pending" bit and schedules a single
+    // frame to run whichever queries have pending work. Replaces the older
+    // direct updateWindowList()/updateMonitors()/... calls in the event
+    // handler — three events in the same Hyprland tick now produce one
+    // hyprctl fork per kind instead of three.
+    function requestWindowList() {
+        root._pendingWindow = true;
+        root._scheduleFrame();
+    }
+    function requestMonitors() {
+        root._pendingMonitor = true;
+        root._scheduleFrame();
+    }
+    function requestWorkspaces() {
+        root._pendingWorkspace = true;
+        root._scheduleFrame();
+    }
+    function requestLayers() {
+        root._pendingLayer = true;
+        root._scheduleFrame();
+    }
+
     function updateAll() {
         updateWindowList();
         updateMonitors();
@@ -148,43 +196,43 @@ Singleton {
                 case "focusedmon":
                 case "activespecial":
                 case "activespecialv2":
-                    root.updateMonitors();
-                    root.updateWorkspaces();
-                    root.updateWindowList();
+                    root.requestMonitors();
+                    root.requestWorkspaces();
+                    root.requestWindowList();
                     break;
 
                 case "activewindow":
                 case "activewindowv2":
-                    root.updateWindowList();
-                    root.updateWorkspaces();
+                    root.requestWindowList();
+                    root.requestWorkspaces();
                     break;
 
                 case "openwindow":
                 case "closewindow":
                 case "movewindow":
                 case "movewindowv2":
-                    root.updateWindowList();
-                    root.updateWorkspaces();
+                    root.requestWindowList();
+                    root.requestWorkspaces();
                     break;
 
                 case "changefloatingmode":
                 case "fullscreen":
                 case "urgent":
                 case "minimize":
-                    root.updateWindowList();
+                    root.requestWindowList();
                     break;
 
                 case "createworkspace":
                 case "destroyworkspace":
                 case "moveworkspace":
                 case "renameworkspace":
-                    root.updateWorkspaces();
+                    root.requestWorkspaces();
                     break;
 
                 case "monitoradded":
                 case "monitorremoved":
-                    root.updateMonitors();
-                    root.updateWorkspaces();
+                    root.requestMonitors();
+                    root.requestWorkspaces();
                     break;
             }
         }

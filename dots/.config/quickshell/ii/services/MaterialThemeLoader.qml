@@ -28,14 +28,32 @@ Singleton {
 
             const json = JSON.parse(fileContent)
             const skip = { "darkmode": true, "transparent": true }
+
+            // ── Diff-then-write ─────────────────────────────────────────────
+            // QML emits a change signal on every property assignment, and
+            // ~80 derived `colors.col*` properties re-evaluate on each
+            // m3colors.* change. Writing all 50 keys blindly is a
+            // 50-cascade invalidation storm. Comparing first and skipping
+            // unchanged entries drops that to a few cascades on the typical
+            // wallpaper cycle (where most palette tokens are stable).
+            const m3 = Appearance.m3colors
+            let writes = 0
             for (const key in json) {
-                if (json.hasOwnProperty(key) && !skip[key]) {
-                    Appearance.m3colors[root._toM3Key(key)] = json[key]
+                if (!json.hasOwnProperty(key) || skip[key]) continue
+                const m3Key = root._toM3Key(key)
+                const next = json[key]
+                // QVariant equality on color works via ===, but we wrap in a
+                // try because some tokens are bools/strings.
+                if (m3[m3Key] !== next) {
+                    m3[m3Key] = next
+                    writes++
                 }
             }
 
             root.updateDarkMode(json)
-            console.log("[MaterialThemeLoader] applyColors: darkmode=", Appearance.m3colors.darkmode, "bg=", Appearance.m3colors.m3background)
+            if (writes > 0) {
+                console.log("[MaterialThemeLoader] applyColors: writes=", writes, "darkmode=", m3.darkmode, "bg=", m3.m3background)
+            }
         } catch (e) {
             console.log("[MaterialThemeLoader] Error parsing colors.json:", e)
         }

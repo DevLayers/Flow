@@ -28,7 +28,13 @@ Singleton {
     property string uptime: "0h, 0m"
 
     Timer {
-        interval: 10000
+        // 30 s is plenty — uptime resolution rarely matters finer than
+        // minutes for the few widgets that display it. Previously this
+        // overwrote the timer interval to the user's resource polling
+        // rate (~3 s), reading /proc/uptime at 3 Hz forever.
+        interval: Config.options?.resources?.updateInterval
+            ? Math.max(30000, Config.options.resources.updateInterval)
+            : 30000
         running: true
         repeat: true
         onTriggered: {
@@ -50,7 +56,6 @@ Singleton {
             if (minutes > 0 || !formatted)
                 formatted += `${formatted ? ", " : ""}${minutes}m`;
             uptime = formatted;
-            interval = Config.options?.resources?.updateInterval ?? 3000;
         }
     }
 

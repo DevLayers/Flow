@@ -27,7 +27,10 @@ Singleton {
         }
     }
 
-    Component.onCompleted: root.refreshItems()
+    Component.onCompleted: {
+        root.refreshItems();
+        root._recomputeSplit();
+    }
 
     function getItemKey(item) {
         if (!item) return "";
@@ -39,25 +42,45 @@ Singleton {
         return baseId;
     }
 
-    property var itemsInUserList: root.allItems.filter(i => {
-        if (!i) return false;
-        var key = root.getItemKey(i);
-        var pins = Config.options.tray.pinnedItems || [];
-        var isPinned = pins.includes(key) || pins.includes(i.id);
-        return isPinned && (!smartTray || i.status !== Status.Passive);
-    })
+    // Single-pass split. The previous two .filter() calls each iterated
+    // the whole list, called getItemKey per item, and re-read the pinned
+    // config twice — a 2× cost that's noticeable with Electron/chromium
+    // apps spamming status-notifier items. Walk once, partition into two
+    // arrays via a single backing property, and derive both consumer-facing
+    // lists from that one walk.
+    property var _split: ({ pinned: [], unpinned: [] })
+    function _recomputeSplit() {
+        const pins = Config.options.tray.pinnedItems || [];
+        const filterPassive = smartTray;
+        const inverted = invertPins;
+        const pinned = [];
+        const unpinned = [];
+        for (let i = 0; i < root.allItems.length; i++) {
+            const item = root.allItems[i];
+            if (!item) continue;
+            if (filterPassive && item.status === Status.Passive) continue;
+            const key = root.getItemKey(item);
+            const isListed = pins.includes(key) || pins.includes(item.id);
+            if (inverted ? !isListed : isListed) pinned.push(item);
+            else unpinned.push(item);
+        }
+        root._split = { pinned, unpinned };
+    }
+    property var pinnedItems: _split.pinned
+    property var unpinnedItems: _split.unpinned
 
-    property var itemsNotInUserList: root.allItems.filter(i => {
-        if (!i) return false;
-        var key = root.getItemKey(i);
-        var pins = Config.options.tray.pinnedItems || [];
-        var isPinned = pins.includes(key) || pins.includes(i.id);
-        return !isPinned && (!smartTray || i.status !== Status.Passive);
-    })
+    onAllItemsChanged: _recomputeSplit()
+    onSmartTrayChanged: _recomputeSplit()
+
+    // Re-run whenever pinned list, invert flag, or smart-tray flag changes.
+    Connections {
+        target: Config.options.tray ?? null
+        function onPinnedItemsChanged() { root._recomputeSplit(); }
+        function onInvertPinnedItemsChanged() { root._recomputeSplit(); }
+        function onFilterPassiveChanged() { root._recomputeSplit(); }
+    }
 
     property bool invertPins: Config.options.tray.invertPinnedItems
-    property var pinnedItems: invertPins ? itemsNotInUserList : itemsInUserList
-    property var unpinnedItems: invertPins ? itemsInUserList : itemsNotInUserList
 
     function getTooltipForItem(item) {
         if (!item) return "";
